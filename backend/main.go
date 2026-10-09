@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -62,6 +63,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	client := ingest.NewClient(envDuration("FETCH_GAP", time.Second))
+	// FETCH_VIA routes feeds through relays: "host=https://relay,host=https://relay".
+	client.Via = map[string]string{}
+	for _, pair := range strings.Split(os.Getenv("FETCH_VIA"), ",") {
+		if host, relay, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
+			client.Via[host] = strings.TrimRight(relay, "/")
+		}
+	}
 	client.Save = func(ctx context.Context, url string, body []byte) {
 		if err := queries.SaveRawPayload(ctx, db.SaveRawPayloadParams{Url: url, Body: string(body)}); err != nil {
 			log.Warn("save raw payload", "url", url, "err", err)

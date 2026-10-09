@@ -12,24 +12,35 @@ import (
 	"time"
 )
 
-const userAgent = "crossover-dynasty/0.1 (hobby fantasy league)"
+const userAgent = "crossover-dynasty/0.1"
 
 // Client fetches JSON from the public feeds, spacing requests to each host
-// and handing every response body to Save before it is parsed.
+// and handing every response body to Save before it is parsed. A host that
+// refuses a request is left alone for CoolOff: these are free feeds, and
+// asking again straight away is how an address gets shut out for longer.
 type Client struct {
-	HTTP *http.Client
-	Gap  time.Duration                                      // minimum time between requests to one host
-	Save func(ctx context.Context, url string, body []byte) // optional
+	HTTP    *http.Client
+	Gap     time.Duration                                      // minimum time between requests to one host
+	CoolOff time.Duration                                      // how long a host that refused is left alone
+	Save    func(ctx context.Context, url string, body []byte) // optional
+	// Via sends one host's requests to a relay instead: host -> the relay's
+	// origin, e.g. "statsapi.mlb.com" -> "https://mlb.example.workers.dev".
+	// The relay must forward the path and query unchanged. It is for a feed
+	// that turns away the server's own address.
+	Via map[string]string
 
-	mu   sync.Mutex
-	next map[string]time.Time // host -> earliest time of its next request
+	mu      sync.Mutex
+	next    map[string]time.Time // host -> earliest time of its next request
+	refused map[string]time.Time // host -> when it may be asked again
 }
 
 func NewClient(gap time.Duration) *Client {
 	return &Client{
-		HTTP: &http.Client{Timeout: 30 * time.Second},
-		Gap:  gap,
-		next: map[string]time.Time{},
+		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		Gap:     gap,
+		CoolOff: 30 * time.Minute,
+		next:    map[string]time.Time{},
+		refused: map[string]time.Time{},
 	}
 }
 
@@ -46,10 +57,10 @@ func (c *Client) GetTransient(ctx context.Context, rawURL string, v any) error {
 }
 
 // fetch tries a failed request once more, which covers a dropped
-// connection or a brief outage.
+// connection or a brief outage, but not a host that has refused.
 func (c *Client) fetch(ctx context.Context, rawURL string, v any, save bool) error {
 	body, err := c.get(ctx, rawURL)
-	if err != nil && ctx.Err() == nil {
+	if err != nil && ctx.Err() == nil && !Refused(err) {
 		body, err = c.get(ctx, rawURL)
 	}
 	if err != nil {
@@ -70,11 +81,18 @@ func (c *Client) get(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if until := c.refusedUntil(u.Host); time.Now().Before(until) {
+		return nil, &StatusError{URL: rawURL, Code: http.StatusTooManyRequests, Until: until}
+	}
 	if err := c.wait(ctx, u.Host); err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	target := rawURL
+	if relay := c.Via[u.Host]; relay != "" {
+		target = relay + u.RequestURI()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +108,22 @@ func (c *Client) get(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, &StatusError{URL: rawURL, Code: res.StatusCode}
+		status := &StatusError{URL: rawURL, Code: res.StatusCode}
+		if Refused(status) {
+			status.Until = time.Now().Add(c.CoolOff)
+			c.mu.Lock()
+			c.refused[u.Host] = status.Until
+			c.mu.Unlock()
+		}
+		return nil, status
 	}
 	return body, nil
+}
+
+func (c *Client) refusedUntil(host string) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.refused[host]
 }
 
 // wait reserves the next request slot for host and sleeps until it arrives.
@@ -117,12 +148,32 @@ func (c *Client) wait(ctx context.Context, host string) error {
 // StatusError is a response other than 200. Callers that expect a feed to
 // be missing sometimes (a list not published yet) can check Code.
 type StatusError struct {
-	URL  string
-	Code int
+	URL   string
+	Code  int
+	Until time.Time // set when the host refused: nothing is sent to it before then
 }
 
 func (e *StatusError) Error() string {
-	return fmt.Sprintf("GET %s: %d %s", e.URL, e.Code, http.StatusText(e.Code))
+	text := fmt.Sprintf("GET %s: %d %s", e.URL, e.Code, http.StatusText(e.Code))
+	if !e.Until.IsZero() {
+		text += "; leaving this feed alone until " + e.Until.Format("15:04")
+	}
+	return text
+}
+
+// Refused reports whether err is a feed turning the request away as
+// unwelcome (blocked or rate limited), as opposed to failing or lacking
+// the page. More requests will not help and may make it worse.
+func Refused(err error) bool {
+	var status *StatusError
+	if !errors.As(err, &status) {
+		return false
+	}
+	switch status.Code {
+	case http.StatusForbidden, http.StatusNotAcceptable, http.StatusTooManyRequests:
+		return true
+	}
+	return false
 }
 
 // NotFound reports whether err is a feed answering 404.

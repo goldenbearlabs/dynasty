@@ -142,3 +142,4 @@ docker compose exec -T db pg_dump -U crossover crossover | gzip > crossover-$(da
 | `SEASONS_BACKFILL` | `10`                         | how many seasons of stat history to keep |
 | `SCORES_SYNC_CRON` | `*/15 * * * *`               | the slower sync: schedule, finals, stat corrections |
 | `FETCH_GAP`    | `1s`                             | minimum time between requests per host |
+| `FETCH_VIA`    | none                             | relays for feeds that refuse the server's address: `host=https://relay`, comma separated |

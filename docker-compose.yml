@@ -18,6 +18,7 @@ services:
     environment:
       DATABASE_URL: postgres://crossover:${DB_PASSWORD:-crossover}@db:5432/crossover
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      FETCH_VIA: ${FETCH_VIA:-}
       TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
     depends_on:
       db:
