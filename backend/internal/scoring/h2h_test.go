@@ -2,8 +2,11 @@ package scoring
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"crossover/internal/settings"
 )
 
 func team(n byte) pgtype.UUID {
@@ -81,5 +84,44 @@ func TestRecordOrder(t *testing.T) {
 	// A team with a bye has played fewer matchups.
 	if perfect, good := (Row{Wins: 2}), (Row{Wins: 2, Losses: 1}); share(perfect) <= share(good) {
 		t.Error("2-0 should rank above 2-1")
+	}
+}
+
+// One-week matchups in a weekly league follow the lineup's weeks; a short
+// stretch at either end of the season joins the week beside it.
+func TestPeriodSpans(t *testing.T) {
+	day := func(s string) time.Time { d, _ := time.Parse(time.DateOnly, s); return d }
+	show := func(spans [][2]time.Time) string {
+		out := ""
+		for _, s := range spans {
+			out += s[0].Format("01-02") + ".." + s[1].Format("01-02") + " "
+		}
+		return out
+	}
+	weekly := settings.League{
+		Format: settings.Format{MatchupDays: 7},
+		Lineup: settings.Lineup{Period: settings.PeriodWeek, WeekStart: "monday"},
+	}
+	tests := []struct {
+		name, start, end, want string
+		rules                  settings.League
+	}{
+		// 2026-10-20 is a Tuesday: the opening six days are a matchup of their own.
+		{"starts mid-week", "2026-10-20", "2026-11-08", "10-20..10-25 10-26..11-01 11-02..11-08 ", weekly},
+		// 2026-10-23 is a Friday: three days are too few, so they join the first full week.
+		{"starts late in the week", "2026-10-23", "2026-11-08", "10-23..11-01 11-02..11-08 ", weekly},
+		// Two days left over at the end join the last week.
+		{"ends early in the week", "2026-10-19", "2026-11-03", "10-19..10-25 10-26..11-03 ", weekly},
+		{"ends late in the week", "2026-10-19", "2026-11-05", "10-19..10-25 10-26..11-01 11-02..11-05 ", weekly},
+		// Daily lineups, or another length: equal periods from the first day, the remainder unplayed.
+		{"daily lineups", "2026-10-20", "2026-11-08", "10-20..10-26 10-27..11-02 ",
+			settings.League{Format: settings.Format{MatchupDays: 7}, Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday"}}},
+		{"three-day matchups", "2026-10-20", "2026-10-27", "10-20..10-22 10-23..10-25 ",
+			settings.League{Format: settings.Format{MatchupDays: 3}, Lineup: weekly.Lineup}},
+	}
+	for _, tt := range tests {
+		if got := show(periodSpans(day(tt.start), day(tt.end), tt.rules)); got != tt.want {
+			t.Errorf("%s:\n got  %s\n want %s", tt.name, got, tt.want)
+		}
 	}
 }

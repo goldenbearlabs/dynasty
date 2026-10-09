@@ -64,7 +64,8 @@ func defaults() settings.League {
 	return settings.League{
 		Roster: settings.Roster{ReserveEligibility: settings.ReserveProspects},
 		Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday", Lock: settings.LockGameStart},
-		Format: settings.Format{Type: settings.FormatTotalPoints, MatchupDays: 7, PlayoffTeams: 4},
+		// Head to head, a week at a time: the format the scoring was balanced for.
+		Format: settings.Format{Type: settings.FormatHeadToHead, MatchupDays: 7, PlayoffTeams: 6},
 		FreeAgency: settings.FreeAgency{
 			Mode:                 settings.FreeAgencyOpen,
 			NewEntrantsDraftOnly: true,

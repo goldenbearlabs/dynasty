@@ -31,6 +31,7 @@
 		{ href: '/league', label: 'League', icon: 'home' },
 		{ href: '/scores', label: 'Scores', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
+		{ href: '/research', label: 'Research', icon: 'search' },
 		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
 		{ href: '/drafts', label: 'Drafts', icon: 'draft' },
 		{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },

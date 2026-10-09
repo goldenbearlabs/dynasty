@@ -12,6 +12,46 @@ import (
 
 const playersPerPage = 50
 
+// listResearch values imported season totals using current league rules.
+func (s *Server) listResearch(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	page, _ := strconv.Atoi(query.Get("page"))
+	if page < 1 || page > 1000000 {
+		page = 1
+	}
+	var availableIn pgtype.UUID
+	availableIn.Scan(query.Get("available_in"))
+	sort := query.Get("sort")
+	if sort == "" {
+		sort = "points"
+	}
+	competition, status, search := query.Get("competition"), query.Get("status"), query.Get("q")
+	rows, err := s.Queries.ListResearchPlayers(r.Context(), db.ListResearchPlayersParams{
+		Competition: competition, Status: status, Search: search,
+		Season: query.Get("season"), Sort: sort, AvailableIn: availableIn,
+		PageSize: playersPerPage, PageOffset: int32((page - 1) * playersPerPage),
+	})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	total, err := s.Queries.CountPlayers(r.Context(), db.CountPlayersParams{
+		Competition: competition, Status: status, Search: search, AvailableIn: availableIn,
+	})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	seasons, err := s.Queries.ListResearchSeasons(r.Context(), competition)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"players": rows, "total": total, "page": page, "per_page": playersPerPage, "seasons": seasons,
+	})
+}
+
 func (s *Server) researchPlayer(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {

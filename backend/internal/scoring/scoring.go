@@ -226,7 +226,17 @@ func (s *Service) SetSeasonDates(ctx context.Context, seasonID pgtype.UUID, star
 	if err != nil {
 		return err
 	}
-	return db.New(s.pool).SetSeasonDates(ctx, db.SetSeasonDatesParams{ID: seasonID, StartsOn: starts, EndsOn: ends})
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		if err := q.SetSeasonDates(ctx, db.SetSeasonDatesParams{ID: seasonID, StartsOn: starts, EndsOn: ends}); err != nil {
+			return err
+		}
+		season, err := q.GetSeason(ctx, seasonID)
+		if err != nil {
+			return err
+		}
+		// The matchups are cut from the season's days, so they follow it.
+		return reschedule(ctx, q, season.LeagueID)
+	})
 }
 
 func dates(startsOn, endsOn string) (pgtype.Date, pgtype.Date, error) {

@@ -100,6 +100,22 @@ export type Player = {
 
 export type PlayerPage = { players: Player[]; total: number; page: number; per_page: number };
 
+export type ResearchPlayer = Pick<Player, 'id' | 'competition' | 'full_name' | 'positions' | 'status' | 'headshot_url' | 'owner_name' | 'owner_slug'> & {
+	team: string;
+	season: string;
+	games: number;
+	stats: Record<string, number>;
+	points: number;
+	points_per_game: number;
+};
+export type ResearchPage = {
+	players: ResearchPlayer[];
+	total: number;
+	page: number;
+	per_page: number;
+	seasons: { label: string; year: number }[];
+};
+
 export type PlayerResearch = {
 	player: Player;
 	games: { id: string; day: string; away_abbrev: string; home_abbrev: string; stats: Record<string, number>; points: number }[];
@@ -561,6 +577,8 @@ const orNull = <T>(promise: Promise<T>) =>
 
 export const getCompetitions = () => request<Competition[]>('GET', '/competitions');
 export const getPlayers = (filter: PlayerFilter) => request<PlayerPage>('GET', `/players${query(filter)}`);
+export const getResearch = (filter: PlayerFilter & { season?: string; sort?: string }) =>
+	request<ResearchPage>('GET', `/research${query(filter)}`);
 export const getPlayerResearch = (id: string) => request<PlayerResearch>('GET', `/players/${id}`);
 export const getPlayerSeasons = (id: string) => request<PlayerSeason[]>('GET', `/players/${id}/seasons`);
 

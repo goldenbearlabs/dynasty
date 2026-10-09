@@ -104,6 +104,7 @@
 						<div class="row schedule">
 							<span class="muted small-text">
 								Head-to-head: {league.settings.format.matchup_days}-day matchups, {league.settings.format.playoff_teams} playoff teams.
+								The schedule is built when the season starts and kept up to date when the dates, rules or franchises change.
 							</span>
 							<button class="small" onclick={() => run(generateSchedule(season.id), 'Schedule rebuilt from tomorrow on.')}>
 								Rebuild schedule

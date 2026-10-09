@@ -127,6 +127,14 @@ func (s *Server) addFranchise(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	// A new franchise needs matchups in every season in progress.
+	if leagues, err := s.Queries.ListLeagues(r.Context(), d.ID); err == nil {
+		for _, league := range leagues {
+			if err := s.Scoring.Reschedule(r.Context(), league.ID); err != nil {
+				s.Log.Warn("reschedule after adding a franchise", "league", league.Name, "err", err)
+			}
+		}
+	}
 	writeJSON(w, http.StatusCreated, invite{Franchise: franchise, InviteToken: franchise.InviteToken.String})
 }
 

@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"slices"
@@ -137,6 +138,15 @@ func (s *Server) updateLeagueSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Dynasty.UpdateLeagueSettings(r.Context(), league, rules); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	// The schedule is built from the rules, so it follows them.
+	var refused problem.Error
+	if err := s.Scoring.Reschedule(r.Context(), league.ID); errors.As(err, &refused) {
+		writeError(w, http.StatusUnprocessableEntity, "The rules were saved, but the schedule could not be rebuilt. "+refused.Error())
+		return
+	} else if err != nil {
 		s.fail(w, r, err)
 		return
 	}

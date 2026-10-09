@@ -46,7 +46,7 @@ with latest as (
          coalesce(totals.games, 0)::integer as games,
          coalesce(valued.stats, '{}'::jsonb) as stats,
          coalesce(valued.points, 0)::float8 as points,
-         (coalesce(valued.points, 0) / nullif(totals.games, 0))::float8 as points_per_game
+         coalesce(valued.points / nullif(totals.games, 0), 0)::float8 as points_per_game
   from players p
   left join pro_teams t on t.id = p.pro_team_id
   left join roster_entries r on r.player_id = p.id
@@ -63,9 +63,9 @@ select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, p
 order by
   case when $1::text = 'name' then full_name end asc,
   case when $1 = 'points' and season <> '' then points
-       when $1 = 'points_per_game' then points_per_game
+       when $1 = 'points_per_game' and games > 0 then points_per_game
        when $1 = 'games' and season <> '' then games::float8
-       else (stats->>@sort)::float8 end desc nulls last,
+       else (stats ->> $1::text)::float8 end desc nulls last,
   full_name, id
 limit $3 offset $2
 `

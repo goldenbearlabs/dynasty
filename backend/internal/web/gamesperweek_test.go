@@ -45,6 +45,7 @@ func TestOneGameAWeek(t *testing.T) {
 		{Name: "UTIL", Positions: []string{settings.AnyPosition}, Count: 1, GamesPerWeek: 1},
 	}
 	rules.Scoring = map[string]float64{"pts": 1}
+	rules.Format.Type = "total_points" // one franchise: nobody to play
 
 	daily := rules
 	daily.Lineup.Period = "day"

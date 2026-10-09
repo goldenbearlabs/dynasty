@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/bits"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -81,7 +82,8 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 	}
 
 	length := rules.Format.MatchupDays
-	remaining := int(season.EndsOn.Time.Sub(start).Hours()/24+1) / length
+	spans := periodSpans(start, season.EndsOn.Time, rules)
+	remaining := len(spans)
 	rounds := playoffRounds(min(rules.Format.PlayoffTeams, len(franchises)))
 	regular := remaining - rounds
 	if regular < 1 {
@@ -94,11 +96,10 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		ids[i] = f.ID
 	}
 	rotation := roundRobin(ids)
-	for i := range remaining {
-		first := start.AddDate(0, 0, i*length)
+	for i, span := range spans {
 		period, err := q.InsertPeriod(ctx, db.InsertPeriodParams{
 			SeasonID: season.ID, Seq: seq + int32(i) + 1, IsPlayoff: i >= regular,
-			StartsOn: sportsday.Date(first), EndsOn: sportsday.Date(first.AddDate(0, 0, length-1)),
+			StartsOn: sportsday.Date(span[0]), EndsOn: sportsday.Date(span[1]),
 		})
 		if err != nil {
 			return err
@@ -114,6 +115,84 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		}
 	}
 	return nil
+}
+
+// periodSpans cuts the days from start to end into matchup periods.
+//
+// One-week matchups in a league with weekly lineups follow the lineup's
+// weeks, so a matchup and the lineup that plays it cover the same days. A
+// season rarely starts or ends on a week boundary: a first or last stretch
+// of fewer than four days joins the week beside it and makes that one
+// matchup longer.
+//
+// Any other length is cut into equal periods from the start, and days left
+// over at the end are not played.
+func periodSpans(start, end time.Time, rules settings.League) [][2]time.Time {
+	length := rules.Format.MatchupDays
+	var spans [][2]time.Time
+	if length != 7 || rules.Lineup.Period != settings.PeriodWeek {
+		for first := start; !first.AddDate(0, 0, length-1).After(end); first = first.AddDate(0, 0, length) {
+			spans = append(spans, [2]time.Time{first, first.AddDate(0, 0, length-1)})
+		}
+		return spans
+	}
+	const shortest = 4 // days a stretch needs to stand as its own matchup
+	days := func(first, last time.Time) int { return int(last.Sub(first).Hours()/24) + 1 }
+	for first := start; !first.After(end); {
+		last := sportsday.WeekStart(first, rules.Lineup.WeekStart).AddDate(0, 0, 6)
+		if days(first, last) < shortest {
+			last = last.AddDate(0, 0, 7)
+		}
+		if last.After(end) {
+			last = end
+		}
+		if days(first, last) < shortest && len(spans) > 0 {
+			spans[len(spans)-1][1] = last
+			break
+		}
+		spans = append(spans, [2]time.Time{first, last})
+		first = last.AddDate(0, 0, 1)
+	}
+	return spans
+}
+
+// Reschedule brings a league's schedule into line after something it was
+// built from has changed: the format, the season's dates, or who is in the
+// league. Matchups that have begun are kept. In a league that is no longer
+// head to head, the matchups still to come are removed. It does nothing
+// without a season in progress, or once the playoffs have begun.
+func (s *Service) Reschedule(ctx context.Context, leagueID pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error { return reschedule(ctx, q, leagueID) })
+}
+
+func reschedule(ctx context.Context, q *db.Queries, leagueID pgtype.UUID) error {
+	season, err := q.LatestSeason(ctx, leagueID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && season.Status != "active") {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	league, err := q.GetLeague(ctx, leagueID)
+	if err != nil {
+		return err
+	}
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return err
+	}
+	periods, err := q.ListPeriods(ctx, season.ID)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(periods, func(p db.Period) bool { return p.IsPlayoff && !p.StartsOn.Time.After(sportsday.Today()) }) {
+		return nil
+	}
+	if rules.Format.Type != settings.FormatHeadToHead {
+		tomorrow := sportsday.Today().AddDate(0, 0, 1)
+		return q.DeletePeriodsFrom(ctx, db.DeletePeriodsFromParams{SeasonID: season.ID, FromDay: sportsday.Date(tomorrow)})
+	}
+	return schedule(ctx, q, league, season)
 }
 
 // roundRobin returns rounds in which every team plays every other once,

@@ -46,6 +46,13 @@ To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.
 
+The Research tab compares players across leagues with season totals for the stats
+that count toward fantasy scoring, total fantasy points and points per game.
+Filter by league, imported season, status or availability, sort by production
+or a scoring stat, and click a player for season history and recent games.
+Fantasy points use each league’s current rules. Missing imported stats appear
+as a dash.
+
 Stat history is stored. A nightly job keeps every player's season totals in
 `player_seasons`, fetched a whole league at a time. The first run for a sport
 backfills ten seasons; after that only the two newest are refreshed. Any page
