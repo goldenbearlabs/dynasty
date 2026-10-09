@@ -81,6 +81,15 @@
 		</label>
 	</div>
 
+	{#if competition.stats.some((s) => s.key === 'pit_gs')}
+		<div class="row end">
+			<label class="field" title="A start beyond this, in the order played, scores nothing. A reliever who opens a game counts only if he goes more than an inning.">
+				Pitcher starts that score per week (0 = all)
+				<input type="number" min="0" max="30" bind:value={settings.lineup.pitcher_starts_per_week} />
+			</label>
+		</div>
+	{/if}
+
 	<h3>Starting slots <span class="muted">({starters} starters)</span></h3>
 	{#each settings.lineup.slots as slot, i (i)}
 		<div class="row end slot">

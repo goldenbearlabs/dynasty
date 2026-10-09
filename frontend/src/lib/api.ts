@@ -13,7 +13,14 @@ export type LeagueSettings = {
 		/** Days a non-prospect sent to reserve must stay there; 0 for none. */
 		reserve_lock_days: number;
 	};
-	lineup: { period: 'day' | 'week'; week_start: string; lock: 'game_start' | 'period_start'; slots: Slot[] };
+	lineup: {
+		period: 'day' | 'week';
+		week_start: string;
+		lock: 'game_start' | 'period_start';
+		slots: Slot[];
+		/** Baseball: how many pitcher starts score for a team in a week; 0 for all of them. */
+		pitcher_starts_per_week: number;
+	};
 	scoring: Record<string, number>;
 	format: { type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number };
 	/** weekly_limit: acquisitions a franchise may make in a week; 0 for no limit. */
@@ -391,6 +398,8 @@ export type Lineup = {
 	slots: Slot[];
 	players: LineupPlayer[];
 	locked: string; // why the whole lineup cannot change, or empty
+	/** The week's pitcher starts against the league's cap; null in a league without one. */
+	starts: { limit: number; made: { player_id: string; full_name: string; day: string; innings: number; counts: boolean }[] } | null;
 };
 
 export type LineupChange = {
