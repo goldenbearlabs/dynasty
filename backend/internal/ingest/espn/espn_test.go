@@ -337,3 +337,50 @@ func TestLatestSeason(t *testing.T) {
 		}
 	}
 }
+
+// A league narrowed to some groups and positions lists only those teams
+// and players, and refuses to carry on if a group comes back empty.
+func TestSourcePool(t *testing.T) {
+	groupTeams := `{"items":[{"$ref":"http://espn.test/seasons/2027/teams/150?lang=en"}]}`
+	mux := http.NewServeMux()
+	mux.HandleFunc("/basketball/mens-college-basketball/teams", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(teamsJSON))
+	})
+	mux.HandleFunc("/basketball/mens-college-basketball/teams/150", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(rosterJSON))
+	})
+	mux.HandleFunc("/basketball/leagues/mens-college-basketball/seasons/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(groupTeams))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	src := New(ingest.NewClient(0), League{
+		Path: "basketball/mens-college-basketball", Provider: "espn_basketball",
+		Groups: []string{"2"}, Positions: []string{"F"},
+	})
+	src.Base, src.CoreBase = server.URL, server.URL
+
+	teams, err := src.Teams(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(teams) != 1 || teams[0].ProviderID != "150" {
+		t.Fatalf("teams = %+v, want only the one in the group", teams)
+	}
+	players, err := src.Roster(context.Background(), teams[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(players) != 1 || players[0].FullName != "Cooper Flagg" {
+		t.Errorf("players = %+v, want only the forward", players)
+	}
+	if pool := src.Pool(); !pool.ListedTeamsOnly || len(pool.Positions) != 1 {
+		t.Errorf("pool = %+v", pool)
+	}
+
+	groupTeams = `{"items":[]}`
+	if _, err := src.Teams(context.Background()); err == nil {
+		t.Error("an empty group was accepted; it must stop the sync")
+	}
+}

@@ -103,14 +103,18 @@ func (s *Syncer) upsertGame(ctx context.Context, competition string, game Game) 
 		id, _ := s.q.FindProTeam(ctx, db.FindProTeamParams{Competition: competition, ProviderID: providerID})
 		return id // left empty for a team we do not know, such as an all-star side
 	}
+	home, away := team(game.HomeTeam), team(game.AwayTeam)
+	if !home.Valid && !away.Valid {
+		return nil // a game between teams outside the competition is not ours to follow
+	}
 	return s.q.UpsertGame(ctx, db.UpsertGameParams{
 		Competition: competition,
 		ProviderID:  game.ProviderID,
 		Day:         sportsday.Date(sportsday.Of(game.StartsAt)),
 		StartsAt:    pgtype.Timestamptz{Time: game.StartsAt, Valid: true},
 		Status:      game.Status,
-		HomeTeamID:  team(game.HomeTeam),
-		AwayTeamID:  team(game.AwayTeam),
+		HomeTeamID:  home,
+		AwayTeamID:  away,
 		HomeScore:   int32(game.HomeScore),
 		AwayScore:   int32(game.AwayScore),
 		Detail:      game.Detail,
@@ -315,7 +319,39 @@ func (s *Syncer) syncRosters(ctx context.Context, competition string, src Source
 		return rows, fmt.Errorf("%d of %d team rosters failed", failed, len(teams))
 	}
 
-	_, err = s.q.MarkMissingInactive(ctx, db.MarkMissingInactiveParams{Competition: competition, SeenBefore: startedAt})
+	// A narrowed competition first removes the players it no longer covers,
+	// while their teams still show where they are; whoever is left and was
+	// not seen has gone, and is kept as inactive.
+	listed := make([]string, len(teams))
+	for i, t := range teams {
+		listed[i] = t.ProviderID
+	}
+	var pool Pool
+	if pooled, ok := src.(PoolSource); ok {
+		pool = pooled.Pool()
+	}
+	if len(pool.Positions) > 0 || pool.ListedTeamsOnly {
+		removed, err := s.q.DeletePlayersOutsidePool(ctx, db.DeletePlayersOutsidePoolParams{
+			Competition: competition, Positions: pool.Positions, ListedTeamsOnly: pool.ListedTeamsOnly, TeamIds: listed,
+		})
+		if err != nil {
+			return rows, err
+		}
+		if removed > 0 {
+			s.log.Info("removed players outside the pool", "competition", competition, "players", removed)
+		}
+	}
+	if _, err := s.q.MarkMissingInactive(ctx, db.MarkMissingInactiveParams{Competition: competition, SeenBefore: startedAt}); err != nil {
+		return rows, err
+	}
+	if !pool.ListedTeamsOnly {
+		return rows, nil
+	}
+	// Teams outside the pool go too, once nothing points at them.
+	if err := s.q.DetachUnlistedTeams(ctx, db.DetachUnlistedTeamsParams{Competition: competition, TeamIds: listed}); err != nil {
+		return rows, err
+	}
+	_, err = s.q.DeleteUnlistedTeams(ctx, db.DeleteUnlistedTeamsParams{Competition: competition, TeamIds: listed})
 	return rows, err
 }
 

@@ -458,3 +458,65 @@ func TestProspectKeepsOneRow(t *testing.T) {
 		t.Errorf("after making the team: %d players, %d ids, status %q; want the same 2 players, 2 ids, active", players, ids, status)
 	}
 }
+
+// leagueFeed serves the teams and rosters it is given, and as a PoolSource
+// says how the league has been narrowed.
+type leagueFeed struct {
+	rosters map[string][]ingest.Player // by team id
+	pool    ingest.Pool
+}
+
+func (f *leagueFeed) Teams(context.Context) ([]ingest.Team, error) {
+	var teams []ingest.Team
+	for id := range f.rosters {
+		teams = append(teams, ingest.Team{ProviderID: id, Abbrev: id, Name: id})
+	}
+	return teams, nil
+}
+
+func (f *leagueFeed) Roster(_ context.Context, team ingest.Team) ([]ingest.Player, error) {
+	return f.rosters[team.ProviderID], nil
+}
+
+func (f *leagueFeed) Pool() ingest.Pool { return f.pool }
+
+// When a competition is narrowed, the players and teams it stored before
+// and no longer covers are removed, not left behind as inactive.
+func TestSyncRostersTrimsToPool(t *testing.T) {
+	pool := dbtest.Open(t)
+	ctx := context.Background()
+	const key, provider = "test_pool", "test_pool_provider"
+	cleanup := func() {
+		pool.Exec(ctx, `delete from players where competition = $1`, key)
+		pool.Exec(ctx, `delete from pro_teams where competition = $1`, key)
+		pool.Exec(ctx, `delete from ingest_runs where competition = $1`, key)
+	}
+	cleanup()
+	defer cleanup()
+
+	at := func(id, position string) ingest.Player {
+		return ingest.Player{Provider: provider, ProviderID: id, FullName: "Player " + id, Positions: []string{position}}
+	}
+	syncer := ingest.NewSyncer(db.New(pool), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	feed := &leagueFeed{rosters: map[string][]ingest.Player{
+		"in":  {at("passer", "QB"), at("kicker", "PK")},
+		"out": {at("elsewhere", "QB")},
+	}}
+	if err := syncer.SyncRosters(ctx, key, feed); err != nil {
+		t.Fatal(err)
+	}
+
+	// The league is narrowed to one team and one position.
+	feed.rosters = map[string][]ingest.Player{"in": {at("passer", "QB")}}
+	feed.pool = ingest.Pool{Positions: []string{"QB"}, ListedTeamsOnly: true}
+	if err := syncer.SyncRosters(ctx, key, feed); err != nil {
+		t.Fatal(err)
+	}
+
+	var players, teams string
+	pool.QueryRow(ctx, `select coalesce(string_agg(full_name || '/' || status, ', ' order by full_name), '') from players where competition = $1`, key).Scan(&players)
+	pool.QueryRow(ctx, `select coalesce(string_agg(provider_id, ', '), '') from pro_teams where competition = $1`, key).Scan(&teams)
+	if players != "Player passer/active" || teams != "in" {
+		t.Errorf("after narrowing: players = %q, teams = %q; want only the passer and his team", players, teams)
+	}
+}

@@ -107,6 +107,83 @@ func (q *Queries) DeletePlayer(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const deletePlayersOutsidePool = `-- name: DeletePlayersOutsidePool :execrows
+delete from players p
+where p.competition = $1
+  and ((cardinality($2::text[]) > 0 and cardinality(p.positions) > 0 and not p.positions && $2::text[])
+    or ($3::boolean and p.pro_team_id in (
+          select t.id from pro_teams t
+          where t.competition = $1 and t.provider_id <> all($4::text[]))))
+  and not exists (select 1 from roster_entries r where r.player_id = p.id)
+  and not exists (select 1 from transactions x where x.player_id = p.id)
+  and not exists (select 1 from draft_picks k where k.player_id = p.id)
+  and not exists (select 1 from trade_items i where i.player_id = p.id)
+`
+
+type DeletePlayersOutsidePoolParams struct {
+	Competition     string   `json:"competition"`
+	Positions       []string `json:"positions"`
+	ListedTeamsOnly bool     `json:"listed_teams_only"`
+	TeamIds         []string `json:"team_ids"`
+}
+
+// Removes players a narrowed competition no longer covers: at none of its
+// positions, or on a team it does not list. A player with any fantasy
+// history stays, and is marked inactive by the roster sync like anyone
+// else who has left.
+func (q *Queries) DeletePlayersOutsidePool(ctx context.Context, arg DeletePlayersOutsidePoolParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePlayersOutsidePool,
+		arg.Competition,
+		arg.Positions,
+		arg.ListedTeamsOnly,
+		arg.TeamIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUnlistedTeams = `-- name: DeleteUnlistedTeams :execrows
+delete from pro_teams where competition = $1 and provider_id <> all($2::text[])
+`
+
+type DeleteUnlistedTeamsParams struct {
+	Competition string   `json:"competition"`
+	TeamIds     []string `json:"team_ids"`
+}
+
+func (q *Queries) DeleteUnlistedTeams(ctx context.Context, arg DeleteUnlistedTeamsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUnlistedTeams, arg.Competition, arg.TeamIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const detachUnlistedTeams = `-- name: DetachUnlistedTeams :exec
+with gone as (
+  select t.id from pro_teams t where t.competition = $1 and t.provider_id <> all($2::text[])
+), released as (
+  update players set pro_team_id = null where pro_team_id in (select id from gone)
+)
+update games set
+  home_team_id = case when home_team_id in (select id from gone) then null else home_team_id end,
+  away_team_id = case when away_team_id in (select id from gone) then null else away_team_id end
+where home_team_id in (select id from gone) or away_team_id in (select id from gone)
+`
+
+type DetachUnlistedTeamsParams struct {
+	Competition string   `json:"competition"`
+	TeamIds     []string `json:"team_ids"`
+}
+
+// Before DeleteUnlistedTeams: nothing may still point at a team being removed.
+func (q *Queries) DetachUnlistedTeams(ctx context.Context, arg DetachUnlistedTeamsParams) error {
+	_, err := q.db.Exec(ctx, detachUnlistedTeams, arg.Competition, arg.TeamIds)
+	return err
+}
+
 const findPlayerByExternalID = `-- name: FindPlayerByExternalID :one
 select player_id from player_external_ids
 where provider = $1 and provider_id = $2
@@ -375,10 +452,12 @@ join players b on b.competition = a.competition
               and b.status <> 'prospect'
 left join pro_teams t on t.id = b.pro_team_id
 where a.status = 'prospect'
+  -- Written as a lookup per pair: joining the ids to each other first
+  -- pairs every id with every other from its feed, millions of rows.
   and not exists (
     select 1 from player_external_ids xa
-    join player_external_ids xb on xb.provider = xa.provider
-    where xa.player_id = a.id and xb.player_id = b.id)
+    where xa.player_id = a.id
+      and xa.provider in (select xb.provider from player_external_ids xb where xb.player_id = b.id))
 order by a.full_name
 limit 200
 `

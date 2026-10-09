@@ -39,19 +39,31 @@ type League struct {
 	// how ESPN numbers it. See LatestSeason.
 	SeasonStarts     time.Month
 	SeasonSpansYears bool
+	// Positions, when set, limits the league to players at these positions.
+	Positions []string
+	// Groups, when set, limits the league to the teams in these ESPN
+	// groups: for college sports, conference ids.
+	Groups []string
 }
 
 type Source struct {
-	Base    string // overridable in tests
-	WebBase string // likewise, for the league-wide statistics
-	client  *ingest.Client
+	Base     string // overridable in tests
+	WebBase  string // likewise, for the league-wide statistics
+	CoreBase string // likewise, for group membership
+	client   *ingest.Client
 	League
 }
 
 // New returns a Source for one ESPN league. Leagues that share athlete ids
 // (college and pro basketball) must share a provider name.
 func New(client *ingest.Client, league League) *Source {
-	return &Source{Base: defaultBase, WebBase: defaultWebBase, client: client, League: league}
+	return &Source{Base: defaultBase, WebBase: defaultWebBase, CoreBase: defaultCoreBase, client: client, League: league}
+}
+
+// Pool reports how the league has been narrowed, so that players stored
+// before the narrowing can be removed.
+func (s *Source) Pool() ingest.Pool {
+	return ingest.Pool{Positions: s.Positions, ListedTeamsOnly: len(s.Groups) > 0}
 }
 
 func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
@@ -79,8 +91,15 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 		return nil, fmt.Errorf("espn %s: no league in teams response", s.Path)
 	}
 
+	members, err := s.groupMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var teams []ingest.Team
 	for _, t := range res.Sports[0].Leagues[0].Teams {
+		if members != nil && !members[t.Team.ID] {
+			continue
+		}
 		team := ingest.Team{ProviderID: t.Team.ID, Abbrev: t.Team.Abbreviation, Name: t.Team.DisplayName}
 		if len(t.Team.Logos) > 0 {
 			team.LogoURL = t.Team.Logos[0].Href
@@ -88,6 +107,45 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 		teams = append(teams, team)
 	}
 	return teams, nil
+}
+
+// groupMembers returns the ids of the teams in the league's Groups, or nil
+// when the league is not limited to any. Membership is read for the season
+// about to start, since teams change conference over the summer, falling
+// back to the one before until the new one is published. A group with no
+// teams is an error: carrying on would drop a whole conference.
+func (s *Source) groupMembers(ctx context.Context) (map[string]bool, error) {
+	if len(s.Groups) == 0 {
+		return nil, nil
+	}
+	sport, league, _ := strings.Cut(s.Path, "/")
+	season := time.Now().Year()
+	if time.Now().Month() >= time.July {
+		season++
+	}
+
+	members := map[string]bool{}
+	for _, group := range s.Groups {
+		var res struct {
+			Items []ref `json:"items"`
+		}
+		for _, year := range []int{season, season - 1} {
+			url := fmt.Sprintf("%s/%s/leagues/%s/seasons/%d/types/2/groups/%s/teams?limit=200", s.CoreBase, sport, league, year, group)
+			if err := s.client.GetJSON(ctx, url, &res); err != nil && !ingest.NotFound(err) {
+				return nil, err
+			}
+			if len(res.Items) > 0 {
+				break
+			}
+		}
+		if len(res.Items) == 0 {
+			return nil, fmt.Errorf("espn %s: group %s lists no teams", s.Path, group)
+		}
+		for _, team := range res.Items {
+			members[team.id()] = true
+		}
+	}
+	return members, nil
 }
 
 func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player, error) {
@@ -130,6 +188,9 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 		}
 		if a.Position.Abbreviation != "" {
 			p.Positions = []string{a.Position.Abbreviation}
+		}
+		if len(s.Positions) > 0 && !slices.Contains(s.Positions, a.Position.Abbreviation) {
+			continue
 		}
 		players = append(players, p)
 	}
@@ -469,7 +530,9 @@ type Draft struct {
 	Provider string     // the league's athlete id space
 	Month    time.Month // when the draft is held
 	Classes  int        // how many past drafts' picks are listed
-	client   *ingest.Client
+	// Positions, when set, keeps only prospects at these positions.
+	Positions []string
+	client    *ingest.Client
 }
 
 func NewDraft(client *ingest.Client, draft Draft) *Draft {
@@ -567,6 +630,9 @@ func (d *Draft) athlete(ctx context.Context, year int, entry string) (*ingest.Pl
 		if a.Name == "overall" && a.DisplayValue != "" && a.DisplayValue != "0" {
 			p.Note += ", ranked " + a.DisplayValue
 		}
+	}
+	if len(d.Positions) > 0 && !slices.Contains(d.Positions, res.Position.Abbreviation) {
+		return nil, nil
 	}
 	if res.Position.Abbreviation != "" {
 		p.Positions = []string{res.Position.Abbreviation}

@@ -35,13 +35,18 @@ func TestPollPushes(t *testing.T) {
 	const key = "test_push"
 	cleanup := func() {
 		pool.Exec(ctx, `delete from games where competition = $1`, key)
+		pool.Exec(ctx, `delete from pro_teams where competition = $1`, key)
 		pool.Exec(ctx, `delete from ingest_runs where competition = $1`, key)
 	}
 	cleanup()
 	defer cleanup()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	src := &feed{game: ingest.Game{ProviderID: "g", StartsAt: time.Now().Add(-time.Minute), Status: ingest.GameScheduled}}
+	// A game is only followed when one of its teams is in the competition.
+	if _, err := pool.Exec(ctx, `insert into pro_teams (competition, provider_id, abbrev, name) values ($1, 'home', 'HOM', 'Home')`, key); err != nil {
+		t.Fatal(err)
+	}
+	src := &feed{game: ingest.Game{ProviderID: "g", HomeTeam: "home", StartsAt: time.Now().Add(-time.Minute), Status: ingest.GameScheduled}}
 	syncer := ingest.NewSyncer(db.New(pool), log)
 	if err := syncer.SyncGames(ctx, key, src, time.Now().AddDate(0, 0, -1), time.Now().AddDate(0, 0, 1)); err != nil {
 		t.Fatal(err)

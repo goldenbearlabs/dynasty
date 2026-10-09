@@ -48,6 +48,7 @@ func cbb(client *ingest.Client) Competition {
 	source := espn.New(client, espn.League{
 		Path: "basketball/mens-college-basketball", Provider: basketballProvider, Stats: basketballFeed,
 		Scoreboard:   "groups=50&limit=500", // every Division I game, not only the featured ones
+		Groups:       collegeConferences,
 		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.November, SeasonSpansYears: true,
 	})
 	return Competition{
@@ -57,6 +58,19 @@ func cbb(client *ingest.Client) Competition {
 		Source: source, Games: source, Seasons: source,
 		Prospects: espn.NewRecruits(client),
 	}
+}
+
+// collegeConferences are the conferences the college league draws from, by
+// ESPN group id. Players elsewhere in Division I are left out.
+var collegeConferences = []string{
+	"2",  // ACC
+	"3",  // Atlantic 10
+	"4",  // Big East
+	"7",  // Big Ten
+	"8",  // Big 12
+	"21", // Pac-12
+	"23", // SEC
+	"44", // Mountain West
 }
 
 func nba(client *ingest.Client) Competition {

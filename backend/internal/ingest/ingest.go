@@ -15,6 +15,19 @@ type Source interface {
 	Roster(ctx context.Context, team Team) ([]Player, error)
 }
 
+// PoolSource is a Source that deliberately covers only part of its league.
+// Players already stored who fall outside it are removed, where an
+// ordinary Source would only mark a player it no longer lists inactive.
+type PoolSource interface {
+	Pool() Pool
+}
+
+// Pool describes the part of a league a competition is limited to.
+type Pool struct {
+	Positions       []string // when set, only players at one of these positions belong
+	ListedTeamsOnly bool     // when true, only players on the teams the Source lists belong
+}
+
 // ProspectSource is a feed of players who have not reached the competition
 // yet: recruits, draft picks, players in a club's system.
 type ProspectSource interface {
