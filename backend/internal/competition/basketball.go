@@ -19,34 +19,71 @@ var (
 		{"blk", "Blocks"}, {"tov", "Turnovers"}, {"tpm", "Three-pointers made"},
 		{"fgm", "Field goals made"}, {"fga", "Field goals attempted"},
 		{"ftm", "Free throws made"}, {"fta", "Free throws attempted"},
+		{"dd", "Double-doubles"}, {"td", "Triple-doubles"},
+		{"pts40", "40-point games"}, {"pts50", "50-point games"},
 	}
-	basketballScoring = map[string]float64{"pts": 1, "reb": 1.2, "ast": 1.5, "stl": 3, "blk": 3, "tov": -1}
+	// A 50-point game is also a 40-point game, so it earns both bonuses.
+	basketballScoring = map[string]float64{
+		"pts": 0.5, "reb": 1, "ast": 1, "stl": 2, "blk": 2, "tov": -1, "tpm": 0.5,
+		"dd": 1, "td": 2, "pts40": 2, "pts50": 2,
+	}
 
-	// ESPN's box score names for those stats.
+	// ESPN's names for those stats, in box scores and season totals.
 	basketballFeed = map[string]string{
 		"points": "pts", "rebounds": "reb", "assists": "ast", "steals": "stl", "blocks": "blk", "turnovers": "tov",
 		"threePointFieldGoalsMade": "tpm", "fieldGoalsMade": "fgm", "fieldGoalsAttempted": "fga",
 		"freeThrowsMade": "ftm", "freeThrowsAttempted": "fta",
+		"doubleDouble": "dd", "tripleDouble": "td", // season totals only; in a game they are worked out below
 	}
 	basketballSeasonGroups = []string{"general", "offensive", "defensive"}
 )
 
+// basketballGame adds what a single game's line amounts to: a double- or
+// triple-double (ten or more in two or three of points, rebounds, assists,
+// steals and blocks) and a 40- or 50-point game.
+func basketballGame(stats map[string]float64) {
+	tens := 0
+	for _, stat := range []string{"pts", "reb", "ast", "stl", "blk"} {
+		if stats[stat] >= 10 {
+			tens++
+		}
+	}
+	for stat, earned := range map[string]bool{"dd": tens >= 2, "td": tens >= 3, "pts40": stats["pts"] >= 40, "pts50": stats["pts"] >= 50} {
+		if earned {
+			stats[stat] = 1
+		}
+	}
+}
+
+// basketballLineup is three guards, three forwards and a centre, then any
+// extra players. Every slot counts one game a week: the manager picks which.
+// The feeds mostly label players only G, F or C, so the slots do too.
+func basketballLineup(util int) settings.Lineup {
+	slots := []settings.Slot{
+		slot("G", 3, "G", "PG", "SG"),
+		slot("F", 3, "F", "SF", "PF"),
+		slot("C", 1, "C"),
+	}
+	if util > 0 {
+		slots = append(slots, slot("UTIL", util, settings.AnyPosition))
+	}
+	for i := range slots {
+		slots[i].GamesPerWeek = 1
+	}
+	return settings.Lineup{Period: settings.PeriodWeek, WeekStart: "monday", Lock: settings.LockGameStart, Slots: slots}
+}
+
 func cbb(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 10, 5
-	rules.Lineup.Slots = []settings.Slot{
-		slot("G", 2, "G", "PG", "SG"),
-		slot("F", 2, "F", "SF", "PF"),
-		slot("C", 1, "C"),
-		slot("UTIL", 1, settings.AnyPosition),
-	}
+	rules.Roster.Main, rules.Roster.Reserve = 12, 5 // 7 starters and 5 on the bench
+	rules.Lineup = basketballLineup(0)
 	rules.Scoring = basketballScoring
 	// College players carry into the NBA league when the dynasty has one;
 	// the setup wizard drops this if it does not.
 	rules.Continuity = &settings.Continuity{Into: "nba", LandOn: settings.ListReserve}
 
 	source := espn.New(client, espn.League{
-		Path: "basketball/mens-college-basketball", Provider: basketballProvider, Stats: basketballFeed,
+		Path: "basketball/mens-college-basketball", Provider: basketballProvider, Stats: basketballFeed, Derive: basketballGame,
 		Scoreboard:   "groups=50&limit=500", // every Division I game, not only the featured ones
 		Groups:       collegeConferences,
 		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.November, SeasonSpansYears: true,
@@ -75,17 +112,12 @@ var collegeConferences = []string{
 
 func nba(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 14, 6
-	rules.Lineup.Slots = []settings.Slot{
-		slot("G", 2, "G", "PG", "SG"),
-		slot("F", 2, "F", "SF", "PF"),
-		slot("C", 1, "C"),
-		slot("UTIL", 2, settings.AnyPosition),
-	}
+	rules.Roster.Main, rules.Roster.Reserve = 14, 6 // 9 starters and 5 on the bench
+	rules.Lineup = basketballLineup(2)
 	rules.Scoring = basketballScoring
 
 	source := espn.New(client, espn.League{
-		Path: "basketball/nba", Provider: basketballProvider, Stats: basketballFeed,
+		Path: "basketball/nba", Provider: basketballProvider, Stats: basketballFeed, Derive: basketballGame,
 		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.October, SeasonSpansYears: true,
 	})
 	return Competition{
@@ -104,17 +136,14 @@ const womensBasketballProvider = "espn_womens_basketball"
 
 func wnba(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 10, 4
-	rules.Lineup.Slots = []settings.Slot{
-		slot("G", 2, "G", "PG", "SG"),
-		slot("F", 2, "F", "SF", "PF"),
-		slot("C", 1, "C"),
-		slot("UTIL", 1, settings.AnyPosition),
-	}
+	// The league is 15 teams of 12, so 16 franchises can hold little more
+	// than their starters before the waiver wire is empty: 7 and 1.
+	rules.Roster.Main, rules.Roster.Reserve = 8, 2
+	rules.Lineup = basketballLineup(0)
 	rules.Scoring = basketballScoring
 
 	source := espn.New(client, espn.League{
-		Path: "basketball/wnba", Provider: womensBasketballProvider, Stats: basketballFeed,
+		Path: "basketball/wnba", Provider: womensBasketballProvider, Stats: basketballFeed, Derive: basketballGame,
 		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.May, // numbered by the year it is played in
 	})
 	return Competition{

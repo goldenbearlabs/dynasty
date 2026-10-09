@@ -2,7 +2,8 @@
 
 // ---- settings: mirrors backend/internal/settings ----
 
-export type Slot = { name: string; positions: string[]; count: number };
+/** games_per_week: how many of a player's games count each week in this slot; 0 for all of them. */
+export type Slot = { name: string; positions: string[]; count: number; games_per_week: number };
 
 export type LeagueSettings = {
 	roster: {
@@ -326,7 +327,16 @@ export type OverallYear = {
 	rows: { franchise_id: string; points: number; finishes: Record<string, number> }[];
 };
 
-export type LineupGame = { starts_at: string; status: string; opponent: string; at_home: boolean; points: number };
+export type LineupGame = {
+	day: string;
+	starts_at: string;
+	status: string;
+	opponent: string;
+	at_home: boolean;
+	points: number;
+	/** False for a game left out by a slot that counts only some games a week. */
+	counts: boolean;
+};
 
 export type LineupPlayer = {
 	player_id: string;
@@ -335,6 +345,8 @@ export type LineupPlayer = {
 	headshot_url: string;
 	team_abbrev: string;
 	slot: string; // empty on the bench
+	/** The day his counted games begin, in a slot that counts only some; empty for his first game. */
+	counts_from: string;
 	locked: boolean;
 	points: number;
 	games: LineupGame[];
@@ -351,7 +363,7 @@ export type Lineup = {
 
 export type LineupChange = {
 	day: string;
-	entries: { slot: string; player_id: string }[];
+	entries: { slot: string; player_id: string; counts_from?: string }[];
 	franchise_id?: string;
 	force?: boolean;
 };

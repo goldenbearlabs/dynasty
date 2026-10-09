@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"crossover/internal/ingest"
@@ -20,6 +21,11 @@ const (
 type Source struct {
 	Base   string // overridable in tests
 	client *ingest.Client
+
+	mu          sync.Mutex
+	roles       map[int]string // pitcher id -> "SP" or "RP"
+	rolesRead   time.Time
+	rolesSeason int // overridable in tests; 0 means this year
 }
 
 func New(client *ingest.Client) *Source {
@@ -82,9 +88,73 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 		if r.Position.Abbreviation != "" {
 			p.Positions = []string{r.Position.Abbreviation}
 		}
+		if r.Position.Abbreviation == "P" {
+			role, err := s.pitcherRole(ctx, r.Person.ID)
+			if err != nil {
+				// Carrying on would turn every starter and reliever back into a plain pitcher.
+				return nil, fmt.Errorf("pitcher roles: %w", err)
+			}
+			if role != "" {
+				p.Positions = []string{role}
+			}
+		}
 		players = append(players, p)
 	}
 	return players, nil
+}
+
+// pitcherRole says whether a pitcher starts or relieves. The feed calls
+// them all "P", so it is read from how they have been used: a pitcher who
+// started at least half his games this season and last is a starter. One
+// who has not pitched in either stays a plain "P".
+func (s *Source) pitcherRole(ctx context.Context, id int) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.roles == nil || time.Since(s.rolesRead) > 12*time.Hour {
+		season := s.rolesSeason
+		if season == 0 {
+			season = time.Now().Year()
+		}
+		type use struct{ games, starts float64 }
+		used := map[int]use{}
+		for _, year := range []int{season, season - 1} {
+			var res struct {
+				Stats []struct {
+					Splits []struct {
+						Player struct {
+							ID int `json:"id"`
+						} `json:"player"`
+						Stat struct {
+							Games  float64 `json:"gamesPlayed"`
+							Starts float64 `json:"gamesStarted"`
+						} `json:"stat"`
+					} `json:"splits"`
+				} `json:"stats"`
+			}
+			url := fmt.Sprintf("%s/stats?stats=season&group=pitching&season=%d&sportId=1&gameType=R&playerPool=all&limit=5000", s.Base, year)
+			if err := s.client.GetTransient(ctx, url, &res); err != nil {
+				return "", err
+			}
+			for _, stats := range res.Stats {
+				for _, split := range stats.Splits {
+					u := used[split.Player.ID]
+					used[split.Player.ID] = use{u.games + split.Stat.Games, u.starts + split.Stat.Starts}
+				}
+			}
+		}
+		s.roles = map[int]string{}
+		for player, u := range used {
+			switch {
+			case u.games == 0:
+			case u.starts*2 >= u.games:
+				s.roles[player] = "SP"
+			default:
+				s.roles[player] = "RP"
+			}
+		}
+		s.rolesRead = time.Now()
+	}
+	return s.roles[id], nil
 }
 
 // draftYears is how many recent draft classes count as prospects.
@@ -298,10 +368,10 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 var (
 	battingStats = map[string]string{
 		"bat_r": "runs", "bat_h": "hits", "bat_hr": "homeRuns", "bat_rbi": "rbi",
-		"bat_sb": "stolenBases", "bat_bb": "baseOnBalls", "bat_so": "strikeOuts",
+		"bat_sb": "stolenBases", "bat_bb": "baseOnBalls", "bat_so": "strikeOuts", "bat_tb": "totalBases",
 	}
 	pitchingStats = map[string]string{
-		"pit_so": "strikeOuts", "pit_w": "wins", "pit_sv": "saves",
+		"pit_so": "strikeOuts", "pit_w": "wins", "pit_l": "losses", "pit_sv": "saves", "pit_hld": "holds",
 		"pit_er": "earnedRuns", "pit_h": "hits", "pit_bb": "baseOnBalls",
 	}
 )

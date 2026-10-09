@@ -86,6 +86,12 @@
 		<div class="row end slot">
 			<label class="field">Slot <input class="slot-name" bind:value={slot.name} /></label>
 			<label class="field">Count <input type="number" min="1" bind:value={slot.count} /></label>
+			{#if settings.lineup.period === 'week'}
+				<label class="field" title="How many of a player's games count each week in this slot. 0 counts them all.">
+					Games a week (0 = all)
+					<input type="number" min="0" max="7" bind:value={slot.games_per_week} />
+				</label>
+			{/if}
 			<div class="positions" role="group" aria-label="Positions for {slot.name}">
 				{#each [ANY, ...competition.positions] as position (position)}
 					<label class="check small-text position">
@@ -101,7 +107,7 @@
 			<button type="button" class="small quiet danger" onclick={() => settings.lineup.slots.splice(i, 1)}>Remove</button>
 		</div>
 	{/each}
-	<button type="button" class="small" onclick={() => settings.lineup.slots.push({ name: '', positions: [], count: 1 })}>
+	<button type="button" class="small" onclick={() => settings.lineup.slots.push({ name: '', positions: [], count: 1, games_per_week: 0 })}>
 		Add a slot
 	</button>
 </fieldset>

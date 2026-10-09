@@ -8,7 +8,13 @@ import (
 
 func mlb(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 24, 10
+	rules.Roster.Main, rules.Roster.Reserve = 20, 10 // 15 starters and 5 on the bench
+	hitters := []string{"C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH", "TWP"}
+	// A starting pitcher's slot counts one start a week, which caps a team
+	// at four; that needs lineups set by the week.
+	starters := slot("SP", 4, "SP", "TWP")
+	starters.GamesPerWeek = 1
+	rules.Lineup.Period = settings.PeriodWeek
 	rules.Lineup.Slots = []settings.Slot{
 		slot("C", 1, "C"),
 		slot("1B", 1, "1B"),
@@ -16,24 +22,27 @@ func mlb(client *ingest.Client) Competition {
 		slot("3B", 1, "3B"),
 		slot("SS", 1, "SS"),
 		slot("OF", 3, "LF", "CF", "RF", "OF"),
-		slot("UTIL", 1, settings.AnyPosition),
-		slot("P", 7, "P", "TWP"),
+		slot("UTIL", 1, hitters...), // any hitter, which is where a designated hitter plays
+		starters,
+		slot("RP", 2, "RP", "P"),
 	}
+	// An inning is three outs, so three points.
 	rules.Scoring = map[string]float64{
-		"bat_r": 1, "bat_h": 1, "bat_hr": 3, "bat_rbi": 1, "bat_sb": 2, "bat_bb": 1, "bat_so": -0.5,
-		"pit_ip": 3, "pit_so": 1, "pit_w": 4, "pit_sv": 5, "pit_er": -2, "pit_h": -0.5, "pit_bb": -0.5,
+		"bat_tb": 1, "bat_r": 1, "bat_rbi": 1, "bat_bb": 1, "bat_sb": 1, "bat_so": -1,
+		"pit_ip": 3, "pit_so": 1, "pit_h": -1, "pit_bb": -1, "pit_er": -2,
+		"pit_w": 2, "pit_l": -2, "pit_sv": 5, "pit_hld": 2,
 	}
 	rules.Draft.Rounds = 5
 
 	source := mlbam.New(client)
 	return Competition{
 		Key: "mlb", Name: "MLB",
-		Positions: []string{"P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH", "TWP"},
+		Positions: []string{"SP", "RP", "P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH", "TWP"},
 		Stats: []Stat{
-			{"bat_r", "Runs"}, {"bat_h", "Hits"}, {"bat_hr", "Home runs"}, {"bat_rbi", "Runs batted in"},
+			{"bat_tb", "Total bases"}, {"bat_r", "Runs"}, {"bat_h", "Hits"}, {"bat_hr", "Home runs"}, {"bat_rbi", "Runs batted in"},
 			{"bat_sb", "Stolen bases"}, {"bat_bb", "Walks"}, {"bat_so", "Strikeouts (batting)"},
-			{"pit_ip", "Innings pitched"}, {"pit_so", "Strikeouts (pitching)"}, {"pit_w", "Wins"},
-			{"pit_sv", "Saves"}, {"pit_er", "Earned runs allowed"}, {"pit_h", "Hits allowed"},
+			{"pit_ip", "Innings pitched"}, {"pit_so", "Strikeouts (pitching)"}, {"pit_w", "Wins"}, {"pit_l", "Losses"},
+			{"pit_sv", "Saves"}, {"pit_hld", "Holds"}, {"pit_er", "Earned runs allowed"}, {"pit_h", "Hits allowed"},
 			{"pit_bb", "Walks allowed"},
 		},
 		Defaults:  rules,

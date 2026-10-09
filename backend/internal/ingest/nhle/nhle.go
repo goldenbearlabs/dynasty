@@ -372,6 +372,7 @@ func (s *Source) BoxScore(ctx context.Context, game ingest.Game) ([]ingest.StatL
 		Goalies  []goalieLine `json:"goalies"`
 	}
 	var res struct {
+		GameState         string `json:"gameState"`
 		PlayerByGameStats struct {
 			HomeTeam side `json:"homeTeam"`
 			AwayTeam side `json:"awayTeam"`
@@ -380,6 +381,37 @@ func (s *Source) BoxScore(ctx context.Context, game ingest.Game) ([]ingest.StatL
 	if err := s.client.GetTransient(ctx, fmt.Sprintf("%s/gamecenter/%s/boxscore", s.Base, game.ProviderID), &res); err != nil {
 		return nil, err
 	}
+	// The box score counts power-play goals but not assists, so power-play
+	// points come from the list of goals.
+	var summary struct {
+		Summary struct {
+			Scoring []struct {
+				Goals []struct {
+					Strength string `json:"strength"`
+					PlayerID int    `json:"playerId"`
+					Assists  []struct {
+						PlayerID int `json:"playerId"`
+					} `json:"assists"`
+				} `json:"goals"`
+			} `json:"scoring"`
+		} `json:"summary"`
+	}
+	if err := s.client.GetTransient(ctx, fmt.Sprintf("%s/gamecenter/%s/landing", s.Base, game.ProviderID), &summary); err != nil {
+		return nil, err
+	}
+	powerPlayPoints := map[int]float64{}
+	for _, period := range summary.Summary.Scoring {
+		for _, goal := range period.Goals {
+			if goal.Strength != "pp" {
+				continue
+			}
+			powerPlayPoints[goal.PlayerID]++
+			for _, a := range goal.Assists {
+				powerPlayPoints[a.PlayerID]++
+			}
+		}
+	}
+	final := res.GameState == "OFF" || res.GameState == "FINAL"
 
 	var lines []ingest.StatLine
 	for _, team := range []side{res.PlayerByGameStats.HomeTeam, res.PlayerByGameStats.AwayTeam} {
@@ -388,8 +420,15 @@ func (s *Source) BoxScore(ctx context.Context, game ingest.Game) ([]ingest.StatL
 				lines = append(lines, ingest.StatLine{Provider: provider, ProviderID: strconv.Itoa(sk.PlayerID), Stats: map[string]float64{
 					"goals": float64(sk.Goals), "assists": float64(sk.Assists), "shots": float64(sk.Shots),
 					"hits": float64(sk.Hits), "blocks": float64(sk.Blocks), "pp_goals": float64(sk.PowerPlayGoals),
-					"pim": float64(sk.PIM), "plus_minus": float64(sk.PlusMinus),
+					"pp_points": powerPlayPoints[sk.PlayerID],
+					"pim":       float64(sk.PIM), "plus_minus": float64(sk.PlusMinus),
 				}})
+			}
+		}
+		played := 0
+		for _, g := range team.Goalies {
+			if g.TimeOnIce != "" && g.TimeOnIce != "00:00" {
+				played++
 			}
 		}
 		for _, g := range team.Goalies {
@@ -399,6 +438,11 @@ func (s *Source) BoxScore(ctx context.Context, game ingest.Game) ([]ingest.StatL
 			stats := map[string]float64{"saves": float64(g.Saves), "goals_against": float64(g.GoalsAgainst)}
 			if g.Decision == "W" {
 				stats["goalie_wins"] = 1
+			}
+			// A shutout is credited once the game is over, to a goalie who
+			// played all of it for his team without conceding.
+			if final && played == 1 && g.GoalsAgainst == 0 {
+				stats["shutouts"] = 1
 			}
 			lines = append(lines, ingest.StatLine{Provider: provider, ProviderID: strconv.Itoa(g.PlayerID), Stats: stats})
 		}
@@ -438,6 +482,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 		Assists     float64 `json:"assists"`
 		Shots       float64 `json:"shots"`
 		PPGoals     float64 `json:"ppGoals"`
+		PPPoints    float64 `json:"ppPoints"`
 		PIM         float64 `json:"penaltyMinutes"`
 		PlusMinus   float64 `json:"plusMinus"`
 	}
@@ -453,6 +498,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 		Wins         float64 `json:"wins"`
 		Saves        float64 `json:"saves"`
 		GoalsAgainst float64 `json:"goalsAgainst"`
+		Shutouts     float64 `json:"shutouts"`
 	}
 	scoring, err := report[skaterScoring](ctx, s, "skater/summary", year)
 	if err != nil {
@@ -479,14 +525,14 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 	var lines []ingest.SeasonLine
 	for _, sk := range scoring {
 		lines = append(lines, line(sk.PlayerID, sk.Team, sk.GamesPlayed, map[string]float64{
-			"goals": sk.Goals, "assists": sk.Assists, "shots": sk.Shots, "pp_goals": sk.PPGoals,
+			"goals": sk.Goals, "assists": sk.Assists, "shots": sk.Shots, "pp_goals": sk.PPGoals, "pp_points": sk.PPPoints,
 			"pim": sk.PIM, "plus_minus": sk.PlusMinus,
 			"hits": hitsAndBlocks[sk.PlayerID].Hits, "blocks": hitsAndBlocks[sk.PlayerID].Blocks,
 		}))
 	}
 	for _, g := range goalies {
 		lines = append(lines, line(g.PlayerID, g.Team, g.GamesPlayed, map[string]float64{
-			"saves": g.Saves, "goals_against": g.GoalsAgainst, "goalie_wins": g.Wins,
+			"saves": g.Saves, "goals_against": g.GoalsAgainst, "goalie_wins": g.Wins, "shutouts": g.Shutouts,
 		}))
 	}
 	return lines, nil

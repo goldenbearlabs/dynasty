@@ -14,19 +14,21 @@ var footballPositions = []string{"QB", "RB", "FB", "WR", "TE"}
 
 func nfl(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 20, 6
+	rules.Roster.Main, rules.Roster.Reserve = 14, 6                              // 9 starters and 5 on the bench
 	rules.Lineup.Period, rules.Lineup.WeekStart = settings.PeriodWeek, "tuesday" // a week runs Thursday to Monday
 	rules.Lineup.Slots = []settings.Slot{
 		slot("QB", 1, "QB"),
 		slot("RB", 2, "RB", "FB"),
 		slot("WR", 2, "WR"),
 		slot("TE", 1, "TE"),
-		slot("FLEX", 1, "RB", "FB", "WR", "TE"),
+		slot("FLEX", 2, "RB", "FB", "WR", "TE"),
+		slot("SFLEX", 1, "QB", "RB", "FB", "WR", "TE"),
 	}
+	// Full point per reception.
 	rules.Scoring = map[string]float64{
 		"pass_yds": 0.04, "pass_td": 4, "interceptions": -2,
 		"rush_yds": 0.1, "rush_td": 6,
-		"receptions": 0.5, "rec_yds": 0.1, "rec_td": 6,
+		"receptions": 1, "rec_yds": 0.1, "rec_td": 6,
 		"fumbles_lost": -2,
 	}
 	rules.Draft.Rounds = 4

@@ -30,10 +30,14 @@
 	let lineup = $state<Lineup>();
 	// The slot chosen for each player in the form; '' is the bench.
 	let chosen = $state<Record<string, string>>({});
+	// The game picked for each player in a slot that counts only some games a
+	// week, as the day it is played; '' leaves it to his next game.
+	let picked = $state<Record<string, string>>({});
 
 	function show(loaded: Lineup) {
 		lineup = loaded;
 		chosen = Object.fromEntries(loaded.players.map((p) => [p.player_id, p.slot]));
+		picked = Object.fromEntries(loaded.players.map((p) => [p.player_id, p.counts_from]));
 	}
 	$effect(() => {
 		if (league && franchise) getLineup(league.id, franchise.id, day).then(show, toast.error);
@@ -48,7 +52,22 @@
 	);
 
 	const weekly = $derived(lineup !== undefined && lineup.day !== lineup.last_day);
-	const dirty = $derived(lineup?.players.some((p) => chosen[p.player_id] !== p.slot) ?? false);
+	const dirty = $derived(
+		lineup?.players.some((p) => chosen[p.player_id] !== p.slot || picked[p.player_id] !== p.counts_from) ?? false
+	);
+	// How many games a week count in the slot a player is in; 0 is all of them.
+	const limit = (player: LineupPlayer) => lineup!.slots.find((s) => s.name === chosen[player.player_id])?.games_per_week ?? 0;
+	const limited = $derived(lineup?.slots.filter((s) => s.games_per_week > 0) ?? []);
+	const begun = (game: LineupGame) => new Date(game.starts_at).getTime() <= Date.now();
+	// Whether a game is one that counts, going by what is chosen in the form.
+	function counts(player: LineupPlayer, game: LineupGame): boolean {
+		const n = limit(player);
+		if (n === 0) return true;
+		const unsaved = chosen[player.player_id] !== player.slot || picked[player.player_id] !== player.counts_from;
+		if (!unsaved) return game.counts;
+		const from = picked[player.player_id] || player.games.find((g) => !begun(g))?.day || '';
+		return player.games.filter((g) => g.day >= from).slice(0, n).includes(game);
+	}
 	const filled = (slot: string) => Object.values(chosen).filter((s) => s === slot).length;
 	const fits = (player: LineupPlayer, positions: string[]) =>
 		positions.includes('*') || player.positions.some((p) => positions.includes(p));
@@ -78,7 +97,7 @@
 				day: lineup.day,
 				entries: Object.entries(chosen)
 					.filter(([, slot]) => slot !== '')
-					.map(([player_id, slot]) => ({ slot, player_id })),
+					.map(([player_id, slot]) => ({ slot, player_id, counts_from: picked[player_id] ?? '' })),
 				franchise_id: franchise.id,
 				force: override
 			});
@@ -136,6 +155,12 @@
 						{slot.name} {filled(slot.name)}/{slot.count}
 					</span>
 				{/each}
+				{#if limited.length > 0}
+					<span class="muted small-text">
+						{limited.length === lineup.slots.length ? 'Every slot' : limited.map((s) => s.name).join(', ')}
+						counts {limited[0].games_per_week === 1 ? 'one game' : `${limited[0].games_per_week} games`} a week per player. Pick which.
+					</span>
+				{/if}
 				{#if data.me?.is_commissioner}
 					<label class="check override">
 						<input type="checkbox" bind:checked={override} />
@@ -174,7 +199,22 @@
 									</div>
 								</td>
 								<td class="wide muted small-text">
-									{#each player.games as game (game.starts_at)}<div>{describe(game)}</div>{:else}No game{/each}
+									{#if limit(player) > 0 && player.games.length > 0}
+										<select
+											class="pick"
+											aria-label="Game that counts for {player.full_name}"
+											bind:value={picked[player.player_id]}
+											disabled={frozen(player)}
+										>
+											<option value="">Next game</option>
+											{#each player.games as game (game.starts_at)}
+												<option value={game.day} disabled={begun(game) && game.day !== player.counts_from}>{describe(game)}</option>
+											{/each}
+										</select>
+									{/if}
+									{#each player.games as game (game.starts_at)}
+										<div class:skipped={!counts(player, game)}>{describe(game)}</div>
+									{:else}No game{/each}
 								</td>
 								<td class="num total">{player.games.length > 0 ? points(player.points) : ''}</td>
 							</tr>
@@ -226,6 +266,17 @@
 	}
 	.slot select {
 		width: 100%;
+	}
+	.pick {
+		display: block;
+		margin-bottom: 0.3rem;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.8rem;
+		max-width: 100%;
+	}
+	.skipped {
+		opacity: 0.45;
+		text-decoration: line-through;
 	}
 	tr.bench td {
 		background: var(--surface-2);

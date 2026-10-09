@@ -170,12 +170,19 @@ func TestGamesAndBoxScore(t *testing.T) {
 		]}`))
 	})
 	mux.HandleFunc("/gamecenter/2026020044/boxscore", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"playerByGameStats":{
+		w.Write([]byte(`{"gameState":"OFF","playerByGameStats":{
 		  "homeTeam":{"forwards":[{"playerId":1,"goals":2,"assists":1,"sog":5,"hits":3,"blockedShots":1,"powerPlayGoals":1,"pim":2,"plusMinus":-1}],
 		              "defense":[{"playerId":2,"assists":2}],
 		              "goalies":[{"playerId":3,"toi":"64:46","saves":21,"goalsAgainst":4,"decision":"W"},{"playerId":4,"toi":"00:00"}]},
 		  "awayTeam":{"forwards":[],"defense":[],"goalies":[{"playerId":5,"toi":"62:10","saves":30,"goalsAgainst":5,"decision":"L"}]}
 		}}`))
+	})
+	// One power-play goal, by player 1 from player 2, and one at even strength.
+	mux.HandleFunc("/gamecenter/2026020044/landing", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"summary":{"scoring":[{"goals":[
+		  {"strength":"pp","playerId":1,"assists":[{"playerId":2}]},
+		  {"strength":"ev","playerId":1,"assists":[{"playerId":2}]}
+		]}]}}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -219,6 +226,13 @@ func TestGamesAndBoxScore(t *testing.T) {
 	}
 	if _, won := byPlayer["5"]["goalie_wins"]; won {
 		t.Errorf("losing goalie = %v", byPlayer["5"])
+	}
+	// Power-play points come from the goal list: one each for the scorer and the passer.
+	if byPlayer["1"]["pp_points"] != 1 || byPlayer["2"]["pp_points"] != 1 {
+		t.Errorf("power-play points = %v and %v, want 1 each", byPlayer["1"]["pp_points"], byPlayer["2"]["pp_points"])
+	}
+	if _, shutout := byPlayer["3"]["shutouts"]; shutout {
+		t.Errorf("a goalie who conceded was given a shutout: %v", byPlayer["3"])
 	}
 }
 

@@ -59,6 +59,11 @@ type Slot struct {
 	Name      string   `json:"name"`
 	Positions []string `json:"positions"`
 	Count     int      `json:"count"`
+	// GamesPerWeek, when above zero, is how many of his games in a week
+	// count for a player in this slot: one game a week for a basketball
+	// player, one start a week for a starting pitcher. The manager picks
+	// the game; left alone, it is his first. It needs weekly lineups.
+	GamesPerWeek int `json:"games_per_week"`
 }
 
 type Format struct {
@@ -225,6 +230,12 @@ func (l League) validateSlots(c Catalog) error {
 			if position != AnyPosition && !slices.Contains(c.Positions, position) {
 				return fmt.Errorf("lineup slot %s lists unknown position %q", slot.Name, position)
 			}
+		}
+		if slot.GamesPerWeek < 0 || slot.GamesPerWeek > 7 {
+			return fmt.Errorf("lineup slot %s can count between 0 (all) and 7 games a week", slot.Name)
+		}
+		if slot.GamesPerWeek > 0 && l.Lineup.Period != PeriodWeek {
+			return fmt.Errorf("lineup slot %s counts %d games a week, which needs weekly lineups", slot.Name, slot.GamesPerWeek)
 		}
 		starters += slot.Count
 	}

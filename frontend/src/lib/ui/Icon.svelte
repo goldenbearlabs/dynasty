@@ -25,7 +25,8 @@
 		trade: 'M7 4L3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7',
 		lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
 		left: 'M15 6l-6 6 6 6',
-		scores: 'M4 5h16v14H4zM12 5v14M7 10v4M17 10v4'
+		scores: 'M4 5h16v14H4zM12 5v14M7 10v4M17 10v4',
+		info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v6M12 7.5h.01'
 	};
 	export type IconName = keyof typeof paths;
 </script>

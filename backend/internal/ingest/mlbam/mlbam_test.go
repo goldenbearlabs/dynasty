@@ -14,7 +14,10 @@ import (
 const teamsJSON = `{"teams":[{"id":119,"abbreviation":"LAD","name":"Los Angeles Dodgers"}]}`
 
 const rosterJSON = `{"roster":[
-  {"person":{"id":660271,"fullName":"Shohei Ohtani","birthDate":"1994-07-05"},"position":{"abbreviation":"TWP"}}
+  {"person":{"id":660271,"fullName":"Shohei Ohtani","birthDate":"1994-07-05"},"position":{"abbreviation":"TWP"}},
+  {"person":{"id":1,"fullName":"A Starter"},"position":{"abbreviation":"P"}},
+  {"person":{"id":2,"fullName":"A Reliever"},"position":{"abbreviation":"P"}},
+  {"person":{"id":3,"fullName":"A Rookie"},"position":{"abbreviation":"P"}}
 ]}`
 
 func TestSource(t *testing.T) {
@@ -27,6 +30,13 @@ func TestSource(t *testing.T) {
 			t.Errorf("rosterType = %q, want 40Man", r.URL.Query().Get("rosterType"))
 		}
 		w.Write([]byte(rosterJSON))
+	})
+	// How each pitcher has been used, the same for both seasons read.
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"stats":[{"splits":[
+		  {"player":{"id":1},"stat":{"gamesPlayed":30,"gamesStarted":28}},
+		  {"player":{"id":2},"stat":{"gamesPlayed":60,"gamesStarted":1}}
+		]}]}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -46,8 +56,12 @@ func TestSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(players) != 1 {
-		t.Fatalf("got %d players, want 1", len(players))
+	if len(players) != 4 {
+		t.Fatalf("got %d players, want 4", len(players))
+	}
+	// Pitchers are told apart by how they have been used; one who has not pitched stays "P".
+	if got := players[1].Positions[0] + " " + players[2].Positions[0] + " " + players[3].Positions[0]; got != "SP RP P" {
+		t.Errorf("pitcher roles = %q, want SP RP P", got)
 	}
 	p := players[0]
 	if p.Provider != "mlbam" || p.ProviderID != "660271" || p.FullName != "Shohei Ohtani" ||

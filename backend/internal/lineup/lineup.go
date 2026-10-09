@@ -29,6 +29,10 @@ func NewService(pool *pgxpool.Pool) *Service {
 type Entry struct {
 	Slot     string      `json:"slot"`
 	PlayerID pgtype.UUID `json:"player_id"`
+	// CountsFrom picks the game that counts, in a slot that counts only
+	// some games a week: the day of that game. Empty leaves it as it was,
+	// or takes the player's next game.
+	CountsFrom string `json:"counts_from"`
 }
 
 // View is a franchise's lineup for one day or week: the slots to fill, and
@@ -49,18 +53,23 @@ type Player struct {
 	Positions   []string    `json:"positions"`
 	HeadshotURL string      `json:"headshot_url"`
 	TeamAbbrev  string      `json:"team_abbrev"`
-	Slot        string      `json:"slot"` // empty on the bench
+	Slot        string      `json:"slot"`        // empty on the bench
+	CountsFrom  string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
 	Locked      bool        `json:"locked"`
-	Points      float64     `json:"points"` // over the day or week, whether he started or not
-	Games       []Game      `json:"games"`
+	// Points over the day or week, whether he started or not. For a starter
+	// in a slot that counts only some games, only the games that count.
+	Points float64 `json:"points"`
+	Games  []Game  `json:"games"`
 }
 
 type Game struct {
+	Day      string    `json:"day"`
 	StartsAt time.Time `json:"starts_at"`
 	Status   string    `json:"status"`
 	Opponent string    `json:"opponent"`
 	AtHome   bool      `json:"at_home"`
 	Points   float64   `json:"points"`
+	Counts   bool      `json:"counts"` // false for a game his slot leaves out
 }
 
 // Get returns the lineup in force on a day.
@@ -97,6 +106,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 
 	// Who is starting, from the lineup in force.
 	starting := map[pgtype.UUID]string{}
+	countsFrom := map[pgtype.UUID]string{}
 	inForce, err := q.LineupInForce(ctx, db.LineupInForceParams{LeagueID: league.ID, FranchiseID: franchiseID, Day: sportsday.Date(first)})
 	if err != nil {
 		return View{}, err
@@ -108,6 +118,9 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		}
 		for _, e := range entries {
 			starting[e.PlayerID] = e.Slot
+			if e.CountsFrom.Valid {
+				countsFrom[e.PlayerID] = e.CountsFrom.Time.Format(time.DateOnly)
+			}
 		}
 	}
 
@@ -121,21 +134,103 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		if n := len(view.Players); n == 0 || view.Players[n-1].PlayerID != r.PlayerID {
 			view.Players = append(view.Players, Player{
 				PlayerID: r.PlayerID, FullName: r.FullName, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
-				TeamAbbrev: r.TeamAbbrev, Slot: starting[r.PlayerID], Games: []Game{},
+				TeamAbbrev: r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], Games: []Game{},
 			})
 		}
 		if !r.GameID.Valid {
 			continue
 		}
 		p := &view.Players[len(view.Players)-1]
-		p.Games = append(p.Games, Game{StartsAt: r.StartsAt.Time, Status: r.GameStatus, Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points})
-		p.Points += r.Points
-		// Under the game-start rule a player locks when his first game begins.
-		if rules.Lineup.Lock == settings.LockGameStart && !r.StartsAt.Time.After(now) {
-			p.Locked = true
-		}
+		p.Games = append(p.Games, Game{
+			Day: r.GameDay.Time.Format(time.DateOnly), StartsAt: r.StartsAt.Time, Status: r.GameStatus,
+			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true,
+		})
+	}
+	for i := range view.Players {
+		settle(&view.Players[i], rules.Lineup, now)
 	}
 	return view, nil
+}
+
+// gamesCounted is how many games a week count in a slot; zero means all.
+func gamesCounted(rules settings.Lineup, slot string) int {
+	for _, s := range rules.Slots {
+		if s.Name == slot {
+			return s.GamesPerWeek
+		}
+	}
+	return 0
+}
+
+// settle works out which of a player's games count, his points, and
+// whether he can still be moved. Under the game-start rule:
+//   - a starter whose every game counts locks when his first game begins;
+//   - a starter in a slot that counts only some games locks when the first
+//     game that counts begins, so an earlier game he sat out does not hold him;
+//   - a bench player who could fill such a slot stays free while he has a
+//     game left to count.
+func settle(p *Player, rules settings.Lineup, now time.Time) {
+	limit := gamesCounted(rules, p.Slot)
+	counted := 0
+	for i := range p.Games {
+		g := &p.Games[i]
+		if limit > 0 {
+			g.Counts = g.Day >= p.CountsFrom && counted < limit
+			if g.Counts {
+				counted++
+			}
+		}
+		if g.Counts {
+			p.Points += g.Points
+		}
+	}
+	if rules.Lock != settings.LockGameStart {
+		return
+	}
+	started := func(g Game) bool { return !g.StartsAt.After(now) }
+	switch {
+	case limit > 0:
+		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && started(g) })
+	case p.Slot == "" && slices.ContainsFunc(rules.Slots, func(s settings.Slot) bool { return s.GamesPerWeek > 0 && fits(p.Positions, s) }):
+		p.Locked = len(p.Games) > 0 && !slices.ContainsFunc(p.Games, func(g Game) bool { return !started(g) })
+	default:
+		p.Locked = slices.ContainsFunc(p.Games, started)
+	}
+}
+
+// pick decides the day a starter's counted games begin in a slot that
+// counts only some. Keeping a player where he was keeps his pick; a new
+// pick must be for a game that has not started.
+func pick(p Player, e Entry, first, last string, now time.Time, force bool) (string, error) {
+	if p.Slot == e.Slot && (e.CountsFrom == "" || e.CountsFrom == p.CountsFrom) {
+		return p.CountsFrom, nil
+	}
+	if p.Locked && !force {
+		return "", problem.New("%s is locked: his game has started.", p.FullName)
+	}
+	day := e.CountsFrom
+	if day == "" {
+		// Nothing chosen: his next game, so one already played is not counted after the fact.
+		if !slices.ContainsFunc(p.Games, func(g Game) bool { return !g.StartsAt.After(now) }) {
+			return "", nil
+		}
+		i := slices.IndexFunc(p.Games, func(g Game) bool { return g.StartsAt.After(now) })
+		if i < 0 {
+			return "", problem.New("%s has no games left this week.", p.FullName)
+		}
+		return p.Games[i].Day, nil
+	}
+	if day < first || day > last {
+		return "", problem.New("%s's game must be in the week of this lineup.", p.FullName)
+	}
+	i := slices.IndexFunc(p.Games, func(g Game) bool { return g.Day >= day })
+	if i < 0 {
+		return "", problem.New("%s has no game on or after %s this week.", p.FullName, day)
+	}
+	if !p.Games[i].StartsAt.After(now) && !force {
+		return "", problem.New("%s's game on %s has already started.", p.FullName, p.Games[i].Day)
+	}
+	return p.Games[i].Day, nil
 }
 
 // Set replaces the lineup for a day (or the week containing it). Every
@@ -158,6 +253,8 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 
 		wanted := map[pgtype.UUID]string{}
 		filled := map[string]int{}
+		counts := map[pgtype.UUID]pgtype.Date{}
+		now := time.Now()
 		for _, e := range entries {
 			i := slices.IndexFunc(current.Players, func(p Player) bool { return p.PlayerID == e.PlayerID })
 			if i < 0 {
@@ -179,6 +276,16 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 			}
 			wanted[e.PlayerID] = e.Slot
 			filled[slot.Name]++
+			if slot.GamesPerWeek > 0 {
+				day, err := pick(player, e, current.Day, current.LastDay, now, force)
+				if err != nil {
+					return err
+				}
+				if day != "" {
+					from, _ := sportsday.Parse(day)
+					counts[e.PlayerID] = sportsday.Date(from)
+				}
+			}
 		}
 		if !force {
 			for _, p := range current.Players {
@@ -203,7 +310,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		for _, e := range entries {
 			if err := q.InsertLineupEntry(ctx, db.InsertLineupEntryParams{
 				LeagueID: league.ID, FranchiseID: franchiseID, EffectiveOn: sportsday.Date(first),
-				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID,
+				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID, CountsFrom: counts[e.PlayerID],
 			}); err != nil {
 				return err
 			}

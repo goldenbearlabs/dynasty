@@ -34,6 +34,7 @@
 		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
 		{ href: '/drafts', label: 'Drafts', icon: 'draft' },
 		{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
+		{ href: '/info', label: 'Rules', icon: 'info' },
 		...(data.me?.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
 	]);
 

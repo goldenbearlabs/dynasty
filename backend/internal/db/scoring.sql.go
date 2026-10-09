@@ -27,8 +27,8 @@ func (q *Queries) CompleteSeason(ctx context.Context, arg CompleteSeasonParams) 
 }
 
 const copyLineupEntries = `-- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id)
-select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
+select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id, e.counts_from
 from lineup_entries e
 where e.league_id = $2 and e.franchise_id = $3 and e.effective_on = $4
 `
@@ -288,8 +288,8 @@ func (q *Queries) InsertLineup(ctx context.Context, arg InsertLineupParams) erro
 }
 
 const insertLineupEntry = `-- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id)
-values ($1, $2, $3, $4, $5, $6)
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
+values ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertLineupEntryParams struct {
@@ -299,6 +299,7 @@ type InsertLineupEntryParams struct {
 	Slot        string      `json:"slot"`
 	SlotIndex   int32       `json:"slot_index"`
 	PlayerID    pgtype.UUID `json:"player_id"`
+	CountsFrom  pgtype.Date `json:"counts_from"`
 }
 
 func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryParams) error {
@@ -309,6 +310,7 @@ func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryPa
 		arg.Slot,
 		arg.SlotIndex,
 		arg.PlayerID,
+		arg.CountsFrom,
 	)
 	return err
 }
@@ -661,7 +663,7 @@ func (q *Queries) ListGamesOnDay(ctx context.Context, arg ListGamesOnDayParams) 
 }
 
 const listLineupEntries = `-- name: ListLineupEntries :many
-select slot, slot_index, player_id from lineup_entries
+select slot, slot_index, player_id, counts_from from lineup_entries
 where league_id = $1 and franchise_id = $2 and effective_on = $3
 order by slot, slot_index
 `
@@ -673,9 +675,10 @@ type ListLineupEntriesParams struct {
 }
 
 type ListLineupEntriesRow struct {
-	Slot      string      `json:"slot"`
-	SlotIndex int32       `json:"slot_index"`
-	PlayerID  pgtype.UUID `json:"player_id"`
+	Slot       string      `json:"slot"`
+	SlotIndex  int32       `json:"slot_index"`
+	PlayerID   pgtype.UUID `json:"player_id"`
+	CountsFrom pgtype.Date `json:"counts_from"`
 }
 
 func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesParams) ([]ListLineupEntriesRow, error) {
@@ -687,7 +690,12 @@ func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesPa
 	items := []ListLineupEntriesRow{}
 	for rows.Next() {
 		var i ListLineupEntriesRow
-		if err := rows.Scan(&i.Slot, &i.SlotIndex, &i.PlayerID); err != nil {
+		if err := rows.Scan(
+			&i.Slot,
+			&i.SlotIndex,
+			&i.PlayerID,
+			&i.CountsFrom,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -705,30 +713,41 @@ with days as (
 ), in_force as (
   select f.id as franchise_id, d.day,
          (select max(n.effective_on) from lineups n
-          where n.league_id = $1 and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
+          where n.league_id = $4 and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
   from franchises f
   cross join days d
-  where f.dynasty_id = (select dynasty_id from leagues where id = $1)
+  where f.dynasty_id = (select dynasty_id from leagues where id = $4)
+), started as (
+  select i.franchise_id, e.player_id, g.id as game_id, g.day, sl.stats, l.settings,
+         coalesce((select (def.rule->>'games_per_week')::int
+                   from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
+                   where def.rule->>'name' = e.slot), 0) as games_per_week,
+         row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7
+                            order by g.starts_at, g.id) as nth
+  from in_force i
+  join lineup_entries e on e.league_id = $4 and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
+  join leagues l on l.id = $4
+  join games g on g.competition = l.competition and g.day = i.day
+  join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  where e.counts_from is null or g.day >= e.counts_from
 )
-select i.franchise_id, e.player_id, p.full_name, p.headshot_url,
-       count(distinct g.id) as games,
+select st.franchise_id, st.player_id, p.full_name, p.headshot_url,
+       count(distinct st.game_id) as games,
        sum(s.value::numeric * r.value::numeric)::float8 as points
-from in_force i
-join lineup_entries e on e.league_id = $1 and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
-join players p on p.id = e.player_id
-join leagues l on l.id = $1
-join games g on g.competition = l.competition and g.day = i.day
-join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
-cross join lateral jsonb_each_text(sl.stats) s
-join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key
-group by i.franchise_id, e.player_id, p.full_name, p.headshot_url
+from started st
+join players p on p.id = st.player_id
+cross join lateral jsonb_each_text(st.stats) s
+join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
+where st.day >= $1::date and (st.games_per_week = 0 or st.nth <= st.games_per_week)
+group by st.franchise_id, st.player_id, p.full_name, p.headshot_url
 order by points desc
 `
 
 type ListLineupPointsParams struct {
-	LeagueID pgtype.UUID `json:"league_id"`
-	FromDay  pgtype.Date `json:"from_day"`
-	ToDay    pgtype.Date `json:"to_day"`
+	FromDay   pgtype.Date `json:"from_day"`
+	WeekStart pgtype.Date `json:"week_start"`
+	ToDay     pgtype.Date `json:"to_day"`
+	LeagueID  pgtype.UUID `json:"league_id"`
 }
 
 type ListLineupPointsRow struct {
@@ -743,9 +762,18 @@ type ListLineupPointsRow struct {
 // ---- points ----
 // Fantasy points for a league over a span of days, by franchise and player:
 // each day's stat lines for whoever was in the lineup in force that day,
-// weighted by the league's scoring rules.
+// weighted by the league's scoring rules. A slot may count only some of a
+// player's games each week (games_per_week): those are his first so many on
+// or after the day his manager picked. Weeks are counted from week_start,
+// the first day of the week from_day falls in, so a span that begins
+// mid-week still knows which games came earlier.
 func (q *Queries) ListLineupPoints(ctx context.Context, arg ListLineupPointsParams) ([]ListLineupPointsRow, error) {
-	rows, err := q.db.Query(ctx, listLineupPoints, arg.LeagueID, arg.FromDay, arg.ToDay)
+	rows, err := q.db.Query(ctx, listLineupPoints,
+		arg.FromDay,
+		arg.WeekStart,
+		arg.ToDay,
+		arg.LeagueID,
+	)
 	if err != nil {
 		return nil, err
 	}

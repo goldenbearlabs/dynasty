@@ -14,6 +14,7 @@ import (
 	"crossover/internal/dbtest"
 	"crossover/internal/dynasty"
 	"crossover/internal/players"
+	"crossover/internal/settings"
 	"crossover/internal/sportsday"
 )
 
@@ -40,8 +41,8 @@ func TestHeadToHeadFlow(t *testing.T) {
 	nba, _ := registry.Get("nba")
 	cbb, _ := registry.Get("cbb")
 	rules := nba.Defaults
-	rules.Lineup.Slots = nba.Defaults.Lineup.Slots[3:4] // one UTIL slot
-	rules.Lineup.Slots[0].Count = 1
+	rules.Lineup.Slots = []settings.Slot{{Name: "UTIL", Positions: []string{settings.AnyPosition}, Count: 1}}
+	rules.Lineup.Period = "day"
 	rules.Roster.ReserveEligibility = "anyone"
 	rules.Scoring = map[string]float64{"pts": 1}
 	rules.Format.Type, rules.Format.MatchupDays, rules.Format.PlayoffTeams = "head_to_head", 1, 2

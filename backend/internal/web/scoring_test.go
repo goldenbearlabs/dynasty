@@ -41,6 +41,8 @@ func TestScoringFlow(t *testing.T) {
 	rules.Lineup.Slots = rules.Lineup.Slots[:0:0]
 	rules.Lineup.Slots = append(rules.Lineup.Slots, nba.Defaults.Lineup.Slots[0], nba.Defaults.Lineup.Slots[3]) // G and UTIL
 	rules.Lineup.Slots[0].Count, rules.Lineup.Slots[1].Count = 1, 1
+	// This test is about daily lineups in which every game counts.
+	rules.Lineup.Period, rules.Lineup.Slots[0].GamesPerWeek, rules.Lineup.Slots[1].GamesPerWeek = "day", 0, 0
 	rules.Scoring = map[string]float64{"pts": 1, "reb": 1.2}
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
 		Name:     "Scoring Test",

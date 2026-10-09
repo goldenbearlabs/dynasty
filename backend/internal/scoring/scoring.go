@@ -81,8 +81,13 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 	if today := sportsday.Today(); today.Before(to) {
 		to = today
 	}
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return nil, err
+	}
 	points, err := q.ListLineupPoints(ctx, db.ListLineupPointsParams{
 		LeagueID: league.ID, FromDay: sportsday.Date(from), ToDay: sportsday.Date(to),
+		WeekStart: sportsday.Date(sportsday.WeekStart(from, rules.Lineup.WeekStart)),
 	})
 	if err != nil {
 		return nil, err

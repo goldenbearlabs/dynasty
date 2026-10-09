@@ -37,6 +37,15 @@
 	const unplayed = $derived(competitions.filter((c) => !leagues.some((l) => l.competition === c.key)));
 	let adding = $state('');
 
+	// Replaces the working copy of a league's rules with its sport's
+	// recommended ones; nothing changes for the league until Save.
+	let loaded = $state('');
+	function loadDefaults(league: (typeof leagues)[number]) {
+		const continuity = league.settings.continuity;
+		league.settings = { ...structuredClone($state.snapshot(sport(league.competition).defaults)), continuity };
+		loaded = league.id;
+	}
+
 	const saveDynasty = () =>
 		save('dynasty', () =>
 			updateDynasty(name, {
@@ -80,6 +89,15 @@
 	{#each leagues as league (league.id)}
 		<details class="card" data-sport={league.competition}>
 			<summary><SportBadge sport={league.competition} solid /> {league.name} rules</summary>
+			<div class="row recommended">
+				<button type="button" class="small" onclick={() => loadDefaults(league)}>Load recommended settings</button>
+				<span class="muted small-text">
+					{loaded === league.id
+						? 'Loaded below. Review them, then save.'
+						: 'The lineup, roster sizes and scoring this sport was balanced with.'}
+					<a href="/info">How they were chosen</a>
+				</span>
+			</div>
 			<LeagueSettingsForm
 				bind:settings={league.settings}
 				competition={sport(league.competition)}
@@ -115,6 +133,9 @@
 </section>
 
 <style>
+	.recommended {
+		padding: 0.6rem 0 0.2rem;
+	}
 	summary {
 		display: flex;
 		align-items: center;

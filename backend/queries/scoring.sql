@@ -77,7 +77,7 @@ select max(effective_on)::date as effective_on from lineups
 where league_id = @league_id and franchise_id = @franchise_id and effective_on <= @day;
 
 -- name: ListLineupEntries :many
-select slot, slot_index, player_id from lineup_entries
+select slot, slot_index, player_id, counts_from from lineup_entries
 where league_id = @league_id and franchise_id = @franchise_id and effective_on = @effective_on
 order by slot, slot_index;
 
@@ -91,12 +91,12 @@ insert into lineups (league_id, franchise_id, effective_on) values (@league_id, 
 on conflict do nothing;
 
 -- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id)
-values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id);
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
+values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id, @counts_from);
 
 -- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id)
-select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
+select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id, e.counts_from
 from lineup_entries e
 where e.league_id = @league_id and e.franchise_id = @franchise_id and e.effective_on = @from_day;
 
@@ -144,9 +144,13 @@ order by p.full_name, p.id, g.starts_at;
 -- name: ListLineupPoints :many
 -- Fantasy points for a league over a span of days, by franchise and player:
 -- each day's stat lines for whoever was in the lineup in force that day,
--- weighted by the league's scoring rules.
+-- weighted by the league's scoring rules. A slot may count only some of a
+-- player's games each week (games_per_week): those are his first so many on
+-- or after the day his manager picked. Weeks are counted from week_start,
+-- the first day of the week from_day falls in, so a span that begins
+-- mid-week still knows which games came earlier.
 with days as (
-  select generate_series(@from_day::date, @to_day::date, interval '1 day')::date as day
+  select generate_series(@week_start::date, @to_day::date, interval '1 day')::date as day
 ), in_force as (
   select f.id as franchise_id, d.day,
          (select max(n.effective_on) from lineups n
@@ -154,19 +158,29 @@ with days as (
   from franchises f
   cross join days d
   where f.dynasty_id = (select dynasty_id from leagues where id = @league_id)
+), started as (
+  select i.franchise_id, e.player_id, g.id as game_id, g.day, sl.stats, l.settings,
+         coalesce((select (def.rule->>'games_per_week')::int
+                   from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
+                   where def.rule->>'name' = e.slot), 0) as games_per_week,
+         row_number() over (partition by i.franchise_id, e.player_id, (g.day - @week_start::date) / 7
+                            order by g.starts_at, g.id) as nth
+  from in_force i
+  join lineup_entries e on e.league_id = @league_id and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
+  join leagues l on l.id = @league_id
+  join games g on g.competition = l.competition and g.day = i.day
+  join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  where e.counts_from is null or g.day >= e.counts_from
 )
-select i.franchise_id, e.player_id, p.full_name, p.headshot_url,
-       count(distinct g.id) as games,
+select st.franchise_id, st.player_id, p.full_name, p.headshot_url,
+       count(distinct st.game_id) as games,
        sum(s.value::numeric * r.value::numeric)::float8 as points
-from in_force i
-join lineup_entries e on e.league_id = @league_id and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
-join players p on p.id = e.player_id
-join leagues l on l.id = @league_id
-join games g on g.competition = l.competition and g.day = i.day
-join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
-cross join lateral jsonb_each_text(sl.stats) s
-join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key
-group by i.franchise_id, e.player_id, p.full_name, p.headshot_url
+from started st
+join players p on p.id = st.player_id
+cross join lateral jsonb_each_text(st.stats) s
+join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
+where st.day >= @from_day::date and (st.games_per_week = 0 or st.nth <= st.games_per_week)
+group by st.franchise_id, st.player_id, p.full_name, p.headshot_url
 order by points desc;
 
 -- ---- merging players ----

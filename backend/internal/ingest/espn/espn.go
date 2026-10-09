@@ -40,6 +40,9 @@ type League struct {
 	// how ESPN numbers it. See LatestSeason.
 	SeasonStarts     time.Month
 	SeasonSpansYears bool
+	// Derive adds stats worked out from a player's line in one game, such
+	// as a double-double. It may be nil.
+	Derive func(stats map[string]float64)
 	// Positions, when set, limits the league to players at these positions.
 	Positions []string
 	// Groups, when set, limits the league to the teams in these ESPN
@@ -311,6 +314,9 @@ func (s *Source) BoxScore(ctx context.Context, game ingest.Game) ([]ingest.StatL
 
 	var lines []ingest.StatLine
 	for _, id := range order {
+		if s.Derive != nil {
+			s.Derive(byPlayer[id])
+		}
 		lines = append(lines, ingest.StatLine{Provider: s.Provider, ProviderID: id, Stats: byPlayer[id]})
 	}
 	return lines, nil
