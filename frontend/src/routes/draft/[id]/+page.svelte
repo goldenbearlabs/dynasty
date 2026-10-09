@@ -24,6 +24,7 @@
 	import Countdown from '#lib/ui/Countdown.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import Splitter from '#lib/ui/Splitter.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import type { PageProps } from './$types';
@@ -154,6 +155,35 @@
 			picking = false;
 		}
 	}
+
+	// ---- pane sizes ----
+	// Each manager arranges the room for themselves: the sizes are kept in
+	// this browser. They apply to the wide layout; narrower screens stack.
+	const usual = { side: 272, board: 38, pool: 60, queue: 34 }; // px, then % of the parent pane
+	const limits = { side: [200, 560], board: [15, 72], pool: [25, 80], queue: [15, 78] } as const;
+	type Pane = keyof typeof usual;
+	let sizes = $state({ ...usual });
+	try {
+		const kept = JSON.parse(localStorage.getItem('draft-room-panes') ?? '{}');
+		for (const pane of Object.keys(usual) as Pane[]) if (typeof kept[pane] === 'number') sizes[pane] = kept[pane];
+	} catch {
+		// storage is unavailable or holds something else: the usual sizes stand
+	}
+	function resize(pane: Pane, value: number) {
+		sizes[pane] = Math.round(Math.min(limits[pane][1], Math.max(limits[pane][0], value)) * 10) / 10;
+		try {
+			localStorage.setItem('draft-room-panes', JSON.stringify(sizes));
+		} catch {
+			// not kept, but the room still resizes
+		}
+	}
+	let workspace = $state<HTMLElement>();
+	let mainPane = $state<HTMLElement>();
+	let scouting = $state<HTMLElement>();
+	let teamPane = $state<HTMLElement>();
+	// Where the pointer is within a pane, as a percentage across or down it.
+	const across = (el: HTMLElement | undefined, x: number) => (el ? ((x - el.getBoundingClientRect().left) / el.clientWidth) * 100 : 50);
+	const down = (el: HTMLElement | undefined, y: number) => (el ? ((y - el.getBoundingClientRect().top) / el.clientHeight) * 100 : 50);
 
 	// My pre-draft rankings for the leagues this draft covers, the ones made for it first.
 	let rankings = $state<RankingSummary[]>([]);
@@ -319,8 +349,15 @@
 				<span class="pill gold">Skipped</span> Pick #{myMakeUp.position} is owed to you. Select a player
 				below to make it up.
 			</p>{/if}
-		<div class="workspace">
-			<div class="main-workspace">
+		<div
+			class="workspace"
+			bind:this={workspace}
+			style:--side="{sizes.side}px"
+			style:--board="{sizes.board}%"
+			style:--pool="{sizes.pool}%"
+			style:--queue="{sizes.queue}%"
+		>
+			<div class="main-workspace" bind:this={mainPane}>
 				<section class="board-pane" aria-label="Draft progress">
 					<div class="section-heading">
 						<h2>Draft board</h2>
@@ -343,7 +380,14 @@
 						onselect={research}
 					/>
 				</section>
-				<div class="scouting">
+				<Splitter
+					orientation="horizontal"
+					label="Resize the draft board"
+					onmove={(_, y) => resize('board', down(mainPane, y))}
+					onnudge={(d) => resize('board', sizes.board + 2 * d)}
+					onreset={() => resize('board', usual.board)}
+				/>
+				<div class="scouting" bind:this={scouting}>
 					<section class="pool-pane" id="draft-player-pool" aria-label="Available players">
 						<div class="section-heading">
 							<h2>Available players</h2>
@@ -361,17 +405,39 @@
 								{version}
 								compact
 								byPoints
+								statColumns
 								onselect={(player) => research(player.id)}
 								{selectedId}
 								action={me && draft.status !== 'complete' ? queueAction : undefined}
 							/>
 						</div>
 					</section>
+					<Splitter
+						orientation="vertical"
+						label="Resize the player pool"
+						onmove={(x) => resize('pool', across(scouting, x))}
+						onnudge={(d) => resize('pool', sizes.pool + 2 * d)}
+						onreset={() => resize('pool', usual.pool)}
+					/>
 					<Research {selectedId} competitions={data.competitions} action={researchAction} />
 				</div>
 			</div>
-			<aside class="team-workspace">
+			<Splitter
+				orientation="vertical"
+				label="Resize the team panel"
+				onmove={(x) => resize('side', workspace ? workspace.getBoundingClientRect().right - x : usual.side)}
+				onnudge={(d) => resize('side', sizes.side - 16 * d)}
+				onreset={() => resize('side', usual.side)}
+			/>
+			<aside class="team-workspace" bind:this={teamPane}>
 				<Teams {franchises} myId={me?.id} {revision} onselect={research} />
+				{#if me}<Splitter
+						orientation="horizontal"
+						label="Resize my queue"
+						onmove={(_, y) => resize('queue', 100 - down(teamPane, y))}
+						onnudge={(d) => resize('queue', sizes.queue - 2 * d)}
+						onreset={() => resize('queue', usual.queue)}
+					/>{/if}
 				{#if me}<section class="queue-pane" aria-label="My draft queue">
 						<div class="section-heading">
 							<h2>My queue <span class="muted">{queue.length}</span></h2>
@@ -551,15 +617,14 @@
 	}
 	.workspace {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 17rem;
-		gap: 0.75rem;
+		/* main, the bar that resizes, the team panel */
+		grid-template-columns: minmax(0, 1fr) 0.75rem var(--side);
 		height: calc(100dvh - 150px);
 		min-height: 480px;
 	}
 	.main-workspace {
 		display: grid;
-		grid-template-rows: minmax(180px, 0.38fr) minmax(0, 0.62fr);
-		gap: 0.75rem;
+		grid-template-rows: minmax(120px, var(--board)) 0.75rem minmax(0, 1fr);
 		min-width: 0;
 		min-height: 0;
 	}
@@ -613,7 +678,8 @@
 	}
 	.scouting {
 		display: grid;
-		grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+		grid-template-columns: minmax(180px, var(--pool)) 0.5rem minmax(180px, 1fr);
+		background: var(--surface);
 		min-height: 0;
 		min-width: 0;
 		border-block: 1px solid var(--rule);
@@ -641,11 +707,14 @@
 		background: var(--surface);
 		border-block: 1px solid var(--rule);
 	}
+	.team-workspace :global(.splitter) {
+		height: 0.5rem;
+	}
 	.queue-pane {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		flex: 0 0 34%;
+		flex: 0 0 var(--queue);
 		border-top: 1px solid var(--rule);
 	}
 	.queue-body {
@@ -667,13 +736,22 @@
 		background: var(--gold-soft);
 	}
 	@media (max-width: 1199px) {
+		/* Stacked: the panes take their own heights and are not resized. */
+		.workspace :global(.splitter) {
+			display: none;
+		}
 		.workspace {
 			grid-template-columns: minmax(0, 1fr);
+			gap: 0.75rem;
 			height: auto;
 			min-height: 0;
 		}
 		.main-workspace {
 			grid-template-rows: 250px auto;
+			gap: 0.75rem;
+		}
+		.scouting {
+			grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
 		}
 		.scouting {
 			height: 480px;
