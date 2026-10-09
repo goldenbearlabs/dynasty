@@ -27,7 +27,7 @@ func TestRookieDraft(t *testing.T) {
 	ann, bob := newBrowser(t, server.URL), newBrowser(t, server.URL)
 	nba, _ := registry.Get("nba")
 	rules := nba.Defaults
-	rules.Roster.Reserve = 5 // so three rounds: half the reserve list, rounded up
+	rules.Roster.Reserve = 5                           // so three rounds: half the reserve list, rounded up
 	rules.Roster.ReserveEligibility = "prospects_only" // to show that a signed rookie may sit there all the same
 	rules.Waivers.Mode = "rolling"
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
