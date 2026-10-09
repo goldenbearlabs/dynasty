@@ -65,6 +65,14 @@ type Franchise struct {
 	InviteToken    pgtype.Text `json:"-"`
 	IsCommissioner bool        `json:"is_commissioner"`
 	UserID         pgtype.UUID `json:"user_id"`
+	ImageUrl       string      `json:"image_url"`
+}
+
+type FranchiseTeam struct {
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	LeagueID    pgtype.UUID `json:"league_id"`
+	Name        string      `json:"name"`
+	ImageUrl    string      `json:"image_url"`
 }
 
 type Game struct {
@@ -154,6 +162,12 @@ type PlayerExternalID struct {
 	Provider   string      `json:"provider"`
 	ProviderID string      `json:"provider_id"`
 	PlayerID   pgtype.UUID `json:"player_id"`
+}
+
+type PlayerNickname struct {
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Nickname    string      `json:"nickname"`
 }
 
 type PlayerSeason struct {

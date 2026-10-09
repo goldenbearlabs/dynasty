@@ -94,17 +94,18 @@ func (q *Queries) ListSeasonYears(ctx context.Context, competition string) ([]in
 	return items, nil
 }
 
-const listSeasonsMissingConferences = `-- name: ListSeasonsMissingConferences :many
+const listSeasonsMissingResearchMetadata = `-- name: ListSeasonsMissingResearchMetadata :many
 select year from player_seasons
-where competition = $1 and competition = 'cbb' and league = ''
-group by year having bool_and(conference = '')
+where competition = $1 and league = ''
+group by year
+having ($1 = 'cbb' and bool_and(conference = ''))
+    or ($1 = 'mlb' and bool_or(stats ? 'pit_ip' and not (stats ? 'pit_games' and stats ? 'pit_gs')))
 `
 
-// Metadata added after the original imports must be backfilled even when
-// these seasons are older than the ordinary history window. Partially known
-// seasons may contain non-Division-I teams, which intentionally stay unknown.
-func (q *Queries) ListSeasonsMissingConferences(ctx context.Context, competition string) ([]int32, error) {
-	rows, err := q.db.Query(ctx, listSeasonsMissingConferences, competition)
+// Backfill metadata introduced after the original imports, including history
+// outside the ordinary window. Unknown conferences can represent non-DI teams.
+func (q *Queries) ListSeasonsMissingResearchMetadata(ctx context.Context, competition string) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listSeasonsMissingResearchMetadata, competition)
 	if err != nil {
 		return nil, err
 	}

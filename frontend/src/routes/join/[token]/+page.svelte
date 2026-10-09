@@ -36,7 +36,7 @@
 	{#if data.invite}
 		{@const franchise = data.invite.franchise}
 		<div class="row who">
-			<Crest name={franchise.name} size={52} />
+			<Crest src={franchise.image_url} name={franchise.name} size={52} />
 			<div>
 				<p class="eyebrow">{data.dynasty?.name}</p>
 				<h1>{franchise.name}</h1>

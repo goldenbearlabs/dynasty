@@ -17,8 +17,9 @@ import (
 // dynastyView is everything the frontend needs to draw the league.
 type dynastyView struct {
 	db.Dynasty
-	Leagues    []db.League    `json:"leagues"`
-	Franchises []db.Franchise `json:"franchises"`
+	TeamIdentities []db.ListTeamIdentitiesRow `json:"team_identities"`
+	Leagues        []db.League                `json:"leagues"`
+	Franchises     []db.Franchise             `json:"franchises"`
 }
 
 func (s *Server) loadDynasty(r *http.Request) (dynastyView, error) {
@@ -38,7 +39,11 @@ func (s *Server) loadDynasty(r *http.Request) (dynastyView, error) {
 	slices.SortFunc(leagues, func(a, b db.League) int { return order(a) - order(b) })
 
 	franchises, err := s.Queries.ListFranchises(ctx, d.ID)
-	return dynastyView{Dynasty: d, Leagues: leagues, Franchises: franchises}, err
+	if err != nil {
+		return dynastyView{}, err
+	}
+	identities, err := s.Queries.ListTeamIdentities(ctx, d.ID)
+	return dynastyView{Dynasty: d, Leagues: leagues, Franchises: franchises, TeamIdentities: identities}, err
 }
 
 func (s *Server) getDynasty(w http.ResponseWriter, r *http.Request) {

@@ -14,6 +14,8 @@ import (
 
 // leagueRoster is one franchise's holdings in one league.
 type leagueRoster struct {
+	TeamName    string          `json:"team_name"`
+	ImageURL    string          `json:"image_url"`
 	LeagueID    pgtype.UUID     `json:"league_id"`
 	Competition string          `json:"competition"`
 	Name        string          `json:"name"`
@@ -56,6 +58,17 @@ func (s *Server) getFranchise(w http.ResponseWriter, r *http.Request) {
 		lr := leagueRoster{
 			LeagueID: league.ID, Competition: league.Competition, Name: league.Name,
 			Limits: rules.Roster, Players: []rosterPlayer{},
+		}
+		lr.TeamName, lr.ImageURL = franchise.Name, franchise.ImageUrl
+		for _, identity := range view.TeamIdentities {
+			if identity.FranchiseID == franchise.ID && identity.LeagueID == league.ID {
+				if identity.Name != "" {
+					lr.TeamName = identity.Name
+				}
+				if identity.ImageUrl != "" {
+					lr.ImageURL = identity.ImageUrl
+				}
+			}
 		}
 		var entries []roster.Entry
 		for _, p := range players {
@@ -103,7 +116,7 @@ func (s *Server) listInvites(w http.ResponseWriter, r *http.Request) {
 		invites = append(invites, invite{
 			Franchise: db.Franchise{
 				ID: row.ID, DynastyID: row.DynastyID, Name: row.Name, ManagerName: row.ManagerName,
-				Slug: row.Slug, IsCommissioner: row.IsCommissioner, UserID: row.UserID,
+				ImageUrl: row.ImageUrl, Slug: row.Slug, IsCommissioner: row.IsCommissioner, UserID: row.UserID,
 			},
 			Email:       row.Email,
 			InviteToken: row.InviteToken.String,

@@ -2,14 +2,17 @@
 	// One period of a head-to-head league: who plays whom, and the score.
 	import { getMatchups, type Franchise, type League, type Matchups } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
-	import Crest from '#lib/ui/Crest.svelte';
+	import { teamIdentity } from '#lib/identity.ts';
+ import type { TeamIdentity } from '#lib/api.ts';
+ import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { dayLabel, points } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 
-	let { league, franchises }: { league: League; franchises: Franchise[] } = $props();
+	let { league, franchises, identities = [] }: { league: League; franchises: Franchise[]; identities?: TeamIdentity[] } = $props();
 
-	const name = (id: string | null) => franchises.find((f) => f.id === id)?.name ?? '';
+	const identity = (id: string | null) => teamIdentity(franchises.find(f => f.id===id),identities,league.id);
+ const name = (id: string | null) => identity(id).name;
 
 	let view = $state<Matchups>();
 	let seq = $state<number>(); // undefined shows the period in progress
@@ -54,7 +57,7 @@
 						{#each [{ id: m.home_franchise_id, points: m.home_points, other: m.away_points }, { id: m.away_franchise_id, points: m.away_points, other: m.home_points }] as side (side.id)}
 							<div class="side" class:behind={m.final && side.points < side.other}>
 								{#if side.id}
-									<Crest name={name(side.id)} size={26} />
+									<Crest src={identity(side.id).image_url} name={name(side.id)} size={26} />
 									<span class="team">{name(side.id)}</span>
 									<span class="score">{points(side.points)}</span>
 								{:else}

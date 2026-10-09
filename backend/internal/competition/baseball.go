@@ -40,6 +40,7 @@ func mlb(client *ingest.Client) Competition {
 			{"bat_tb", "Total bases"}, {"bat_r", "Runs"}, {"bat_h", "Hits"}, {"bat_hr", "Home runs"}, {"bat_rbi", "Runs batted in"},
 			{"bat_sb", "Stolen bases"}, {"bat_bb", "Walks"}, {"bat_so", "Strikeouts (batting)"},
 			{"pit_ip", "Innings pitched"}, {"pit_so", "Strikeouts (pitching)"}, {"pit_w", "Wins"}, {"pit_l", "Losses"},
+			{"pit_games", "Pitching appearances"}, {"bat_games", "Batting appearances"},
 			{"pit_sv", "Saves"}, {"pit_hld", "Holds"}, {"pit_gs", "Games started"}, {"pit_er", "Earned runs allowed"}, {"pit_h", "Hits allowed"},
 			{"pit_bb", "Walks allowed"},
 		},

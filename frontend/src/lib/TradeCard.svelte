@@ -58,7 +58,7 @@
 		{#each trade.parties as party (party.franchise_id)}
 			<section>
 				<h3 class="row">
-					<Crest name={name(party.franchise_id)} size={24} />
+					<Crest src={franchises.find(f => f.id === party.franchise_id)?.image_url} name={name(party.franchise_id)} size={24} />
 					{name(party.franchise_id)} <span class="muted">receives</span>
 				</h3>
 				<ul>

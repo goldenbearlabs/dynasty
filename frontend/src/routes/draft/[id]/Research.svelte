@@ -88,6 +88,7 @@
 <section class="research" id="draft-player-research" aria-label="Player research">
 	<div class="section-title">
 		<h2>Player research</h2>
+		{#if selectedId}<a href="/player/{selectedId}">Open full profile ↗</a>{/if}
 		<span class="muted">{selectedId ? 'Profile & game log' : 'Select a player'}</span>
 		<a class="back" href="#draft-player-pool">Back to players ↑</a>
 	</div>

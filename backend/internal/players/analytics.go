@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"crossover/internal/problem"
 	"crossover/internal/settings"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ResearchFilter affects displayed rows, never the population used to compute
@@ -24,6 +26,8 @@ type ResearchPool struct {
 }
 
 type ResearchFilter struct {
+	PlayerID                                                                 pgtype.UUID
+	PitcherWorkloadPercent                                                   *int
 	MinRateSet, MaxRateSet, MinIndexSet, MaxIndexSet, MinPARSet, MaxGamesSet bool
 	Pools                                                                    []ResearchPool
 	MaxGames                                                                 int
@@ -39,9 +43,13 @@ type ResearchFilter struct {
 }
 
 type AnalyticsPlayer struct {
+	QualificationNote       string  `json:"qualification_note"`
+	BenchmarkMinimumGames   int     `json:"benchmark_minimum_games"`
+	BenchmarkMinimumInnings float64 `json:"benchmark_minimum_innings"`
 	db.ListResearchPlayersRow
 	RowKey                 string   `json:"row_key"`
 	ScoringSource          string   `json:"scoring_source"`
+	NormalizationGroup     string   `json:"normalization_group"`
 	HasScoringStats        bool     `json:"has_scoring_stats"`
 	Qualified              bool     `json:"qualified"`
 	MetricPosition         string   `json:"metric_position"`
@@ -59,6 +67,7 @@ type AnalyticsPlayer struct {
 }
 
 type Benchmark struct {
+	MeanIndex       *float64 `json:"mean_index"`
 	Season          string   `json:"season"`
 	Competition     string   `json:"competition"`
 	Position        string   `json:"position"`
@@ -94,21 +103,22 @@ type LeagueAnalysis struct {
 }
 
 type AnalyticsPage struct {
-	StartingConferences map[string][]string         `json:"starting_conferences"`
-	RawStatKeys         []string                    `json:"raw_stat_keys"`
-	Catalog             []db.ListResearchCatalogRow `json:"catalog"`
-	Analysis            []LeagueAnalysis            `json:"analysis"`
-	Chart               []ChartPoint                `json:"chart"`
-	ChartTotal          int                         `json:"chart_total"`
-	Warnings            []string                    `json:"warnings"`
-	Players             []AnalyticsPlayer           `json:"players"`
-	Total               int                         `json:"total"`
-	Page                int                         `json:"page"`
-	PerPage             int                         `json:"per_page"`
-	Seasons             []db.ListResearchSeasonsRow `json:"seasons"`
-	Teams               []string                    `json:"teams"`
-	Benchmarks          []Benchmark                 `json:"benchmarks"`
-	BenchmarkGames      int                         `json:"benchmark_games"`
+	PitcherWorkloadPercent int                         `json:"pitcher_workload_percent"`
+	StartingConferences    map[string][]string         `json:"starting_conferences"`
+	RawStatKeys            []string                    `json:"raw_stat_keys"`
+	Catalog                []db.ListResearchCatalogRow `json:"catalog"`
+	Analysis               []LeagueAnalysis            `json:"analysis"`
+	Chart                  []ChartPoint                `json:"chart"`
+	ChartTotal             int                         `json:"chart_total"`
+	Warnings               []string                    `json:"warnings"`
+	Players                []AnalyticsPlayer           `json:"players"`
+	Total                  int                         `json:"total"`
+	Page                   int                         `json:"page"`
+	PerPage                int                         `json:"per_page"`
+	Seasons                []db.ListResearchSeasonsRow `json:"seasons"`
+	Teams                  []string                    `json:"teams"`
+	Benchmarks             []Benchmark                 `json:"benchmarks"`
+	BenchmarkGames         int                         `json:"benchmark_games"`
 }
 
 type analyticRules struct {
@@ -242,7 +252,8 @@ func (s *Service) Analytics(ctx context.Context, f ResearchFilter) (AnalyticsPag
 	if err != nil {
 		return AnalyticsPage{}, err
 	}
-	result.Analysis = leagueAnalysis(valued, rules, result.BenchmarkGames)
+	f.BenchmarkGames = result.BenchmarkGames
+	result.Analysis = leagueAnalysis(valued, rules, f)
 	result.Warnings = []string{}
 	for _, a := range result.Analysis {
 		if a.ScoringSource == "defaults" {
@@ -300,6 +311,162 @@ func index(rate float64, d distribution) *float64 {
 }
 func ptr[T any](v T) *T { return &v }
 
+func metricPosition(comp, pos string) string {
+	if comp == "nba" || comp == "wnba" || comp == "cbb" {
+		switch pos {
+		case "PG", "SG":
+			return "G"
+		case "SF", "PF":
+			return "F"
+		}
+	}
+	if comp == "mlb" {
+		switch pos {
+		case "LF", "CF", "RF":
+			return "OF"
+		}
+	}
+	return pos
+}
+
+func normalizationGroup(p db.ListResearchPlayersRow) string {
+	if p.Competition != "mlb" {
+		return "League"
+	}
+	if slices.Contains(p.Positions, "TWP") {
+		return "Two-way players"
+	}
+	pitcher := slices.ContainsFunc(p.Positions, func(pos string) bool { return pos == "P" || pos == "SP" || pos == "RP" })
+	if !pitcher {
+		return "Hitters"
+	}
+	var stats map[string]float64
+	json.Unmarshal(p.Stats, &stats)
+	games, knownGames := stats["pit_games"]
+	starts, knownStarts := stats["pit_gs"]
+	if knownGames && knownStarts && games > 0 {
+		if starts >= games/2 {
+			return "Starting pitchers"
+		}
+		if starts > 0 {
+			return "Mixed-role pitchers"
+		}
+		return "Relievers"
+	}
+	if slices.Contains(p.Positions, "SP") {
+		return "Starting pitchers"
+	}
+	if slices.Contains(p.Positions, "RP") {
+		return "Relievers"
+	}
+	return "Pitchers (role unknown)"
+}
+
+func comparisonPositions(p db.ListResearchPlayersRow) []string {
+	positions := []string{}
+	for _, pos := range p.Positions {
+		if p.Competition == "mlb" && pos == "P" {
+			switch normalizationGroup(p) {
+			case "Starting pitchers":
+				pos = "SP"
+			case "Relievers", "Mixed-role pitchers":
+				pos = "RP"
+			}
+		}
+		positions = append(positions, metricPosition(p.Competition, pos))
+	}
+	return slices.Compact(slices.Sorted(slices.Values(positions)))
+}
+
+// Split flexible demand over actual, distinct eligible pools: aliases such as
+// G/PG/SG describe one basketball pool, not three separate positions.
+func replacementPositions(comp string, positions, available []string) []string {
+	result := []string{}
+	for _, pos := range positions {
+		if pos == settings.AnyPosition {
+			result = append(result, available...)
+			continue
+		}
+		if comp == "mlb" && pos == "P" {
+			for _, pitcher := range []string{"SP", "RP", "P"} {
+				if slices.Contains(available, pitcher) {
+					result = append(result, pitcher)
+				}
+			}
+			continue
+		}
+		result = append(result, metricPosition(comp, pos))
+	}
+	return slices.Compact(slices.Sorted(slices.Values(result)))
+}
+
+type workloadThreshold struct {
+	games   int
+	innings float64
+}
+
+func pitcherWorkloadPercent(f ResearchFilter) int {
+	if f.PitcherWorkloadPercent == nil {
+		return 25
+	}
+	return max(0, min(100, *f.PitcherWorkloadPercent))
+}
+
+func pitcherWorkload(p db.ListResearchPlayersRow) (games, innings float64, pitcher bool) {
+	pitcher = p.Competition == "mlb" && !slices.Contains(p.Positions, "TWP") && slices.ContainsFunc(p.Positions, func(pos string) bool { return pos == "P" || pos == "SP" || pos == "RP" })
+	if !pitcher {
+		return
+	}
+	var stats map[string]float64
+	json.Unmarshal(p.Stats, &stats)
+	games, known := stats["pit_games"]
+	if !known {
+		games = float64(p.Games)
+	}
+	return games, stats["pit_ip"], true
+}
+
+// Workload qualification scales with each season's progress and pitching role.
+// A display filter cannot change the threshold or the benchmark population.
+func workloadThresholds(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f ResearchFilter) map[string]workloadThreshold {
+	maximums := map[string]workloadThreshold{}
+	for _, row := range rows {
+		if row.Season == "" || !hasScoringStats(row.Stats, rules[row.Competition].Rules.Scoring) {
+			continue
+		}
+		games, innings, pitcher := pitcherWorkload(row)
+		if !pitcher {
+			continue
+		}
+		key := cohortKey(row.Competition, row.Season) + "|" + normalizationGroup(row)
+		m := maximums[key]
+		m.games = max(m.games, int(games))
+		m.innings = max(m.innings, innings)
+		maximums[key] = m
+	}
+	fraction := float64(pitcherWorkloadPercent(f)) / 100
+	for key, maximum := range maximums {
+		maximums[key] = workloadThreshold{games: max(max(1, f.BenchmarkGames), int(math.Ceil(float64(maximum.games)*fraction))), innings: maximum.innings * fraction}
+	}
+	return maximums
+}
+
+func qualification(row db.ListResearchPlayersRow, minimum int, limits map[string]workloadThreshold) (bool, workloadThreshold, string) {
+	limit := workloadThreshold{games: max(1, minimum)}
+	games, innings, pitcher := pitcherWorkload(row)
+	if pitcher {
+		if l, ok := limits[cohortKey(row.Competition, row.Season)+"|"+normalizationGroup(row)]; ok {
+			limit = l
+		}
+		if games < float64(limit.games) || innings+1e-9 < limit.innings {
+			return false, limit, fmt.Sprintf("Small pitching workload · %.0f/%d appearances · %.1f/%.1f innings", games, limit.games, innings, limit.innings)
+		}
+	} else if int(row.Games) < limit.games {
+		return false, limit, fmt.Sprintf("Small sample · %d/%d games", row.Games, limit.games)
+	}
+	return true, limit, ""
+}
+
 func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f ResearchFilter) AnalyticsPage {
 	if f.BenchmarkGames < 1 {
 		f.BenchmarkGames = 5
@@ -313,6 +480,7 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 	if f.Sort == "" {
 		f.Sort = "points"
 	}
+	limits := workloadThresholds(rows, rules, f)
 	cohorts := map[string][]db.ListResearchPlayersRow{}
 	positions := map[string]map[string][]db.ListResearchPlayersRow{}
 	teams := map[string]bool{}
@@ -322,7 +490,8 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 				teams[team] = true
 			}
 		}
-		if p.Season == "" || int(p.Games) < f.BenchmarkGames || !hasScoringStats(p.Stats, rules[p.Competition].Rules.Scoring) {
+		qualified, _, _ := qualification(p, f.BenchmarkGames, limits)
+		if p.Season == "" || !qualified || !hasScoringStats(p.Stats, rules[p.Competition].Rules.Scoring) {
 			continue
 		}
 		key := cohortKey(p.Competition, p.Season)
@@ -330,32 +499,44 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 		if positions[key] == nil {
 			positions[key] = map[string][]db.ListResearchPlayersRow{}
 		}
-		for _, pos := range slices.Compact(slices.Sorted(slices.Values(p.Positions))) {
+		for _, pos := range comparisonPositions(p) {
 			positions[key][pos] = append(positions[key][pos], p)
 		}
 	}
-	result := AnalyticsPage{Players: []AnalyticsPlayer{}, Teams: []string{}, Benchmarks: []Benchmark{}, BenchmarkGames: f.BenchmarkGames, Page: f.Page, PerPage: f.PerPage}
+	result := AnalyticsPage{PitcherWorkloadPercent: pitcherWorkloadPercent(f), Players: []AnalyticsPlayer{}, Teams: []string{}, Benchmarks: []Benchmark{}, BenchmarkGames: f.BenchmarkGames, Page: f.Page, PerPage: f.PerPage}
 	for team := range teams {
 		result.Teams = append(result.Teams, team)
 	}
 	slices.Sort(result.Teams)
-	distributions := map[string]distribution{}
 	positional := map[string]map[string]distribution{}
 	baselines := map[string]map[string]Benchmark{}
+	leagueDistributions := map[string]distribution{}
+	roleDistributions := map[string]distribution{}
+	roleRows := map[string][]db.ListResearchPlayersRow{}
+	for key, cohort := range cohorts {
+		for _, row := range cohort {
+			role := key + "|" + normalizationGroup(row)
+			roleRows[role] = append(roleRows[role], row)
+		}
+	}
+	for key, rows := range roleRows {
+		roleDistributions[key] = summarize(rows)
+	}
 	for comp, cohort := range cohorts {
 		d := summarize(cohort)
-		distributions[comp] = d
+		leagueDistributions[comp] = d
 		actualComp := cohort[0].Competition
 		season := cohort[0].Season
 		r := rules[actualComp]
 		demand := map[string]float64{}
+		available := []string{}
+		for pos := range positions[comp] {
+			available = append(available, pos)
+		}
 		slots := 0
 		for _, slot := range r.Rules.Lineup.Slots {
 			slots += slot.Count
-			eligible := slot.Positions
-			if slices.Contains(eligible, settings.AnyPosition) {
-				eligible = r.Positions
-			}
+			eligible := replacementPositions(actualComp, slot.Positions, available)
 			if len(eligible) == 0 {
 				continue
 			}
@@ -369,6 +550,16 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 			pd := summarize(members)
 			positional[comp][pos] = pd
 			b := Benchmark{Competition: actualComp, Season: season, Position: pos, Players: len(members), Mean: pd.mean, SD: pd.sd, StarterSlots: slots}
+			meanIndex, count := 0.0, 0
+			for _, member := range members {
+				if v := index(member.PointsPerGame, roleDistributions[comp+"|"+normalizationGroup(member)]); v != nil {
+					meanIndex += *v
+					count++
+				}
+			}
+			if count > 0 {
+				b.MeanIndex = ptr(meanIndex / float64(count))
+			}
 			// The first rate below estimated starting demand is replacement.
 			// Flexible slots share demand equally across their eligible positions.
 			rank := int(math.Ceil(demand[pos])) + 1
@@ -389,13 +580,16 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 	var filtered []AnalyticsPlayer
 	result.Chart = []ChartPoint{}
 	for _, row := range rows {
-		p := AnalyticsPlayer{ListResearchPlayersRow: row, RowKey: row.ID.String() + "|" + row.Competition + "|" + row.Season, ScoringSource: rules[row.Competition].Source, HasScoringStats: hasScoringStats(row.Stats, rules[row.Competition].Rules.Scoring)}
+		p := AnalyticsPlayer{ListResearchPlayersRow: row, RowKey: row.ID.String() + "|" + row.Competition + "|" + row.Season, NormalizationGroup: normalizationGroup(row), ScoringSource: rules[row.Competition].Source, HasScoringStats: hasScoringStats(row.Stats, rules[row.Competition].Rules.Scoring)}
 		key := cohortKey(p.Competition, p.Season)
 		if err := json.Unmarshal(row.Stats, &p.values); err != nil {
 			p.values = map[string]float64{}
 		}
-		d := distributions[key]
-		p.Qualified = p.Season != "" && int(p.Games) >= f.BenchmarkGames && p.HasScoringStats && len(d.rates) > 0
+		d := roleDistributions[key+"|"+p.NormalizationGroup]
+		leagueD := leagueDistributions[key]
+		qualified, threshold, note := qualification(row, f.BenchmarkGames, limits)
+		p.BenchmarkMinimumGames, p.BenchmarkMinimumInnings, p.QualificationNote = threshold.games, threshold.innings, note
+		p.Qualified = p.Season != "" && qualified && p.HasScoringStats && len(d.rates) > 0
 		if p.Qualified {
 			p.LeagueIndex = index(p.PointsPerGame, d)
 			if len(d.rates) >= 2 {
@@ -403,24 +597,24 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 				hi := sort.Search(len(d.rates), func(i int) bool { return d.rates[i] > p.PointsPerGame })
 				p.Percentile = ptr(100 * float64(lo+hi-1) / 2 / float64(len(d.rates)-1))
 			}
-			if d.maxGames > 0 {
-				p.Availability = ptr(100 * float64(p.Games) / float64(d.maxGames))
+			if leagueD.maxGames > 0 {
+				p.Availability = ptr(100 * float64(p.Games) / float64(leagueD.maxGames))
 			}
-			if d.positivePoints > 0 {
-				p.ProductionShare = ptr(100 * max(0, p.Points) / d.positivePoints)
+			if leagueD.positivePoints > 0 {
+				p.ProductionShare = ptr(100 * max(0, p.Points) / leagueD.positivePoints)
 			}
 			// For multi-position players, use their most valuable eligible position.
 			// A position filter explicitly selects the comparison position.
-			candidates := slices.Clone(p.Positions)
+			candidates := comparisonPositions(row)
 			slices.Sort(candidates)
 			if f.Position != "" {
-				selected := strings.Split(f.Position, ",")
+				selected := []string{}
+				for _, pos := range strings.Split(f.Position, ",") {
+					selected = append(selected, replacementPositions(p.Competition, []string{pos}, candidates)...)
+				}
 				candidates = slices.DeleteFunc(candidates, func(pos string) bool { return !slices.Contains(selected, pos) })
 			}
 			for _, pos := range candidates {
-				if !slices.Contains(p.Positions, pos) {
-					continue
-				}
 				b := baselines[key][pos]
 				if p.MetricPosition == "" {
 					p.MetricPosition = pos
@@ -444,6 +638,9 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 					p.WinShareAdded = ptr(0.5 * math.Erf(z/math.Sqrt2) * float64(p.Games))
 				}
 			}
+		}
+		if f.PlayerID.Valid && p.ID != f.PlayerID {
+			continue
 		}
 		if f.Competition != "" && p.Competition != f.Competition {
 			continue
@@ -472,7 +669,7 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 		if f.Status != "" && p.Status != f.Status || f.Search != "" && !strings.Contains(strings.ToLower(p.FullName), strings.ToLower(f.Search)) {
 			continue
 		}
-		if f.Position != "" && !matchesPosition(p.Positions, f.Position) {
+		if f.Position != "" && !matchesPosition(p.Positions, f.Position) && !matchesPosition(comparisonPositions(row), f.Position) {
 			continue
 		}
 		if f.Team != "" && !slices.Contains(strings.Split(p.Team, " / "), f.Team) && p.Team != f.Team {
@@ -637,7 +834,8 @@ func matchesPosition(positions []string, query string) bool {
 	}
 	return false
 }
-func leagueAnalysis(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, minimum int) []LeagueAnalysis {
+func leagueAnalysis(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f ResearchFilter) []LeagueAnalysis {
+	limits := workloadThresholds(rows, rules, f)
 	groups := map[string][]db.ListResearchPlayersRow{}
 	for _, row := range rows {
 		if row.Season != "" {
@@ -666,7 +864,7 @@ func leagueAnalysis(rows []db.ListResearchPlayersRow, rules map[string]analyticR
 					a.Contributions[stat] += value * weight
 				}
 			}
-			if int(p.Games) >= minimum {
+			if qualified, _, _ := qualification(p, f.BenchmarkGames, limits); qualified {
 				a.Qualified++
 				rates = append(rates, p.PointsPerGame)
 				totals = append(totals, max(0, p.Points))

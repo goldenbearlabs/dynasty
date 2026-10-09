@@ -62,7 +62,7 @@
 					<tr>
 						<td>
 							<div class="row name">
-								<Crest name={invite.name} size={30} />
+								<Crest src={invite.image_url} name={invite.name} size={30} />
 								<input aria-label="Franchise name" bind:value={invite.name} />
 							</div>
 						</td>

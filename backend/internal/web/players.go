@@ -47,6 +47,12 @@ func (s *Server) listResearch(w http.ResponseWriter, r *http.Request) {
 		Position: query.Get("position"), Team: query.Get("team"), Owner: query.Get("owner"), Sort: query.Get("sort"),
 		AboveReplacement: query.Get("above_replacement") == "true", Ascending: query.Get("ascending") == "true", PerPage: playersPerPage,
 	}
+	workload, err := integer("pitcher_workload_percent", 25, 100)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	f.PitcherWorkloadPercent = &workload
 	for _, field := range []struct {
 		key               string
 		value             *int

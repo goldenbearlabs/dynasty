@@ -63,6 +63,7 @@ export type League = {
 };
 
 export type Franchise = {
+	image_url: string;
 	id: string;
 	name: string;
 	manager_name: string;
@@ -81,7 +82,9 @@ export type Invite = Franchise & {
 
 export type Credentials = { email: string; password: string };
 
+export type TeamIdentity = { franchise_id: string; league_id: string; competition: string; name: string; image_url: string };
 export type Dynasty = {
+ team_identities: TeamIdentity[];
 	id: string;
 	name: string;
 	settings: DynastySettings;
@@ -130,6 +133,10 @@ export type ResearchPlayer = Pick<Player, 'id' | 'competition' | 'full_name' | '
 	points_per_game: number;
 	row_key: string;
 	scoring_source: 'league' | 'defaults';
+	normalization_group: string;
+	qualification_note: string;
+	benchmark_minimum_games: number;
+	benchmark_minimum_innings: number;
 	has_scoring_stats: boolean;
 	qualified: boolean;
 	metric_position: string;
@@ -145,6 +152,7 @@ export type ResearchPlayer = Pick<Player, 'id' | 'competition' | 'full_name' | '
 	production_share: number | null;
 };
 export type ResearchBenchmark = {
+	mean_index: number | null;
 	competition: string; season: string; position: string; players: number; mean: number; sd: number;
 	starter_slots: number; replacement_rank: number | null; replacement_rate: number | null;
 };
@@ -160,10 +168,11 @@ raw_per_game?: string; pools?: string; max_games?: number; max_rate?: number; ma
 	qualified_only?: string; missing_only?: string; stat_key?: string; min_stat?: number; max_stat?: number;
 	include_chart?: string; chart_x?: string; chart_y?: string; chart_group?: string;
 	season?: string; sort?: string; position?: string; team?: string; owner?: string;
-	min_games?: number; min_rate?: number; min_index?: number; benchmark_games?: number;
+	min_games?: number; min_rate?: number; min_index?: number; benchmark_games?: number; pitcher_workload_percent?: number;
 	replacement_rank?: number; above_replacement?: string; ascending?: string;
 };
 export type ResearchPage = {
+	pitcher_workload_percent: number;
 	starting_conferences: Record<string, string[]>;
 	players: ResearchPlayer[];
 	total: number;
@@ -199,6 +208,35 @@ export type PlayerSeason = {
 	points_per_game: number;
 };
 
+export type ProfileSeason = PlayerSeason & {
+ key: string; year: number; synced_at: string; scoring_source: string;
+ research: ResearchPlayer | null; research_note: string; eligible_splits: number; splits: number;
+};
+export type PlayerEvent = {
+ id: number; kind: string; detail: Record<string, unknown>; created_at: string;
+ competition: string; franchise_name: string; franchise_slug: string;
+ trade_id: string | null; draft_id: string | null; draft_name: string; pick_round: number; pick_position: number;
+};
+export type PlayerTimeline = { events: PlayerEvent[]; total: number; page: number; per_page: number };
+export type ProfileGame = { id: string; competition: string; day: string; starts_at: string;
+ stats: Record<string, number>; away_abbrev: string; home_abbrev: string; points: number; scoring_source: string };
+export type PlayerGameLog = { games: ProfileGame[]; total: number; page: number; per_page: number };
+export type PlayerProfile = {
+ fantasy_production: { season_id: string; year: number; competition: string; franchise_name: string; franchise_slug: string; games: number; points: number }[];
+ player: Pick<Player, 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
+ seasons: ProfileSeason[]; game_log: PlayerGameLog; timeline: PlayerTimeline;
+ ownership: { league_id: string; competition: string; league_name: string; franchise_name: string; franchise_slug: string;
+ franchise_id: string; list: string; acquired_via: string; acquired_at: string; reserved_at: string | null; slot: string }[];
+ drafts: { id: string; round: number; position: number; auto_picked: boolean; picked_at: string | null;
+ draft_id: string; draft_name: string; year: number; kind: string; franchise_name: string; franchise_slug: string; competition: string }[];
+ trades: { id: string; status: string; note: string; created_at: string; resolved_at: string | null;
+ from_name: string; from_slug: string; to_name: string; to_slug: string; competition: string }[];
+ waivers: { league_id: string; competition: string; clears_at: string }[];
+ starter_eligible: boolean; eligibility_note: string; conference: string;
+ scoring_rules: Record<string, Record<string, number>>; rules_sources: Record<string, string>;
+ reserve_locked_until: Record<string, string>;
+};
+
 export type PlayerFilter = {
 	competition?: string;
 	status?: string;
@@ -213,6 +251,7 @@ export type PlayerFilter = {
 };
 
 export type RosterPlayer = {
+ nickname: string;
 	player_id: string;
 	list: List;
 	full_name: string;
@@ -227,6 +266,7 @@ export type RosterPlayer = {
 };
 
 export type LeagueRoster = {
+ team_name: string; image_url: string;
 	league_id: string;
 	competition: string;
 	name: string;
@@ -321,7 +361,7 @@ export type StandingsRow = {
 	wins: number;
 	losses: number;
 	ties: number;
-	players: { player_id: string; full_name: string; headshot_url: string; games: number; points: number }[];
+	players: { player_id: string; full_name: string; headshot_url: string; nickname?: string; games: number; points: number }[];
 };
 
 /** One league's table for its latest season, best first. */
@@ -425,6 +465,7 @@ export type LineupGame = {
 };
 
 export type LineupPlayer = {
+ nickname: string;
 	starter_eligible: boolean;
 	eligibility_note: string;
 	player_id: string;
@@ -687,6 +728,9 @@ export const getResearch = (filter: ResearchFilter) =>
 	request<ResearchPage>('GET', `/research${query(filter)}`);
 export const getStatSeasons = () => request<StatSeason[]>('GET', '/stat-seasons');
 export const getPlayerResearch = (id: string) => request<PlayerResearch>('GET', `/players/${id}`);
+export const getPlayerProfile = (id: string) => request<PlayerProfile>('GET', `/players/${id}/profile`);
+export const getPlayerTimeline = (id: string, page: number) => request<PlayerTimeline>('GET', `/players/${id}/transactions${query({page})}`);
+export const getPlayerGameLog = (id: string, page: number, competition = '') => request<PlayerGameLog>('GET', `/players/${id}/games${query({page, competition})}`);
 export const getPlayerSeasons = (id: string) => request<PlayerSeason[]>('GET', `/players/${id}/seasons`);
 
 export const getDynasty = () => orNull(request<Dynasty>('GET', '/dynasty'));
@@ -705,6 +749,10 @@ export const getInvite = (token: string) => request<{ franchise: Franchise; rese
 export const claimInvite = (token: string, credentials: Credentials) =>
 	request<void>('POST', `/invites/${token}/claim`, credentials);
 
+export const setOrganizationIdentity = (id: string, name: string, image_url: string) => request<void>('PUT', `/franchises/${id}/identity`, {name,image_url});
+export const setTeamIdentity = (id: string, league: string, name: string, image_url: string) => request<void>('PUT', `/franchises/${id}/leagues/${league}/identity`, {name,image_url});
+export const getPlayerNickname = (franchise: string, player: string) => request<{nickname: string}>('GET', `/franchises/${franchise}/players/${player}/nickname`);
+export const setPlayerNickname = (franchise: string, player: string, nickname: string) => request<void>('PUT', `/franchises/${franchise}/players/${player}/nickname`, {nickname});
 export const getFranchise = (slug: string) => request<FranchiseDetail>('GET', `/franchises/${slug}`);
 export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move', change: RosterChange) =>
 	request<void>('POST', `/leagues/${leagueId}/roster/${action}`, change);

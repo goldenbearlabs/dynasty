@@ -212,7 +212,7 @@
 														class="player-name"
 														aria-pressed={selectedId === player.id}
 														onclick={() => onselect(player)}>{player.full_name}</button
-													>{:else}<strong>{player.full_name}</strong>{/if}
+													>{:else}<a href="/player/{player.id}"><strong>{player.full_name}</strong></a>{/if}
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span

@@ -31,7 +31,8 @@
 		<section class="stack tight">
 			<h2>Standings</h2>
 			<Standings
-				tables={data.standings}
+				identities={data.dynasty.team_identities}
+ tables={data.standings}
 				overall={data.overall}
 				franchises={data.dynasty.franchises}
 				leagues={data.dynasty.leagues}
@@ -51,7 +52,7 @@
 								<SportBadge sport={roster.competition} solid />
 								{#if roster.overage > 0}<span class="pill bad">Over by {roster.overage}</span>{/if}
 							</div>
-							<strong class="league">{roster.name}</strong>
+							<div class="row"><Crest name={roster.team_name} src={roster.image_url} size={30} /><strong class="league">{roster.team_name}</strong></div><span class="muted small-text">{roster.name}</span>
 							<Meter label="Main" value={onList(roster.players, 'main')} max={roster.limits.main} />
 							<Meter label="Reserve" value={onList(roster.players, 'reserve')} max={roster.limits.reserve} />
 						</a>
@@ -70,7 +71,7 @@
 			<div class="franchises">
 				{#each data.dynasty.franchises as f (f.id)}
 					<a class="franchise" href="/franchise/{f.slug}">
-						<Crest name={f.name} size={44} />
+						<Crest src={f.image_url} name={f.name} size={44} />
 						<div>
 							<strong>{f.name}</strong>
 							<div class="muted small-text">{f.manager_name}</div>

@@ -223,7 +223,7 @@
 									<div class="player">
 										<Headshot name={player.full_name} src={player.headshot_url} size={30} />
 										<div>
-											<strong>{player.full_name}</strong>
+											<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 											{#if player.locked}<span class="pill"><Icon name="lock" size={11} /> Locked</span>{/if}
 											<div class="muted small-text">
 												{player.positions.join('/')} · {player.team_abbrev}

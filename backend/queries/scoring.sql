@@ -118,6 +118,7 @@ select exists (
 -- span of days and the fantasy points he scored in each. A player with no
 -- game in the span appears once, with no game.
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
+       coalesce(n.nickname, '')::text as nickname,
        coalesce(t.abbrev, '')::text as team_abbrev, coalesce(t.conference, '')::text as conference,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
@@ -136,6 +137,7 @@ left join games g on g.competition = l.competition
                  and p.pro_team_id in (g.home_team_id, g.away_team_id)
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
+left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = @league_id and re.franchise_id = @franchise_id and re.list = 'main'
 order by p.full_name, p.id, g.starts_at;
 
@@ -195,17 +197,18 @@ with days as (
         (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
          in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
 )
-select st.franchise_id, st.player_id, p.full_name, p.headshot_url,
+select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
        count(distinct st.game_id) as games,
        sum(s.value::numeric * r.value::numeric)::float8 as points
 from started st
 join players p on p.id = st.player_id
+left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id = st.player_id
 cross join lateral jsonb_each_text(st.stats) s
 join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
 where st.day >= @from_day::date
   and (st.games_per_week = 0 or st.nth <= st.games_per_week)
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
-group by st.franchise_id, st.player_id, p.full_name, p.headshot_url
+group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc;
 
 -- name: ListWeekStarts :many

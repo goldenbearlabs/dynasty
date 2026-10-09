@@ -219,7 +219,7 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 		if err != nil {
 			return 0, err
 		}
-		missing, err := s.q.ListSeasonsMissingConferences(ctx, competition)
+		missing, err := s.q.ListSeasonsMissingResearchMetadata(ctx, competition)
 		if err != nil {
 			return 0, err
 		}

@@ -116,8 +116,12 @@ func TestResearchAnalyticsAPI(t *testing.T) {
 	if filtered.Total != 0 || len(filtered.Analysis) != 3 {
 		t.Fatal("player filters must not change league-wide analysis")
 	}
+	b.want(http.StatusOK, "GET", base+"&pitcher_workload_percent=0", nil, &filtered)
+	if filtered.PitcherWorkloadPercent != 0 {
+		t.Fatal("zero workload override must be preserved")
+	}
 	b.want(http.StatusUnprocessableEntity, "GET", "/api/research?pools=oops", nil, nil)
-	for _, query := range []string{"&min_rate=NaN", "&min_index=Inf", "&min_games=-1", "&replacement_rank=99999999"} {
+	for _, query := range []string{"&min_rate=NaN", "&min_index=Inf", "&min_games=-1", "&replacement_rank=99999999", "&pitcher_workload_percent=-1", "&pitcher_workload_percent=101"} {
 		b.want(http.StatusUnprocessableEntity, "GET", base+query, nil, nil)
 	}
 }

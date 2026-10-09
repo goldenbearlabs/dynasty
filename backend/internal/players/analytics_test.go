@@ -214,3 +214,168 @@ func TestAnalyticsZeroUpperBound(t *testing.T) {
 		t.Fatal("an explicit zero maximum is a filter, not an unset value")
 	}
 }
+
+func TestBasketballAliasesShareReplacementDemand(t *testing.T) {
+	rows := []db.ListResearchPlayersRow{}
+	for _, group := range []string{"G", "F", "C"} {
+		for i := 0; i < 10; i++ {
+			pos := group
+			if group == "G" {
+				pos = []string{"G", "PG", "SG"}[i%3]
+			}
+			stats, _ := json.Marshal(map[string]float64{"pts": float64(1000 - i*50)})
+			rows = append(rows, db.ListResearchPlayersRow{Competition: "nba", Season: "2026", FullName: pos + string(rune('A'+i)), Positions: []string{pos}, Games: 10, Stats: stats, Points: float64(1000 - i*50), PointsPerGame: float64(100 - i*5)})
+		}
+	}
+	rules := map[string]analyticRules{"nba": {Rules: settings.League{Scoring: map[string]float64{"pts": 1}, Lineup: settings.Lineup{Slots: []settings.Slot{{Name: "G", Count: 2, Positions: []string{"G", "PG", "SG"}}, {Name: "F", Count: 2, Positions: []string{"F", "SF", "PF"}}, {Name: "C", Count: 1, Positions: []string{"C"}}, {Name: "UTIL", Count: 2, Positions: []string{"*"}}}}}, Managers: 2}}
+	result := analyze(rows, rules, ResearchFilter{})
+	for _, b := range result.Benchmarks {
+		if b.Position == "" {
+			continue
+		}
+		want := 7
+		if b.Position == "C" {
+			want = 5
+		}
+		if b.Players != 10 || b.ReplacementRank == nil || *b.ReplacementRank != want {
+			t.Fatalf("aliases diluted demand: %+v", b)
+		}
+	}
+	selected := analyze(rows, rules, ResearchFilter{Position: "PG"})
+	if selected.Total != 3 || selected.Players[0].MetricPosition != "G" || *selected.Players[0].ReplacementRank != 7 {
+		t.Fatal("alias filters must keep shared comparison pool")
+	}
+}
+
+func TestMLBLeagueIndexUsesComparableRoles(t *testing.T) {
+	rows := []db.ListResearchPlayersRow{}
+	for _, group := range []string{"hitter", "starter", "reliever", "mixed"} {
+		scale := 1.0
+		pos := "1B"
+		if group == "starter" {
+			scale = 10
+			pos = "P"
+		}
+		if group == "mixed" {
+			scale = 6
+			pos = "P"
+		}
+		if group == "reliever" {
+			scale = 3
+			pos = "P"
+		}
+		for i := 1; i <= 3; i++ {
+			stats := map[string]float64{"pts": float64(i) * scale * 10}
+			if group != "hitter" {
+				stats["pit_games"] = 10
+				stats["pit_gs"] = 0
+				if group == "starter" {
+					stats["pit_gs"] = 10
+				}
+				if group == "mixed" {
+					stats["pit_gs"] = 4
+				}
+			}
+			raw, _ := json.Marshal(stats)
+			rows = append(rows, db.ListResearchPlayersRow{Competition: "mlb", Season: "2026", FullName: group + string(rune('A'+i)), Positions: []string{pos}, Games: 10, Stats: raw, Points: stats["pts"], PointsPerGame: stats["pts"] / 10})
+		}
+	}
+	rules := map[string]analyticRules{"mlb": {Rules: settings.League{Scoring: map[string]float64{"pts": 1}, Lineup: settings.Lineup{Slots: []settings.Slot{{Name: "1B", Count: 1, Positions: []string{"1B"}}, {Name: "P", Count: 2, Positions: []string{"P"}}}}}, Managers: 1}}
+	result := analyze(rows, rules, ResearchFilter{})
+	for _, p := range result.Players {
+		want := 100.0
+		if p.FullName[len(p.FullName)-1] == 'B' {
+			want -= 15 * math.Sqrt(1.5)
+		}
+		if p.FullName[len(p.FullName)-1] == 'D' {
+			want += 15 * math.Sqrt(1.5)
+		}
+		if p.LeagueIndex == nil || math.Abs(*p.LeagueIndex-want) > 1e-9 {
+			t.Fatalf("role scale biased League+: %+v", p)
+		}
+		if p.NormalizationGroup == "League" || p.NormalizationGroup == "Pitchers (role unknown)" {
+			t.Fatal("historical pitching workload not used")
+		}
+	}
+	selected := analyze(rows, rules, ResearchFilter{Position: "SP"})
+	if selected.Total != 3 {
+		t.Fatal("generic P labels should be filterable by season pitching role")
+	}
+	// A two-way cohort with no peers has no invented comparable index.
+	row := rows[0]
+	row.Positions = []string{"TWP"}
+	row.FullName = "Two-way"
+	rows = append(rows, row)
+	result = analyze(rows, rules, ResearchFilter{Search: "Two-way"})
+	if result.Players[0].LeagueIndex != nil {
+		t.Fatal("singleton two-way role must not get an index")
+	}
+}
+
+func TestPitcherWorkloadQualification(t *testing.T) {
+	rows := []db.ListResearchPlayersRow{}
+	add := func(name string, games, starts int, innings, points float64) {
+		stats, _ := json.Marshal(map[string]float64{"pts": points, "pit_games": float64(games), "pit_gs": float64(starts), "pit_ip": innings})
+		rows = append(rows, db.ListResearchPlayersRow{Competition: "mlb", Season: "2026", FullName: name, Positions: []string{"P"}, Games: int32(games), Stats: stats, Points: points, PointsPerGame: points / float64(games)})
+	}
+	add("Full reliever", 81, 0, 96, 324)
+	add("Other reliever", 60, 0, 90, 180)
+	add("Stallings", 6, 0, 14, 59.5)
+	add("Full mixed", 83, 30, 141, 400)
+	add("Other mixed", 50, 10, 120, 250)
+	add("Dollander", 10, 3, 44, 124.5)
+	add("Low innings", 60, 0, 10, 100)
+	rules := map[string]analyticRules{"mlb": {Rules: settings.League{Scoring: map[string]float64{"pts": 1}, Lineup: settings.Lineup{Slots: []settings.Slot{{Name: "P", Count: 1, Positions: []string{"P"}}}}}, Managers: 1}}
+	result := analyze(rows, rules, ResearchFilter{IncludeChart: true, ChartX: "games", ChartY: "league_index"})
+	for _, p := range result.Players {
+		low := p.FullName == "Stallings" || p.FullName == "Dollander" || p.FullName == "Low innings"
+		if low {
+			if p.Qualified || p.LeagueIndex != nil || p.Percentile != nil || p.PositionIndex != nil || p.PointsAboveReplacement != nil || p.QualificationNote == "" {
+				t.Fatalf("small workload got ranked: %+v", p)
+			}
+			if p.BenchmarkMinimumGames != 21 {
+				t.Fatal("workload appearances not scaled by role")
+			}
+			if p.FullName == "Stallings" && p.BenchmarkMinimumInnings != 24 {
+				t.Fatal("incorrect innings threshold")
+			}
+			if !p.HasScoringStats || p.Points <= 0 {
+				t.Fatal("raw stats were removed")
+			}
+		} else if !p.Qualified || p.LeagueIndex == nil {
+			t.Fatalf("sustained workload was excluded: %+v", p)
+		}
+	}
+	filtered := analyze(rows, rules, ResearchFilter{Search: "Stallings"})
+	if filtered.Total != 1 || filtered.Players[0].BenchmarkMinimumGames != 21 {
+		t.Fatal("display filters changed qualification")
+	}
+	qualified := analyze(rows, rules, ResearchFilter{QualifiedOnly: true})
+	if qualified.Total != 4 {
+		t.Fatal("qualified-only filter retained small samples")
+	}
+	for _, p := range result.Chart {
+		if (p.Label == "Stallings" || p.Label == "Dollander") && p.Y != nil {
+			t.Fatal("unqualified chart value invented")
+		}
+	}
+	disabled := analyze(rows, rules, ResearchFilter{Search: "Stallings", PitcherWorkloadPercent: ptr(0)})
+	if disabled.Players[0].LeagueIndex == nil {
+		t.Fatal("explicit workload override was ignored")
+	}
+	analysis := leagueAnalysis(rows, rules, ResearchFilter{BenchmarkGames: 5})
+	if len(analysis) != 1 || analysis[0].Qualified != 4 {
+		t.Fatal("league analysis uses different qualification")
+	}
+	// Workload gates scale with an in-progress season and isolate season pools.
+	early := rows[0]
+	early.Season = "2027"
+	early.Games = 6
+	early.FullName = "Early reliever"
+	early.Stats = []byte(`{"pts":20,"pit_games":6,"pit_gs":0,"pit_ip":8}`)
+	rows = append(rows, early)
+	earlyResult := analyze(rows, rules, ResearchFilter{Search: "Early reliever"})
+	if !earlyResult.Players[0].Qualified || earlyResult.Players[0].BenchmarkMinimumGames != 5 {
+		t.Fatal("previous season workload contaminated new season")
+	}
+}

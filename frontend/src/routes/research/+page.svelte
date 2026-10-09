@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PlayerSearch from '#lib/PlayerSearch.svelte';
  import { onMount, untrack } from 'svelte';
  import { page as route } from '$app/state';
  import { getResearch, type ResearchPage, type ResearchPool, type ResearchPlayer } from '#lib/api.ts';
@@ -42,6 +43,7 @@
  let missingOnly = $state(false);
  let aboveReplacement = $state(false);
  let benchmarkGames = $state<number | undefined>(5);
+ let pitcherWorkloadPercent = $state<number | undefined>(25);
  let replacementRank = $state<number | undefined>(0);
  let sort = $state('league_index');
  let ascending = $state(false);
@@ -119,7 +121,7 @@
  });
  let previousFilters = '';
  $effect.pre(() => {
-  const key = JSON.stringify([pools,competition,status,query,selectedPositions,team,owner,minGames,maxGames,minRate,maxRate,minIndex,maxIndex,minPAR,statKey,minStat,maxStat,qualifiedOnly,missingOnly,aboveReplacement,benchmarkGames,replacementRank,sort,ascending,rawMode]);
+  const key = JSON.stringify([pools,competition,status,query,selectedPositions,team,owner,minGames,maxGames,minRate,maxRate,minIndex,maxIndex,minPAR,statKey,minStat,maxStat,qualifiedOnly,missingOnly,aboveReplacement,benchmarkGames,pitcherWorkloadPercent,replacementRank,sort,ascending,rawMode]);
   if (key !== previousFilters) { previousFilters = key; page = 1; }
  });
  $effect(() => {
@@ -129,7 +131,7 @@
    position:selectedPositions.join(','), team, owner, min_games:minGames, max_games:maxGames, min_rate:minRate, max_rate:maxRate,
    min_index:minIndex, max_index:maxIndex, min_par:minPAR, stat_key:statKey, min_stat:minStat, max_stat:maxStat,
    qualified_only:String(qualifiedOnly), missing_only:String(missingOnly), above_replacement:String(aboveReplacement),
-   benchmark_games:benchmarkGames ?? 5, replacement_rank:replacementRank ?? 0, ascending:String(ascending),
+   benchmark_games:benchmarkGames ?? 5, pitcher_workload_percent:pitcherWorkloadPercent ?? 25, replacement_rank:replacementRank ?? 0, ascending:String(ascending),
    raw_per_game:String((view==='raw' || view==='all') && rawMode==='per_game'), include_chart:String(workspace === 'charts'), chart_x:chartX, chart_y:chartY, chart_group:chartGroup })
    .then((r) => { if (active) { result = r; page = r.page; } })
    .catch((e: Error) => { if (active) error = e.message; })
@@ -142,6 +144,7 @@
 
 <div class="stack research-page">
  <header class="spread"><div class="stack tight"><div class="row"><span class="eyebrow">Fantasy intelligence</span><span class="pill brand">{poolCount} datasets</span></div><h1>Research lab</h1><p class="muted">Compare player seasons, build your own charts, and discover where each league is strongest.</p></div></header>
+ <PlayerSearch competitions={data.competitions} />
 
  <section class="card dataset-card" aria-label="Research datasets">
   <div class="spread"><div><h2><span class="step">1</span> Choose your research pool</h2><p class="muted small-text">Add league–season datasets to compare them side by side. Each keeps its own scoring and benchmarks.</p></div>{#if pools.length}<button class="quiet small" onclick={() => { pools = []; clearFilters(); }}>Use latest from all leagues</button>{/if}</div>
@@ -162,7 +165,7 @@
   {#if result?.starting_conferences?.cbb && (pools.length === 0 || pools.some((p) => p.competition === 'cbb'))}
    <p class="muted small-text"><strong>CBB starting conferences:</strong> {result.starting_conferences.cbb.length ? result.starting_conferences.cbb.map((id) => data.competitions.find((c) => c.key === 'cbb')?.conferences?.find((c) => c.id === id)?.name ?? id).join(', ') : 'All conferences'}. Research uses season-specific membership. Other conferences stay available for drafts and reserves. The commissioner can change this in league settings.</p>
   {/if}
-  <div class="spread"><h2><span class="step">2</span> Explore your pool</h2><span class="muted small-text">{qualifiedCount.toLocaleString()} benchmark players · minimum {result?.benchmark_games ?? 5} games</span></div>
+  <div class="spread"><h2><span class="step">2</span> Explore your pool</h2><span class="muted small-text">{qualifiedCount.toLocaleString()} benchmark players · minimum {result?.benchmark_games ?? 5} games · pitchers also need {result?.pitcher_workload_percent ?? 25}% of their peer group’s appearances and innings</span></div>
   <Tabs tabs={[{value:'players',label:'Players'},{value:'charts',label:'Custom charts'},{value:'leagues',label:'League-wide analysis'}]} bind:value={workspace} label="Research workspace" />
  </section>
 
@@ -228,9 +231,9 @@
     <ColumnHeader label="Roster owner" help="Current fantasy owner in the competition, rather than historical ownership in this season." active={sort==='owner'} {ascending} onsort={() => sortBy('owner')} />
    </tr></thead><tbody>
     {#each result.players as player (player.row_key)}<tr class:selected={selectedId===player.id}>
-     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><button class="player-name" onclick={() => selectedId=player.id}>{player.full_name}</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span>Small sample · {player.games} games</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
+     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
      <td><div class="row tight"><SportBadge sport={player.competition} /><strong>{player.season || 'No season'}</strong></div>{#if player.scoring_source==='defaults'}<small class="muted">Sport default scoring</small>{/if}</td>
-     <td>{player.positions.join('/') || '—'}</td><td class="muted">{player.team || '—'}</td>
+     <td>{player.positions.join('/') || '—'}{#if player.competition==='mlb'}<div class="muted small-text" title="Peer group used for League+ and percentile">{player.normalization_group}</div>{/if}</td><td class="muted">{player.team || '—'}</td>
      <td class="num">{player.season ? formatValue(player.games) : '—'}</td><td class="num">{player.has_scoring_stats ? formatValue(player.points) : '—'}</td><td class="num">{player.has_scoring_stats && player.games>0 ? formatValue(player.points_per_game) : '—'}</td>
      {#each metricColumns as c (c.key)}<td class="num" class:highlight={c.key==='league_index'} class:positive={['points_above_replacement','par_per_game','win_share_added'].includes(c.key) && Number(player[c.key as keyof ResearchPlayer])>0} class:negative={['points_above_replacement','par_per_game','win_share_added'].includes(c.key) && Number(player[c.key as keyof ResearchPlayer])<0}>{formatValue(player[c.key as keyof ResearchPlayer])}</td>{/each}
      {#if view==='advanced' || view==='all'}<td title="Replacement {formatValue(player.replacement_rate)} FP/game at rank {player.replacement_rank ?? '—'}">{player.metric_position || '—'}</td>{/if}
@@ -240,14 +243,15 @@
    </tbody></table></div>
    {#if pages>1}<nav class="spread" aria-label="Research pages"><button disabled={loading || page<=1} onclick={() => page--}>Previous</button><span class="muted small-text">Page {page} of {pages.toLocaleString()}</span><button disabled={loading || page>=pages} onclick={() => page++}>Next</button></nav>{/if}
    {/if}
-   <p class="muted small-text">A dash means missing data or an insufficient benchmark sample. League+ measures relative production, not projected performance. Raw stats include stats that don’t earn fantasy points.</p>
+   <p class="muted small-text">A dash means missing data or an insufficient benchmark sample. League+ measures relative peer production, not projected performance. Above replacement uses raw league points and is not comparable across sports. Raw stats include stats that don’t earn fantasy points.</p>
   {/if}
  {:else}<p class="muted">Loading your research pool…</p>{/if}
 
  <details class="card method-guide"><summary>How the metrics work &amp; benchmark settings</summary><div class="stack guide">
-  <div class="row"><label class="control numeric"><span>Benchmark minimum games</span><input type="number" min="1" max="10000" bind:value={benchmarkGames} /></label><label class="control numeric"><span>Replacement rank (0 = automatic)</span><input type="number" min="0" max="100000" bind:value={replacementRank} /></label></div>
-  <p><strong>League+ and Position+:</strong> 100 + 15 × (player FP/game − cohort average) / cohort standard deviation. Each league-season has separate benchmarks, independent of player filters. A 115 means one standard deviation above average, not 15% more points.</p>
-  <p><strong>Above replacement:</strong> (FP/game − replacement FP/game) × games played. Automatic depth is ceil(managers × allocated starting slots) + 1. Flexible slots split demand equally across eligible positions. A manual rank overrides this estimate. Too few qualified peers means no replacement estimate.</p>
+  <div class="row"><label class="control numeric"><span>Benchmark minimum games</span><input type="number" min="1" max="10000" bind:value={benchmarkGames} /></label><label class="control numeric"><span>Pitcher workload minimum % (0 = off)</span><input aria-label="Pitcher workload minimum percent" type="number" min="0" max="100" bind:value={pitcherWorkloadPercent} /></label><label class="control numeric"><span>Replacement rank (0 = automatic)</span><input type="number" min="0" max="100000" bind:value={replacementRank} /></label></div>
+  <p><strong>Pitcher sample requirements:</strong> By default, pitchers need at least 25% of both the highest appearance count and highest innings total among their pitching peers in the selected season, plus the benchmark minimum games. These are separate workload thresholds and scale as a season progresses. Small workloads keep their raw stats but have no comparative metrics. This is a ranking qualification rule, not a projection or confidence interval.</p>
+  <p><strong>League+ and Position+:</strong> 100 + 15 × (player FP/game − cohort average) / cohort standard deviation. Each league-season has separate benchmarks, independent of player filters. MLB normalizes hitters, starting pitchers, relievers and mixed-role pitchers separately so a pitching appearance is not compared with a hitter’s game. Two-way players need their own qualified peer sample. A 115 means one standard deviation above average, not 15% more points.</p>
+  <p><strong>Above replacement:</strong> (FP/game − replacement FP/game) × games played. Automatic depth is ceil(managers × allocated starting slots) + 1. Flexible slots split demand equally across distinct eligible position pools. Basketball G/PG/SG and F/SF/PF aliases share a pool; MLB outfield aliases share OF. These are raw league fantasy points, so compare replacement totals within a sport and season; point scales and season lengths differ. A manual rank overrides this estimate. Too few qualified peers means no replacement estimate.</p>
   <p><strong>Win share added:</strong> GP × [Φ(PAR/game ÷ (league rate SD × √(2 × starters))) − 0.5]. This illustrative model assumes independent normal scores and one game per starter. It uses season-rate spread as a variance proxy and ignores schedules, actual lineup use, game-level variance and weekly caps. It is not measured fantasy wins or real-world Win Shares.</p>
   <p><strong>Historical scope:</strong> stats and teams belong to the selected season; eligibility, player status and fantasy ownership reflect today’s records. Imported history may cover only players known to the feed.</p>
  </div></details>
@@ -257,6 +261,8 @@
 {#snippet playerAction()}{/snippet}
 
 <style>
+ .preview-link { border: 0; background: none; color: var(--ink-soft); font-size: .7rem; padding: .2rem .4rem; }
+ .preview-link:hover { color: var(--brand); }
  .research-page { gap: 1.15rem; }
  .eyebrow { color: var(--brand); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
  h1 { font-size: clamp(1.8rem,3vw,2.6rem); }

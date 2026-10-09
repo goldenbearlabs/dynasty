@@ -36,7 +36,7 @@ func (q *Queries) CreateDynasty(ctx context.Context, arg CreateDynastyParams) (D
 const createFranchise = `-- name: CreateFranchise :one
 insert into franchises (dynasty_id, name, manager_name, slug, invite_token, is_commissioner)
 values ($1, $2, $3, $4, $5, $6)
-returning id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id
+returning id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url
 `
 
 type CreateFranchiseParams struct {
@@ -67,6 +67,7 @@ func (q *Queries) CreateFranchise(ctx context.Context, arg CreateFranchiseParams
 		&i.InviteToken,
 		&i.IsCommissioner,
 		&i.UserID,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -122,7 +123,7 @@ func (q *Queries) GetDynasty(ctx context.Context) (Dynasty, error) {
 }
 
 const getFranchise = `-- name: GetFranchise :one
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id from franchises where id = $1
+select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where id = $1
 `
 
 func (q *Queries) GetFranchise(ctx context.Context, id pgtype.UUID) (Franchise, error) {
@@ -137,12 +138,13 @@ func (q *Queries) GetFranchise(ctx context.Context, id pgtype.UUID) (Franchise, 
 		&i.InviteToken,
 		&i.IsCommissioner,
 		&i.UserID,
+		&i.ImageUrl,
 	)
 	return i, err
 }
 
 const getFranchiseByInvite = `-- name: GetFranchiseByInvite :one
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id from franchises where invite_token = $1::text
+select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where invite_token = $1::text
 `
 
 func (q *Queries) GetFranchiseByInvite(ctx context.Context, inviteToken string) (Franchise, error) {
@@ -157,12 +159,13 @@ func (q *Queries) GetFranchiseByInvite(ctx context.Context, inviteToken string) 
 		&i.InviteToken,
 		&i.IsCommissioner,
 		&i.UserID,
+		&i.ImageUrl,
 	)
 	return i, err
 }
 
 const getFranchiseBySlug = `-- name: GetFranchiseBySlug :one
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id from franchises where dynasty_id = $1 and slug = $2
+select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where dynasty_id = $1 and slug = $2
 `
 
 type GetFranchiseBySlugParams struct {
@@ -182,6 +185,7 @@ func (q *Queries) GetFranchiseBySlug(ctx context.Context, arg GetFranchiseBySlug
 		&i.InviteToken,
 		&i.IsCommissioner,
 		&i.UserID,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -205,7 +209,7 @@ func (q *Queries) GetLeague(ctx context.Context, id pgtype.UUID) (League, error)
 }
 
 const listFranchises = `-- name: ListFranchises :many
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id from franchises where dynasty_id = $1 order by name
+select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where dynasty_id = $1 order by name
 `
 
 func (q *Queries) ListFranchises(ctx context.Context, dynastyID pgtype.UUID) ([]Franchise, error) {
@@ -226,6 +230,7 @@ func (q *Queries) ListFranchises(ctx context.Context, dynastyID pgtype.UUID) ([]
 			&i.InviteToken,
 			&i.IsCommissioner,
 			&i.UserID,
+			&i.ImageUrl,
 		); err != nil {
 			return nil, err
 		}

@@ -157,7 +157,7 @@
 				{#each draft.franchise_order as id, i (id)}
 					<li>
 						<span class="n">{i + 1}</span>
-						<Crest name={franchise(id).name} size={26} />
+						<Crest src={franchise(id).image_url} name={franchise(id).name} size={26} />
 						<strong>{franchise(id).name}</strong>
 						<span class="moves">
 							<button type="button" class="quiet small" aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}>

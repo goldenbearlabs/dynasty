@@ -15,10 +15,12 @@ where r.league_id = @league_id and r.franchise_id = @franchise_id;
 -- Every player a franchise holds, across all its leagues, for display.
 select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at,
        p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
-       coalesce(t.abbrev, '')::text as team_abbrev
+       coalesce(t.abbrev, '')::text as team_abbrev,
+       coalesce(n.nickname, '')::text as nickname
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
+left join player_nicknames n on n.franchise_id = r.franchise_id and n.player_id = p.id
 where r.franchise_id = @franchise_id
 order by p.full_name;
 

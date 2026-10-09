@@ -1,7 +1,8 @@
 <script lang="ts">
-	// A franchise's monogram on a colour derived from its name, so each
-	// franchise is recognisable at a glance without anyone uploading a logo.
-	let { name, size = 40 }: { name: string; size?: number } = $props();
+	// Custom organization/team logo, with a monogram if absent or unavailable.
+	let { name, size = 40, src = '' }: { name: string; size?: number; src?: string } = $props();
+ let failed = $state(false);
+ $effect(() => { src; failed = false; });
 
 	const initials = $derived(
 		name
@@ -14,10 +15,12 @@
 	const hue = $derived([...name].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 360, 7));
 </script>
 
-<span class="crest" style:--hue={hue} style:--size="{size}px" aria-hidden="true">{initials}</span>
+<span class="crest" style:--hue={hue} style:--size="{size}px" aria-hidden="true">{initials}{#if src && !failed}<img {src} alt="" width={size} height={size} loading="lazy" referrerpolicy="no-referrer" onerror={() => failed=true} />{/if}</span>
 
 <style>
+	img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--surface); }
 	.crest {
+ position: relative; overflow: hidden;
 		flex: none;
 		display: inline-grid;
 		place-items: center;

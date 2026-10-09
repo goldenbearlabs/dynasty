@@ -274,7 +274,8 @@
 			</div>
 			<div class="on-clock" class:mine={myTurn}>
 				{#if onClock && draft.status !== 'complete'}<Crest
-						name={franchise(onClock.current_franchise_id)?.name ?? ''}
+						src={franchise(onClock.current_franchise_id)?.image_url}
+ name={franchise(onClock.current_franchise_id)?.name ?? ''}
 						size={30}
 					/>
 					<div>

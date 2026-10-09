@@ -16,7 +16,10 @@
 		type RosterPlayer,
 		type Standings
 	} from '#lib/api.ts';
-	import LineupEditor from '#lib/LineupEditor.svelte';
+	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
+ import PlayerNickname from '#lib/PlayerNickname.svelte';
+ import { teamIdentity } from '#lib/identity.ts';
+ import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
 	import TradeAsset from '#lib/TradeAsset.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
@@ -37,7 +40,7 @@
 	const canEdit = $derived(mine || data.me?.is_commissioner === true);
 	const leagues = $derived(data.dynasty?.leagues ?? []);
 	const franchises = $derived(data.dynasty?.franchises ?? []);
-	const nameOf = (id: string | null) => franchises.find((f) => f.id === id)?.name ?? '';
+	const nameOf = (id: string | null, leagueID?: string) => teamIdentity(franchises.find((f) => f.id === id),data.dynasty?.team_identities,leagueID).name;
 
 	// ---- which view: the organization, or one league ----
 	let view = $state(untrack(() => page.url.searchParams.get('view') ?? ''));
@@ -116,7 +119,7 @@
 			matchup: matchup && {
 				id: matchup.id,
 				bye: matchup.away_franchise_id === null,
-				opponent: nameOf(home ? matchup.away_franchise_id : matchup.home_franchise_id),
+				opponent: nameOf(home ? matchup.away_franchise_id : matchup.home_franchise_id,leagueId),
 				ours: home ? matchup.home_points : matchup.away_points,
 				theirs: home ? matchup.away_points : matchup.home_points,
 				final: matchup.final
@@ -161,9 +164,10 @@
 
 <div class="stack">
 	<header class="head">
-		<Crest name={team.name} size={56} />
+		<Crest name={league ? roster?.team_name || team.name : team.name} src={league ? roster?.image_url || team.image_url : team.image_url} size={56} />
 		<div class="grow">
-			<h1>{team.name}</h1>
+			<h1>{league ? roster?.team_name || team.name : team.name}</h1>
+ {#if league}<p class="muted small-text">{team.name} · {league.name}</p>{/if}
 			<div class="row muted">
 				Managed by {team.manager_name}
 				{#if mine}<span class="pill brand">You</span>{/if}
@@ -178,6 +182,7 @@
 	</header>
 
 	<Tabs {tabs} bind:value={() => view, show} label="View" />
+ {#if canEdit}{#key team.id}<TeamIdentityEditor franchise={team} {leagues} identities={data.dynasty?.team_identities ?? []} />{/key}{/if}
 
 	{#if canEdit && !mine}
 		<p class="card small-text"><span class="pill gold">Commissioner</span> Changes you make here skip the roster rules.</p>
@@ -198,7 +203,7 @@
 			{#each cards as c (c.roster.league_id)}
 				<button class="card league" data-sport={c.roster.competition} class:quiet={c.phase.key !== 'in'} onclick={() => show(c.roster.competition)}>
 					<span class="spread">
-						<span class="row"><SportBadge sport={c.roster.competition} solid /> <strong class="name">{c.roster.name}</strong></span>
+						<span class="row"><Crest name={c.roster.team_name} src={c.roster.image_url} size={34} /><SportBadge sport={c.roster.competition} solid /> <strong class="name">{c.roster.team_name}</strong></span>
 						<span class="pill" class:good={c.phase.key === 'in'}>{c.phase.label}</span>
 					</span>
 
@@ -311,13 +316,14 @@
 													<Headshot name={player.full_name} src={player.headshot_url} />
 													<div>
 														<div class="row who">
-															<strong>{player.full_name}</strong>
+															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
 															{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}
 															{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 															{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
 														</div>
-														<div class="muted small-text">
+														<PlayerNickname franchiseID={team.id} playerID={player.player_id} playerName={player.full_name} initialNickname={player.nickname} editable={canEdit} />
+ <div class="muted small-text">
 															{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}
 														</div>
 													</div>
@@ -352,7 +358,7 @@
 								{#each now.table.rows as row, i (row.franchise_id)}
 									<tr class:me={row.franchise_id === team.id}>
 										<td class="rank">{i + 1}</td>
-										<td>{nameOf(row.franchise_id)}</td>
+										<td>{nameOf(row.franchise_id,league.id)}</td>
 										{#if now.headToHead}<td class="num">{row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ''}</td>{/if}
 										<td class="num">{points(row.points)}</td>
 									</tr>
@@ -364,7 +370,7 @@
 				{#if now.headToHead && now.phase.key === 'in'}
 					<section class="panel">
 						<h2 class="bar">Matchups</h2>
-						<div class="pad"><Matchups {league} {franchises} /></div>
+						<div class="pad"><Matchups {league} {franchises} identities={data.dynasty?.team_identities} /></div>
 					</section>
 				{/if}
 			</div>

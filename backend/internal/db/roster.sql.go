@@ -182,10 +182,12 @@ func (q *Queries) ListActivity(ctx context.Context, arg ListActivityParams) ([]L
 const listFranchiseRoster = `-- name: ListFranchiseRoster :many
 select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at,
        p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
-       coalesce(t.abbrev, '')::text as team_abbrev
+       coalesce(t.abbrev, '')::text as team_abbrev,
+       coalesce(n.nickname, '')::text as nickname
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
+left join player_nicknames n on n.franchise_id = r.franchise_id and n.player_id = p.id
 where r.franchise_id = $1
 order by p.full_name
 `
@@ -205,6 +207,7 @@ type ListFranchiseRosterRow struct {
 	BirthDate   pgtype.Date        `json:"birth_date"`
 	HeadshotUrl string             `json:"headshot_url"`
 	TeamAbbrev  string             `json:"team_abbrev"`
+	Nickname    string             `json:"nickname"`
 }
 
 // Every player a franchise holds, across all its leagues, for display.
@@ -232,6 +235,7 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 			&i.BirthDate,
 			&i.HeadshotUrl,
 			&i.TeamAbbrev,
+			&i.Nickname,
 		); err != nil {
 			return nil, err
 		}

@@ -48,6 +48,7 @@ type Row struct {
 }
 
 type PlayerPoints struct {
+	Nickname    string      `json:"nickname"`
 	PlayerID    pgtype.UUID `json:"player_id"`
 	FullName    string      `json:"full_name"`
 	HeadshotURL string      `json:"headshot_url"`
@@ -98,7 +99,7 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 		row.FranchiseID = p.FranchiseID
 		row.Points += p.Points
 		row.Players = append(row.Players, PlayerPoints{
-			PlayerID: p.PlayerID, FullName: p.FullName, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
+			PlayerID: p.PlayerID, FullName: p.FullName, Nickname: p.Nickname, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
 		})
 		byFranchise[p.FranchiseID] = row
 	}

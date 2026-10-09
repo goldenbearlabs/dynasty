@@ -510,6 +510,11 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 				}
 				games, _ := split.Stat["gamesPlayed"].(float64)
 				line.Games = max(line.Games, int(games))
+				if group == "pitching" {
+					line.Stats["pit_games"] = games
+				} else {
+					line.Stats["bat_games"] = games
+				}
 
 				names := battingStats
 				if group == "pitching" {

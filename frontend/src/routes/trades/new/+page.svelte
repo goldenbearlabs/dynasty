@@ -109,12 +109,12 @@
 
 		<div class="sides">
 			<section class="stack tight">
-				<h2 class="row"><Crest name={me.name} size={28} /> You send</h2>
+				<h2 class="row"><Crest src={me.image_url} name={me.name} size={28} /> You send</h2>
 				{#if mine}<AssetPicker detail={mine} {franchises} selected={sending} />{:else}<p class="muted">Loading…</p>{/if}
 			</section>
 			<section class="stack tight">
 				<h2 class="row">
-					{#if theirs}<Crest name={theirs.franchise.name} size={28} /> {theirs.franchise.name} sends{:else}They send{/if}
+					{#if theirs}<Crest src={theirs.franchise.image_url} name={theirs.franchise.name} size={28} /> {theirs.franchise.name} sends{:else}They send{/if}
 				</h2>
 				{#if theirs}<AssetPicker detail={theirs} {franchises} selected={receiving} />{:else}<p class="muted">Loading…</p>{/if}
 			</section>

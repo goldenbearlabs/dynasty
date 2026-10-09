@@ -3,7 +3,9 @@
 	// same lineup editor the team page uses.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import LineupEditor from '#lib/LineupEditor.svelte';
+	import { teamIdentity } from '#lib/identity.ts';
+ import Crest from '#lib/ui/Crest.svelte';
+ import LineupEditor from '#lib/LineupEditor.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import type { PageProps } from './$types';
@@ -34,8 +36,8 @@
 {:else}
 	<div class="stack" data-sport={sport}>
 		<header>
-			<p class="row eyebrow"><SportBadge {sport} solid /> <a href="/franchise/{franchise.slug}?view={sport}">{franchise.name}</a></p>
-			<h1>{league.name} lineup</h1>
+			<p class="row eyebrow"><SportBadge {sport} solid /> <a href="/franchise/{franchise.slug}?view={sport}">{teamIdentity(franchise,data.dynasty?.team_identities,league.id).name}</a></p>
+			<h1 class="row"><Crest name={teamIdentity(franchise,data.dynasty?.team_identities,league.id).name} src={teamIdentity(franchise,data.dynasty?.team_identities,league.id).image_url} size={44} />{teamIdentity(franchise,data.dynasty?.team_identities,league.id).name} lineup</h1>
 		</header>
 		{#key league.id + franchise.id}
 			<LineupEditor

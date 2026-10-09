@@ -81,7 +81,7 @@
 
 			{#if data.me}
 				<div class="me">
-					<Crest name={data.me.name} size={34} />
+					<Crest src={data.me.image_url} name={data.me.name} size={34} />
 					<div class="who">
 						<strong>{data.me.name}</strong>
 						<span class="muted small-text">{data.me.manager_name}</span>

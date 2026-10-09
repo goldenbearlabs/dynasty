@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Each league's table for its current season, and the cross-sport table
 	// when the dynasty crowns an overall champion.
-	import type { Franchise, League, OverallYear, Standings } from '#lib/api.ts';
+	import { teamIdentity } from '#lib/identity.ts';
+ import type { TeamIdentity, Franchise, League, OverallYear, Standings } from '#lib/api.ts';
 	import Matchups from '#lib/Matchups.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
@@ -9,8 +10,8 @@
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { points } from '#lib/ui/time.ts';
 
-	type Props = { tables: Standings[]; overall: OverallYear[]; franchises: Franchise[]; leagues: League[] };
-	let { tables, overall, franchises, leagues }: Props = $props();
+	type Props = { tables: Standings[]; overall: OverallYear[]; franchises: Franchise[]; leagues: League[]; identities?: TeamIdentity[] };
+	let { tables, overall, franchises, leagues, identities = [] }: Props = $props();
 
 	const franchise = (id: string | null) => franchises.find((f) => f.id === id);
 	const latest = $derived(overall[0]);
@@ -36,7 +37,7 @@
 			{#if champion}
 				<p class="card champion" data-sport={table.competition}>
 					<Icon name="trophy" size={22} />
-					<span><strong>{champion.name}</strong> won the {table.season.year} title.</span>
+					<span><strong>{teamIdentity(champion,identities,league?.id).name}</strong> won the {table.season.year} title.</span>
 				</p>
 			{/if}
 			<div class="panel scroll" data-sport={table.competition}>
@@ -57,15 +58,15 @@
 								<td class="rank">{i + 1}</td>
 								<td>
 									<a class="who" href="/franchise/{f?.slug}">
-										<Crest name={f?.name ?? ''} size={28} />
-										<strong>{f?.name}</strong>
+										<Crest name={teamIdentity(f,identities,league?.id).name} src={teamIdentity(f,identities,league?.id).image_url} size={28} />
+ <strong>{teamIdentity(f,identities,league?.id).name}</strong>
 									</a>
 								</td>
 								{#if headToHead}
 									<td class="num total">{row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ''}</td>
 								{/if}
 								<td class="wide muted small-text">
-									{#if row.players[0]}{row.players[0].full_name} · {points(row.players[0].points)}{/if}
+									{#if row.players[0]}{row.players[0].nickname ? `${row.players[0].full_name} “${row.players[0].nickname}”` : row.players[0].full_name} · {points(row.players[0].points)}{/if}
 								</td>
 								<td class="num" class:total={!headToHead}>{points(row.points)}</td>
 							</tr>
@@ -78,7 +79,7 @@
 				{#if headToHead}Ranked by record, then points.{/if}
 			</p>
 			{#if headToHead && league}
-				{#key league.id}<Matchups {league} {franchises} />{/key}
+				{#key league.id}<Matchups {league} {franchises} {identities} />{/key}
 			{/if}
 		{/if}
 	{:else if latest}
@@ -99,7 +100,7 @@
 							<td class="rank">{i + 1}</td>
 							<td>
 								<a class="who" href="/franchise/{f?.slug}">
-									<Crest name={f?.name ?? ''} size={28} />
+									<Crest src={f?.image_url} name={f?.name ?? ''} size={28} />
 									<strong>{f?.name}</strong>
 								</a>
 							</td>

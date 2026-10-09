@@ -1,4 +1,5 @@
 <script lang="ts">
+ import PlayerSearch from '#lib/PlayerSearch.svelte';
 	// The player pool. Signed-in managers can add free agents from here; a
 	// commissioner can also place a player on any roster.
 	import { untrack } from 'svelte';
@@ -48,6 +49,8 @@
 		<h1>Players</h1>
 		<Tabs {tabs} bind:value={competition} label="Sport" />
 	</header>
+
+	<PlayerSearch competitions={data.competitions} />
 
 	{#if data.me?.is_commissioner && data.dynasty}
 		<div class="card row commissioner">

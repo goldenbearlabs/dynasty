@@ -116,6 +116,7 @@ func (s *Service) Merge(ctx context.Context, keepID, duplicateID pgtype.UUID) er
 			func() error { return q.MoveStatLines(ctx, db.MoveStatLinesParams(ids)) },
 			func() error { return q.MoveLineupEntries(ctx, db.MoveLineupEntriesParams(ids)) },
 			func() error { return q.MovePlayerSeasons(ctx, db.MovePlayerSeasonsParams(ids)) },
+			func() error { return q.MovePlayerNicknames(ctx, db.MovePlayerNicknamesParams(ids)) },
 			func() error { return q.KeepEarliestEligibility(ctx, db.KeepEarliestEligibilityParams(ids)) },
 			func() error { return q.DeletePlayer(ctx, duplicateID) },
 		}

@@ -66,6 +66,7 @@ type Start struct {
 }
 
 type Player struct {
+	Nickname        string      `json:"nickname"`
 	StarterEligible bool        `json:"starter_eligible"`
 	EligibilityNote string      `json:"eligibility_note"`
 	PlayerID        pgtype.UUID `json:"player_id"`
@@ -153,7 +154,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 	for _, r := range rows {
 		if n := len(view.Players); n == 0 || view.Players[n-1].PlayerID != r.PlayerID {
 			view.Players = append(view.Players, Player{
-				PlayerID: r.PlayerID, FullName: r.FullName, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
+				PlayerID: r.PlayerID, FullName: r.FullName, Nickname: r.Nickname, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
 				StarterEligible: rules.CanStart(league.Competition, r.Conference),
 				TeamAbbrev:      r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], Games: []Game{},
 			})

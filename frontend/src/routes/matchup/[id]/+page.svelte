@@ -3,7 +3,8 @@
 	import { page } from '$app/state';
 	import { getMatchup, type MatchupDetail } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
-	import Crest from '#lib/ui/Crest.svelte';
+	import { teamIdentity } from '#lib/identity.ts';
+ import Crest from '#lib/ui/Crest.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import { dayLabel, points } from '#lib/ui/time.ts';
@@ -21,7 +22,8 @@
 	onScoresChange(() => (matchup ? [matchup.competition] : []), load);
 
 	const franchise = (id: string | null) => data.dynasty?.franchises.find((f) => f.id === id);
-	const sides = $derived(
+	const leagueID = $derived(data.dynasty?.leagues.find(l => l.competition===matchup?.competition)?.id);
+ const sides = $derived(
 		matchup
 			? [
 					{ franchise: franchise(matchup.home_franchise_id), total: matchup.home_points, other: matchup.away_points, players: matchup.home_players },
@@ -51,15 +53,15 @@
 				<section class="card flush">
 					{#if side.franchise}
 						<header class:behind={matchup.final && side.total < side.other}>
-							<Crest name={side.franchise.name} size={40} />
-							<a class="name" href="/franchise/{side.franchise.slug}">{side.franchise.name}</a>
+							<Crest src={teamIdentity(side.franchise,data.dynasty?.team_identities,leagueID).image_url} name={teamIdentity(side.franchise,data.dynasty?.team_identities,leagueID).name} size={40} />
+							<a class="name" href="/franchise/{side.franchise.slug}">{teamIdentity(side.franchise,data.dynasty?.team_identities,leagueID).name}</a>
 							<span class="total">{points(side.total)}</span>
 						</header>
 						<ul>
 							{#each side.players as player (player.player_id)}
 								<li>
 									<Headshot name={player.full_name} src={player.headshot_url} size={30} />
-									<span class="who">{player.full_name}</span>
+									<span class="who">{player.full_name}{#if player.nickname} <span class="pill brand">“{player.nickname}”</span>{/if}</span>
 									<span class="muted small-text">{player.games} {player.games === 1 ? 'game' : 'games'}</span>
 									<strong class="pts">{points(player.points)}</strong>
 								</li>

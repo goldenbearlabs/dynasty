@@ -49,7 +49,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const getFranchiseByUser = `-- name: GetFranchiseByUser :one
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id from franchises where user_id = $1
+select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where user_id = $1
 `
 
 func (q *Queries) GetFranchiseByUser(ctx context.Context, userID pgtype.UUID) (Franchise, error) {
@@ -64,6 +64,7 @@ func (q *Queries) GetFranchiseByUser(ctx context.Context, userID pgtype.UUID) (F
 		&i.InviteToken,
 		&i.IsCommissioner,
 		&i.UserID,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -129,7 +130,7 @@ func (q *Queries) InsertSecret(ctx context.Context, arg InsertSecretParams) erro
 }
 
 const listInvites = `-- name: ListInvites :many
-select f.id, f.dynasty_id, f.name, f.manager_name, f.slug, f.invite_token, f.is_commissioner, f.user_id, coalesce(u.email, '')::text as email
+select f.id, f.dynasty_id, f.name, f.manager_name, f.slug, f.invite_token, f.is_commissioner, f.user_id, f.image_url, coalesce(u.email, '')::text as email
 from franchises f
 left join users u on u.id = f.user_id
 where f.dynasty_id = $1
@@ -145,6 +146,7 @@ type ListInvitesRow struct {
 	InviteToken    pgtype.Text `json:"-"`
 	IsCommissioner bool        `json:"is_commissioner"`
 	UserID         pgtype.UUID `json:"user_id"`
+	ImageUrl       string      `json:"image_url"`
 	Email          string      `json:"email"`
 }
 
@@ -166,6 +168,7 @@ func (q *Queries) ListInvites(ctx context.Context, dynastyID pgtype.UUID) ([]Lis
 			&i.InviteToken,
 			&i.IsCommissioner,
 			&i.UserID,
+			&i.ImageUrl,
 			&i.Email,
 		); err != nil {
 			return nil, err

@@ -69,6 +69,9 @@ uses full selected datasets independently of player filters, with presets for
 position strengths, scoring drivers, production concentration and season
 scoring trends. It also shows imported coverage and replacement depth.
 
+League+ compares MLB hitters, starting pitchers, relievers and mixed-role pitchers separately, using
+season-specific pitching appearances and starts; a two-way player needs a
+separate qualified peer sample. These roles are visible in research.
 League+ and Position+ normalize FP/game to a mean of 100 and a standard
 deviation of 15 among qualified peers in the same league-season. FPAR measures
 production above positional replacement; auto depth estimates starting demand
@@ -188,3 +191,36 @@ calculating benchmarks or charts. Smaller-conference players remain draftable
 and may be held on reserve under the default **Prospects or outside starting
 conferences** reserve rule. Conference eligibility is also enforced by lineup
 validation and scoring, including lineups saved before a rule change.
+
+Replacement demand treats basketball position aliases and baseball outfield
+positions as shared pools. Above-replacement season totals are raw fantasy
+points under that league’s rules and are not comparable across sports.
+
+Pitcher research defaults to a workload gate: at least 25% of both the highest
+appearances and highest innings among peers in the same season and pitching
+role, plus the benchmark minimum games. Small samples retain raw stats but
+receive no comparative rankings. The research metric controls can change this
+percentage (0 disables it); display filters do not affect qualification.
+
+Player search on Research and Players opens a dedicated `/player/{id}` profile.
+Profiles combine stored career seasons with the same full-population research
+benchmarks used by the lab, raw stat scoring breakdowns, career charts and CSV
+exports, paginated final-game logs, ownership and lineup status, actual counted fantasy production, reserve locks,
+draft selections, completed trades and a paginated transaction timeline.
+Each season and game uses its own competition's current scoring rules. Profiles
+retain outside-conference college stats while clearly explaining why those
+seasons do not receive comparative research metrics. Opening a profile reads
+stored history without triggering provider imports. Private draft queues,
+waiver claims and trade proposals are excluded from public profiles.
+
+Managers can customize their organization name and image from **My team →
+Customize organization & teams** and give each sport a separate team name and
+image. Blank sport fields inherit the organization's identity. These settings
+appear on team pages, league tables, matchups and lineups; shared league names
+and franchise URLs stay unchanged. Images may use HTTP(S) URLs or uploaded
+raster images, which the browser resizes to 256 pixels and stores with the team.
+Managers can also set organization-scoped player nicknames on roster lists or
+player profiles. Nicknames accompany real names in rosters, lineups and scoring
+views, survive player-record merges, and do not replace provider identities or
+research names. Managers may edit their own organization; commissioners may
+assist other organizations.

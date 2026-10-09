@@ -7,7 +7,7 @@
  let preset = $state('position');
  const name = (key: string) => competitions.find((c) => c.key === key)?.name ?? key.toUpperCase();
  const presets = {
-  position: { title: 'Where each league is strongest', subtitle: 'Position average on the League+ scale. 100 is the league-season average. Multi-position players appear in each eligible position.', y: 'Position average League+' },
+  position: { title: 'Where each league is strongest', subtitle: 'Position average on the League+ scale. 100 is the league-season peer average; MLB uses separate hitter, starter, reliever and mixed-role groups. Multi-position players appear in each eligible position.', y: 'Position average League+' },
   scoring: { title: 'What drives the scoring', subtitle: 'Each stat’s signed share of absolute weighted scoring contributions. This compares scoring makeup, not raw point totals.', y: 'Weighted scoring share %' },
   concentration: { title: 'How concentrated is the production?', subtitle: 'Share of positive qualified fantasy points produced by the top ten players. Smaller imported populations naturally have greater concentration.', y: 'Top 10 production share %' },
   trends: { title: 'Compare season scoring environments', subtitle: 'Median FP/game by league-season, using current scoring rules. Compare seasons within a sport; raw point scales differ between sports.', y: 'Median FP / game' }
@@ -15,9 +15,8 @@
  const selected = $derived(presets[preset as keyof typeof presets]);
  const points = $derived.by((): ResearchChartPoint[] => {
   if (preset === 'position') return result.benchmarks.filter((b) => b.position).map((b) => {
-   const base = result.benchmarks.find((a) => a.competition === b.competition && a.season === b.season && !a.position);
    const group = `${name(b.competition)} ${b.season} · ${b.position}`;
-   return { key: group, label: group, group, x: b.players, y: base && base.sd > 1e-9 && b.players >= 2 ? 100+15*(b.mean-base.mean)/base.sd : null };
+   return { key: group, label: group, group, x: b.players, y: b.mean_index ?? null };
   });
   if (preset === 'scoring') return result.analysis.flatMap((a) => {
    const total = Object.values(a.contributions).reduce((n,v) => n+Math.abs(v),0);

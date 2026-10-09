@@ -33,10 +33,11 @@ where ps.player_id = @duplicate_id
     where k.player_id = @keep_id and k.competition = ps.competition and k.year = ps.year
       and k.team = ps.team and k.league = ps.league);
 
--- name: ListSeasonsMissingConferences :many
--- Metadata added after the original imports must be backfilled even when
--- these seasons are older than the ordinary history window. Partially known
--- seasons may contain non-Division-I teams, which intentionally stay unknown.
+-- name: ListSeasonsMissingResearchMetadata :many
+-- Backfill metadata introduced after the original imports, including history
+-- outside the ordinary window. Unknown conferences can represent non-DI teams.
 select year from player_seasons
-where competition = @competition and competition = 'cbb' and league = ''
-group by year having bool_and(conference = '');
+where competition = @competition and league = ''
+group by year
+having (@competition = 'cbb' and bool_and(conference = ''))
+    or (@competition = 'mlb' and bool_or(stats ? 'pit_ip' and not (stats ? 'pit_games' and stats ? 'pit_gs')));
