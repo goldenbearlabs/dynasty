@@ -26,6 +26,11 @@
 		 * several sports by the index that makes them comparable.
 		 */
 		byPoints?: boolean;
+		/**
+		 * In a compact list, give the season's points and index columns of
+		 * their own, and put the team and age under the name.
+		 */
+		statColumns?: boolean;
 		/** Compact rows with a name button that opens inline research. */
 		compact?: boolean;
 		onselect?: (player: Player) => void;
@@ -38,6 +43,7 @@
 		action,
 		version = 0,
 		byPoints = false,
+		statColumns = false,
 		compact = false,
 		onselect,
 		selectedId
@@ -62,6 +68,12 @@
 		);
 	});
 	const ranked = $derived(order !== 'name');
+	// Whether the season's figures get columns: always in the full list, on request in the compact one.
+	const columns = $derived(ranked && (!compact || statColumns));
+	const under = (player: Player) =>
+		[player.team_abbrev || player.team_name || 'No team', age(player.birth_date) && `age ${age(player.birth_date)}`, !competition && ranked && player.season]
+			.filter(Boolean)
+			.join(' · ');
 	const fantasyPoints = (n: number) => Math.round(n).toLocaleString();
 	let page = $state(1);
 
@@ -178,7 +190,7 @@
 							<th>Player</th>
 							<th>Pos</th>
 							{#if !compact}<th class="wide">Team</th><th class="wide num">Age</th>{/if}
-							{#if !compact && ranked}<th class="num">Points</th><th class="num" title="100 is the average rostered player; 15 is one standard deviation">Index</th>{/if}
+							{#if columns}<th class="num">Points</th><th class="num" title="100 is the average rostered player; 15 is one standard deviation">Index</th>{/if}
 							<th class="num"
 								>{result.total.toLocaleString()} {result.total === 1 ? 'player' : 'players'}</th
 							>
@@ -208,7 +220,8 @@
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 												{#if player.waiver_until}<span class="pill brand">Waivers</span>{/if}
 											</div>
-											{#if compact}<div class="muted small-text">
+											{#if compact && statColumns}<div class="muted small-text">{under(player)}</div>
+											{:else if compact}<div class="muted small-text">
 													{player.team_abbrev || player.team_name || 'No team'} · {player.status}
 													{#if ranked && player.season}
 														· <strong>{fantasyPoints(player.season_points)}</strong> pts
@@ -224,7 +237,7 @@
 								<td>{player.positions.join('/')}</td>
 								{#if !compact}<td class="wide muted" title={player.team_name}>{player.team_name}</td
 									><td class="wide num">{age(player.birth_date)}</td>{/if}
-								{#if !compact && ranked}<td class="num">{player.season ? fantasyPoints(player.season_points) : ''}</td
+								{#if columns}<td class="num">{player.season ? fantasyPoints(player.season_points) : ''}</td
 									><td class="num">{player.season_index ? Math.round(player.season_index) : ''}</td>{/if}
 								<td class="actions">
 									{#if player.owner_slug}

@@ -206,7 +206,7 @@
 			</section>
 
 			<section aria-label="Player pool">
-				<PlayerList competition={sport} leagueId={open.league_id} compact byPoints action={add} />
+				<PlayerList competition={sport} leagueId={open.league_id} compact byPoints statColumns action={add} />
 			</section>
 		</div>
 	</div>
