@@ -75,18 +75,45 @@ delete from pro_teams where competition = @competition and provider_id <> all(@t
 -- available_in narrows to players a league could acquire: they play in its
 -- competition and are on nobody's roster there. draft_id does the same for
 -- every league a draft covers.
+--
+-- last_points is what each player scored last season under the rules of his
+-- sport's league here, and by_points puts the highest first. "Last season"
+-- is, of a sport's two most recent seasons, the one with more games played:
+-- the season just finished until the new one has overtaken it.
+with reference as materialized ( -- worked out once, not once per player
+  select distinct on (competition) competition, year
+  from (
+    select competition, year, sum(games) as played,
+           row_number() over (partition by competition order by year desc) as recency
+    from player_seasons
+    where league = ''
+    group by competition, year
+  ) recent
+  where recency <= 2
+  order by competition, played desc
+)
 select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
-       w.clears_at                  as waiver_until
+       w.clears_at                  as waiver_until,
+       coalesce(last.points, 0)::float8 as last_points
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
+left join lateral (
+  select sum(stat.value::numeric * rule.value::numeric) as points
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  join leagues l on l.competition = ps.competition
+  cross join lateral jsonb_each_text(ps.stats) stat
+  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
+  where ps.player_id = p.id and ps.competition = p.competition and ps.league = ''
+) last on true
 where (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
@@ -98,7 +125,7 @@ where (@competition::text = '' or p.competition = @competition)
         and p.competition in (select l.competition from draft_leagues dl
                               join leagues l on l.id = dl.league_id
                               where dl.draft_id = sqlc.narg('draft_id'))))
-order by p.full_name, p.id
+order by case when @by_points::boolean then coalesce(last.points, 0) end desc nulls last, p.full_name, p.id
 limit @page_size offset @page_offset;
 
 -- name: CountPlayers :one

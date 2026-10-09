@@ -598,18 +598,40 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 }
 
 const listPlayers = `-- name: ListPlayers :many
+with reference as materialized ( -- worked out once, not once per player
+  select distinct on (competition) competition, year
+  from (
+    select competition, year, sum(games) as played,
+           row_number() over (partition by competition order by year desc) as recency
+    from player_seasons
+    where league = ''
+    group by competition, year
+  ) recent
+  where recency <= 2
+  order by competition, played desc
+)
 select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
-       w.clears_at                  as waiver_until
+       w.clears_at                  as waiver_until,
+       coalesce(last.points, 0)::float8 as last_points
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
+left join lateral (
+  select sum(stat.value::numeric * rule.value::numeric) as points
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  join leagues l on l.competition = ps.competition
+  cross join lateral jsonb_each_text(ps.stats) stat
+  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
+  where ps.player_id = p.id and ps.competition = p.competition and ps.league = ''
+) last on true
 where ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
@@ -621,8 +643,8 @@ where ($1::text = '' or p.competition = $1)
         and p.competition in (select l.competition from draft_leagues dl
                               join leagues l on l.id = dl.league_id
                               where dl.draft_id = $5)))
-order by p.full_name, p.id
-limit $7 offset $6
+order by case when $6::boolean then coalesce(last.points, 0) end desc nulls last, p.full_name, p.id
+limit $8 offset $7
 `
 
 type ListPlayersParams struct {
@@ -631,6 +653,7 @@ type ListPlayersParams struct {
 	Search      string      `json:"search"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
+	ByPoints    bool        `json:"by_points"`
 	PageOffset  int32       `json:"page_offset"`
 	PageSize    int32       `json:"page_size"`
 }
@@ -651,11 +674,17 @@ type ListPlayersRow struct {
 	OwnerName     string             `json:"owner_name"`
 	OwnerSlug     string             `json:"owner_slug"`
 	WaiverUntil   pgtype.Timestamptz `json:"waiver_until"`
+	LastPoints    float64            `json:"last_points"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
 // competition and are on nobody's roster there. draft_id does the same for
 // every league a draft covers.
+//
+// last_points is what each player scored last season under the rules of his
+// sport's league here, and by_points puts the highest first. "Last season"
+// is, of a sport's two most recent seasons, the one with more games played:
+// the season just finished until the new one has overtaken it.
 func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
 	rows, err := q.db.Query(ctx, listPlayers,
 		arg.Competition,
@@ -663,6 +692,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		arg.Search,
 		arg.AvailableIn,
 		arg.DraftID,
+		arg.ByPoints,
 		arg.PageOffset,
 		arg.PageSize,
 	)
@@ -689,6 +719,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.OwnerName,
 			&i.OwnerSlug,
 			&i.WaiverUntil,
+			&i.LastPoints,
 		); err != nil {
 			return nil, err
 		}

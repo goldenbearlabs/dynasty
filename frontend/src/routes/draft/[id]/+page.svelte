@@ -360,6 +360,7 @@
 								draftId={id}
 								{version}
 								compact
+								byPoints
 								onselect={(player) => research(player.id)}
 								{selectedId}
 								action={me && draft.status !== 'complete' ? queueAction : undefined}

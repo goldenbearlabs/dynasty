@@ -72,6 +72,30 @@ func TestRankings(t *testing.T) {
 	for _, p := range page.Players {
 		id[p.FullName] = p.ID
 	}
+	// --- the pool can be put in order of last season's fantasy points ---------
+	for name, stats := range map[string]string{"Zr One": `{"pts": 100}`, "Zr Three": `{"pts": 300, "reb": 10, "fga": 250}`} {
+		if _, err := pool.Exec(ctx, `insert into player_seasons (player_id, competition, year, label, games, stats)
+		                             values ($1, 'nba', 2026, '2025-26', 70, $2::jsonb)`, id[name], stats); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var sorted struct {
+		Players []struct {
+			FullName   string  `json:"full_name"`
+			LastPoints float64 `json:"last_points"`
+		}
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba&sort=points", nil, &sorted)
+	// Points are worth a half and rebounds one in this league; attempts score nothing.
+	if p := sorted.Players; len(p) != 3 || p[0].FullName != "Zr Three" || p[0].LastPoints != 160 ||
+		p[1].FullName != "Zr One" || p[1].LastPoints != 50 || p[2].FullName != "Zr Two" || p[2].LastPoints != 0 {
+		t.Fatalf("by last season's points = %+v; want Three (160), One (50), then Two with no season", p)
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba", nil, &sorted)
+	if p := sorted.Players; p[0].FullName != "Zr One" || p[1].FullName != "Zr Three" {
+		t.Fatalf("without a sort = %+v; want them by name", p)
+	}
+
 	draft := func(name, kind, competition string) string {
 		t.Helper()
 		var d struct{ ID string }

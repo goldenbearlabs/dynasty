@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { getPlayers, type Player, type PlayerPage } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
@@ -20,6 +20,8 @@
 		action?: Snippet<[Player]>;
 		/** Change this to reload the current page, e.g. after a roster move. */
 		version?: number;
+		/** Start sorted by last season's fantasy points, with a control to switch to names. */
+		byPoints?: boolean;
 		/** Compact rows with a name button that opens inline research. */
 		compact?: boolean;
 		onselect?: (player: Player) => void;
@@ -31,6 +33,7 @@
 		draftId,
 		action,
 		version = 0,
+		byPoints = false,
 		compact = false,
 		onselect,
 		selectedId
@@ -40,6 +43,8 @@
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
 	let availableOnly = $state(false);
+	let order = $state(untrack(() => (byPoints ? 'points' : 'name')));
+	const fantasyPoints = (n: number) => Math.round(n).toLocaleString();
 	let page = $state(1);
 
 	let result = $state<PlayerPage>();
@@ -77,6 +82,7 @@
 			q: query,
 			page,
 			draft_id: draftId,
+			sort: order === 'points' ? 'points' : undefined,
 			available_in: availableOnly ? leagueId : undefined
 		})
 			.then((data) => {
@@ -111,6 +117,12 @@
 			<option value="prospect">Prospects</option>
 			<option value="inactive">Inactive</option>
 		</select>
+		{#if byPoints}
+			<select aria-label="Order" bind:value={order} onchange={() => (page = 1)}>
+				<option value="points">Last season's points</option>
+				<option value="name">Name</option>
+			</select>
+		{/if}
 		{#if leagueId && !draftId}
 			<label class="check">
 				<input type="checkbox" bind:checked={availableOnly} onchange={() => (page = 1)} />
@@ -132,6 +144,7 @@
 							<th>Player</th>
 							<th>Pos</th>
 							{#if !compact}<th class="wide">Team</th><th class="wide num">Age</th>{/if}
+							{#if !compact && order === 'points'}<th class="num">Last season</th>{/if}
 							<th class="num"
 								>{result.total.toLocaleString()} {result.total === 1 ? 'player' : 'players'}</th
 							>
@@ -163,6 +176,7 @@
 											</div>
 											{#if compact}<div class="muted small-text">
 													{player.team_abbrev || player.team_name || 'No team'} · {player.status}
+													{#if order === 'points' && player.last_points}· <strong>{fantasyPoints(player.last_points)}</strong> pts{/if}
 												</div>{:else if player.note}<div class="muted small-text">
 													{player.note}
 												</div>{/if}
@@ -172,6 +186,7 @@
 								<td>{player.positions.join('/')}</td>
 								{#if !compact}<td class="wide muted" title={player.team_name}>{player.team_name}</td
 									><td class="wide num">{age(player.birth_date)}</td>{/if}
+								{#if !compact && order === 'points'}<td class="num">{player.last_points ? fantasyPoints(player.last_points) : ''}</td>{/if}
 								<td class="actions">
 									{#if player.owner_slug}
 										<a class="small-text" href="/franchise/{player.owner_slug}"

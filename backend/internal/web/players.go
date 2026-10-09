@@ -125,6 +125,7 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		Search:      search,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
+		ByPoints:    query.Get("sort") == "points", // last season's fantasy points, highest first
 		PageSize:    playersPerPage,
 		PageOffset:  int32((page - 1) * playersPerPage),
 	})

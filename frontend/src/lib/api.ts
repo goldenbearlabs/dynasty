@@ -96,6 +96,8 @@ export type Player = {
 	owner_slug: string;
 	/** Set while he is on waivers: he can be claimed, not added. */
 	waiver_until: string | null;
+	/** Fantasy points last season under his league's scoring; 0 without a season on record. */
+	last_points: number;
 };
 
 export type PlayerPage = { players: Player[]; total: number; page: number; per_page: number };
@@ -139,6 +141,8 @@ export type PlayerFilter = {
 	q?: string;
 	available_in?: string;
 	draft_id?: string;
+	/** "points" puts last season's highest fantasy scorers first; otherwise by name. */
+	sort?: string;
 	page?: number;
 };
 
