@@ -76,6 +76,11 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 		return nil, err
 	}
 
+	charted, err := s.depthChart(ctx, team)
+	if err != nil {
+		return nil, err
+	}
+
 	var players []ingest.Player
 	for _, r := range res.Roster {
 		p := ingest.Player{
@@ -89,10 +94,15 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 			p.Positions = []string{r.Position.Abbreviation}
 		}
 		if r.Position.Abbreviation == "P" {
-			role, err := s.pitcherRole(ctx, r.Person.ID)
-			if err != nil {
-				// Carrying on would turn every starter and reliever back into a plain pitcher.
-				return nil, fmt.Errorf("pitcher roles: %w", err)
+			// The roster calls every pitcher "P". His club's depth chart says
+			// whether he starts or relieves; a pitcher it leaves out (in the
+			// minors, mostly) is placed by how he has been used.
+			role := charted[r.Person.ID]
+			if role == "" {
+				if role, err = s.pitcherRole(ctx, r.Person.ID); err != nil {
+					// Carrying on would turn every starter and reliever back into a plain pitcher.
+					return nil, fmt.Errorf("pitcher roles: %w", err)
+				}
 			}
 			if role != "" {
 				p.Positions = []string{role}
@@ -103,10 +113,41 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 	return players, nil
 }
 
-// pitcherRole says whether a pitcher starts or relieves. The feed calls
-// them all "P", so it is read from how they have been used: a pitcher who
-// started at least half his games this season and last is a starter. One
-// who has not pitched in either stays a plain "P".
+// depthChart reads a club's own listing of its pitchers: the rotation as
+// "SP", and the bullpen as "P" with the closer "CP", both of which are
+// relievers here.
+func (s *Source) depthChart(ctx context.Context, team ingest.Team) (map[int]string, error) {
+	var res struct {
+		Roster []struct {
+			Person struct {
+				ID int `json:"id"`
+			} `json:"person"`
+			Position struct {
+				Abbreviation string `json:"abbreviation"`
+			} `json:"position"`
+		} `json:"roster"`
+	}
+	if err := s.client.GetJSON(ctx, fmt.Sprintf("%s/teams/%s/roster?rosterType=depthChart", s.Base, team.ProviderID), &res); err != nil {
+		return nil, fmt.Errorf("depth chart: %w", err)
+	}
+	roles := map[int]string{}
+	for _, r := range res.Roster {
+		switch r.Position.Abbreviation {
+		case "SP":
+			roles[r.Person.ID] = "SP"
+		case "P", "CP":
+			if roles[r.Person.ID] == "" { // a pitcher listed in both is a starter
+				roles[r.Person.ID] = "RP"
+			}
+		}
+	}
+	return roles, nil
+}
+
+// pitcherRole places a pitcher his club's depth chart does not list, from
+// how he has been used: one who started at least half his games this
+// season and last is a starter. One who has not pitched in either stays a
+// plain "P".
 func (s *Source) pitcherRole(ctx context.Context, id int) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

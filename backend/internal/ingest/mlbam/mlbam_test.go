@@ -17,7 +17,9 @@ const rosterJSON = `{"roster":[
   {"person":{"id":660271,"fullName":"Shohei Ohtani","birthDate":"1994-07-05"},"position":{"abbreviation":"TWP"}},
   {"person":{"id":1,"fullName":"A Starter"},"position":{"abbreviation":"P"}},
   {"person":{"id":2,"fullName":"A Reliever"},"position":{"abbreviation":"P"}},
-  {"person":{"id":3,"fullName":"A Rookie"},"position":{"abbreviation":"P"}}
+  {"person":{"id":3,"fullName":"A Rookie"},"position":{"abbreviation":"P"}},
+  {"person":{"id":4,"fullName":"Charted Starter"},"position":{"abbreviation":"P"}},
+  {"person":{"id":5,"fullName":"Charted Closer"},"position":{"abbreviation":"P"}}
 ]}`
 
 func TestSource(t *testing.T) {
@@ -26,16 +28,21 @@ func TestSource(t *testing.T) {
 		w.Write([]byte(teamsJSON))
 	})
 	mux.HandleFunc("/teams/119/roster", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("rosterType") != "40Man" {
-			t.Errorf("rosterType = %q, want 40Man", r.URL.Query().Get("rosterType"))
+		switch r.URL.Query().Get("rosterType") {
+		case "40Man":
+			w.Write([]byte(rosterJSON))
+		case "depthChart": // the club lists pitcher 4 in its rotation and pitcher 5 as its closer
+			w.Write([]byte(`{"roster":[{"person":{"id":4},"position":{"abbreviation":"SP"}},{"person":{"id":5},"position":{"abbreviation":"CP"}}]}`))
+		default:
+			t.Errorf("rosterType = %q", r.URL.Query().Get("rosterType"))
 		}
-		w.Write([]byte(rosterJSON))
 	})
 	// How each pitcher has been used, the same for both seasons read.
 	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"stats":[{"splits":[
 		  {"player":{"id":1},"stat":{"gamesPlayed":30,"gamesStarted":28}},
-		  {"player":{"id":2},"stat":{"gamesPlayed":60,"gamesStarted":1}}
+		  {"player":{"id":2},"stat":{"gamesPlayed":60,"gamesStarted":1}},
+		  {"player":{"id":4},"stat":{"gamesPlayed":40,"gamesStarted":0}}
 		]}]}`))
 	})
 	server := httptest.NewServer(mux)
@@ -56,12 +63,18 @@ func TestSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(players) != 4 {
-		t.Fatalf("got %d players, want 4", len(players))
+	if len(players) != 6 {
+		t.Fatalf("got %d players, want 6", len(players))
 	}
-	// Pitchers are told apart by how they have been used; one who has not pitched stays "P".
-	if got := players[1].Positions[0] + " " + players[2].Positions[0] + " " + players[3].Positions[0]; got != "SP RP P" {
-		t.Errorf("pitcher roles = %q, want SP RP P", got)
+	// A pitcher off the depth chart is placed by how he has been used, and
+	// one who has not pitched stays "P". The depth chart comes first: it
+	// makes pitcher 4 a starter although he has only relieved.
+	roles := ""
+	for _, p := range players[1:] {
+		roles += p.Positions[0] + " "
+	}
+	if roles != "SP RP P SP RP " {
+		t.Errorf("pitcher roles = %q, want SP RP P SP RP", roles)
 	}
 	p := players[0]
 	if p.Provider != "mlbam" || p.ProviderID != "660271" || p.FullName != "Shohei Ohtani" ||

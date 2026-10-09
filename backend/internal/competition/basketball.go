@@ -58,10 +58,10 @@ func basketballGame(stats map[string]float64) {
 // basketballLineup is three guards, three forwards and a centre, then any
 // extra players. Every slot counts one game a week: the manager picks which.
 // The feeds mostly label players only G, F or C, so the slots do too.
-func basketballLineup(util int) settings.Lineup {
+func basketballLineup(guards, forwards, util int) settings.Lineup {
 	slots := []settings.Slot{
-		slot("G", 3, "G", "PG", "SG"),
-		slot("F", 3, "F", "SF", "PF"),
+		slot("G", guards, "G", "PG", "SG"),
+		slot("F", forwards, "F", "SF", "PF"),
 		slot("C", 1, "C"),
 	}
 	if util > 0 {
@@ -76,7 +76,7 @@ func basketballLineup(util int) settings.Lineup {
 func cbb(client *ingest.Client) Competition {
 	rules := defaults()
 	rules.Roster.Main, rules.Roster.Reserve = 12, 5 // 7 starters and 5 on the bench
-	rules.Lineup = basketballLineup(0)
+	rules.Lineup = basketballLineup(3, 3, 0)
 	rules.Scoring = basketballScoring
 	// College players carry into the NBA league when the dynasty has one;
 	// the setup wizard drops this if it does not.
@@ -113,7 +113,7 @@ var collegeConferences = []string{
 func nba(client *ingest.Client) Competition {
 	rules := defaults()
 	rules.Roster.Main, rules.Roster.Reserve = 14, 6 // 9 starters and 5 on the bench
-	rules.Lineup = basketballLineup(2)
+	rules.Lineup = basketballLineup(3, 3, 2)
 	rules.Scoring = basketballScoring
 
 	source := espn.New(client, espn.League{
@@ -137,9 +137,9 @@ const womensBasketballProvider = "espn_womens_basketball"
 func wnba(client *ingest.Client) Competition {
 	rules := defaults()
 	// The league is 15 teams of 12, so 16 franchises can hold little more
-	// than their starters before the waiver wire is empty: 7 and 1.
+	// than their starters before the waiver wire is empty: 6 and 2.
 	rules.Roster.Main, rules.Roster.Reserve = 8, 2
-	rules.Lineup = basketballLineup(0)
+	rules.Lineup = basketballLineup(2, 2, 1)
 	rules.Scoring = basketballScoring
 
 	source := espn.New(client, espn.League{

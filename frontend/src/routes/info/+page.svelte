@@ -34,7 +34,7 @@
 		{ key: 'cbb', top: 18.9, first: 13.8, third: 7.0 },
 		{ key: 'nhl', top: 16.5, first: 11.6, third: 7.4 },
 		{ key: 'mlb', top: 12.0, first: 8.0, third: 5.3 },
-		{ key: 'wnba', top: 36.5, first: 28.0, third: 14.4 }
+		{ key: 'wnba', top: 41.3, first: 30.0, third: 15.2 }
 	];
 	const nameOf = (key: string) => data.competitions.find((c) => c.key === key)?.name ?? key.toUpperCase();
 </script>
