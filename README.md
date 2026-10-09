@@ -69,11 +69,13 @@ uses full selected datasets independently of player filters, with presets for
 position strengths, scoring drivers, production concentration and season
 scoring trends. It also shows imported coverage and replacement depth.
 
-League+ compares MLB hitters, starting pitchers, relievers and mixed-role pitchers separately, using
-season-specific pitching appearances and starts; a two-way player needs a
-separate qualified peer sample. These roles are visible in research.
-League+ and Position+ normalize FP/game to a mean of 100 and a standard
-deviation of 15 among qualified peers in the same league-season. FPAR measures
+League+ normalizes **total season fantasy points** to a mean of 100 and a
+standard deviation of 15 among all qualified players in the same league-season,
+including every position and MLB pitching role. Percentile ranks those same
+season totals. Availability matters: FP/game remains the separate rate metric.
+Position+ normalizes FP/game among eligible positional peers. A 115 is one
+standard deviation above average, not 15% more points. MLB workload requirements
+still use season-specific pitching roles to exclude small samples. FPAR measures
 production above positional replacement; auto depth estimates starting demand
 from manager count and lineup slots, splitting flexible-slot demand equally
 across positions, with an optional manual rank. Multi-position players use
@@ -224,3 +226,58 @@ player profiles. Nicknames accompany real names in rosters, lineups and scoring
 views, survive player-record merges, and do not replace provider identities or
 research names. Managers may edit their own organization; commissioners may
 assist other organizations.
+
+Redis caches research route responses for ten minutes, and the other public
+reads (player search, profiles, game logs, transaction history, standings,
+matchups, scoreboards, game pages, franchise pages) for thirty seconds. The
+season datasets behind research are held decoded in the app's own memory, the
+last three selections at a time. Filtering or chart changes reuse the dataset
+rather than repeating the full database aggregation. Identical concurrent requests share
+one calculation; cold dataset loads are limited to one at a time per app process.
+
+`docker compose up -d --build` includes a private Redis service with a 64 MB
+cache limit, LRU eviction and no persistence. The app uses `REDIS_URL`; host
+runs can point it at their own Redis, or leave it unset to disable caching.
+Redis failures bypass caching with short timeouts and a five-second retry pause.
+The cache is disposable; Postgres always holds the data.
+
+Migration 0019 maintains separate research and public cache generations inside
+Postgres transactions. Relevant committed imports, roster changes, player merges,
+branding and commissioner rule changes make old keys unreachable immediately;
+failed transactions do not invalidate good entries. Live game/lineup changes
+invalidate player routes without invalidating season research. Raw feed payloads,
+ingest-run logs and private queues do not invalidate research. A generation check
+also prevents caching a response when its data changed during calculation.
+Expiration bounds time-dependent profile information (such as a reserve lock
+expiring) to thirty seconds. Browser/proxy caching is disabled on these routes.
+
+The app trusts its last look at a cache generation for `CACHE_REVISION_AGE`
+(one second by default) instead of asking Postgres on every request. Anything
+changed through the app, and anything pushed to browsers, is seen at once; a
+feed sync or direct SQL change can take that long to show. Set it to `0` to ask
+every time.
+
+Migration 0020 stores what the server used to recalculate on each read, kept
+current by triggers in the same commit as the change behind it:
+
+- fantasy points beside every season line and game stat line, rescored when a
+  league's scoring rules or starting conferences change;
+- `stat_seasons`, the seasons there are stats for;
+- `period_scores`, what each side scored in a finished head-to-head period.
+  It is written the first time standings need the period and cleared when a
+  stat correction, lineup change or rule change touches it.
+
+Feed syncs write each team, box score and season in one transaction, so a sync
+starts one new cache generation per batch rather than one per row.
+
+The compose file sizes Postgres and the app for a small server; `GOMEMLIMIT`
+and `DB_POOL` in `.env` adjust it. To see which queries cost the most, run
+this once and then read the view:
+
+```sh
+docker compose exec db psql -U crossover -c 'create extension if not exists pg_stat_statements'
+docker compose exec db psql -U crossover -c 'select calls, round(total_exec_time) as ms, left(query, 80) from pg_stat_statements order by total_exec_time desc limit 20'
+```
+Session, private manager/admin routes, writes and live streams are not cached.
+Keys include a database namespace, generation, route/query or dataset selection,
+and a cache format version (`v1`); bump the version if cached JSON semantics change.

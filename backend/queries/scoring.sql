@@ -1,15 +1,21 @@
 -- ---- games and stat lines ----
 
--- name: FindProTeam :one
-select id from pro_teams where competition = @competition and provider_id = @provider_id;
+-- name: ListProTeamIDs :many
+select provider_id, id from pro_teams where competition = @competition;
 
 -- name: UpsertGame :exec
+-- An unchanged game is not written again: every write here starts a new
+-- cache generation.
 insert into games (competition, provider_id, day, starts_at, status, home_team_id, away_team_id, home_score, away_score, detail)
 values (@competition, @provider_id, @day, @starts_at, @status, @home_team_id, @away_team_id, @home_score, @away_score, @detail)
 on conflict (competition, provider_id) do update
   set day = excluded.day, starts_at = excluded.starts_at, status = excluded.status,
       home_team_id = excluded.home_team_id, away_team_id = excluded.away_team_id,
-      home_score = excluded.home_score, away_score = excluded.away_score, detail = excluded.detail;
+      home_score = excluded.home_score, away_score = excluded.away_score, detail = excluded.detail
+  where (games.day, games.starts_at, games.status, games.detail, games.home_score, games.away_score)
+        <> (excluded.day, excluded.starts_at, excluded.status, excluded.detail, excluded.home_score, excluded.away_score)
+     or games.home_team_id is distinct from excluded.home_team_id
+     or games.away_team_id is distinct from excluded.away_team_id;
 
 -- name: ListGamesInPlay :many
 -- Games that are live, or should have started: the ones worth polling.
@@ -36,7 +42,8 @@ order by starts_at;
 
 -- name: UpsertStatLine :exec
 insert into stat_lines (game_id, player_id, stats) values (@game_id, @player_id, @stats)
-on conflict (game_id, player_id) do update set stats = excluded.stats;
+on conflict (game_id, player_id) do update set stats = excluded.stats
+  where stat_lines.stats is distinct from excluded.stats;
 
 -- name: MarkGameStatsSynced :exec
 update games set stats_synced_at = now() where id = @id;
@@ -123,10 +130,7 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
-       coalesce((select sum(s.value::numeric * r.value::numeric)
-                 from stat_lines sl
-                 cross join lateral jsonb_each_text(sl.stats) s
-                 join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key
+       coalesce((select sl.points from stat_lines sl
                  where sl.game_id = g.id and sl.player_id = p.id), 0)::float8 as points
 from roster_entries re
 join players p on p.id = re.player_id
@@ -276,9 +280,7 @@ where g.id = @id;
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(p.pro_team_id = g.home_team_id, false)::boolean as at_home,
        sl.stats,
-       coalesce((select sum(s.value::numeric * r.value::numeric)
-                 from jsonb_each_text(sl.stats) s
-                 join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key), 0)::float8 as points,
+       coalesce(sl.points, 0)::float8 as points,
        coalesce(f.name, '')::text as owner_name,
        coalesce(f.slug, '')::text as owner_slug
 from stat_lines sl
@@ -322,3 +324,19 @@ select * from matchups where id = @id;
 
 -- name: ListActiveSeasons :many
 select * from seasons where status = 'active';
+
+-- ---- settled periods ----
+
+-- name: ListPeriodScores :many
+-- What each franchise scored in the season's settled periods.
+select ps.* from period_scores ps
+join periods p on p.id = ps.period_id
+where p.season_id = @season_id;
+
+-- name: LockPeriod :exec
+-- Held while a period is settled, and taken by whatever would unsettle it.
+select pg_advisory_xact_lock(hashtextextended((@period_id::uuid)::text, 0));
+
+-- name: InsertPeriodScore :exec
+insert into period_scores (period_id, franchise_id, points) values (@period_id, @franchise_id, @points)
+on conflict do nothing;

@@ -3,12 +3,14 @@ package web_test
 import (
 	"bytes"
 	"context"
+	"crossover/internal/cache"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -116,13 +118,25 @@ func startServer(t *testing.T, pool *pgxpool.Pool) (*httptest.Server, competitio
 	}
 	movedPlayer = syncer.OnMove
 
+	var responseCache *cache.Store
+	if url := os.Getenv("TEST_REDIS_URL"); url != "" {
+		client, err := cache.Connect(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { client.Close() })
+		responseCache = cache.New(client, pool, log)
+	}
+	playerService := players.NewService(pool, registry)
+	playerService.Cache = responseCache
 	server := httptest.NewServer((&web.Server{
+		Cache:      responseCache,
 		Queries:    db.New(pool),
 		Auth:       accounts,
 		Registry:   registry,
 		Dynasty:    dynasty.NewService(pool, registry),
 		Roster:     rosters,
-		Players:    players.NewService(pool, registry),
+		Players:    playerService,
 		Drafts:     drafts,
 		Trades:     trade.NewService(pool),
 		Waivers:    waiver.NewService(pool, log),

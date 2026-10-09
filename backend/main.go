@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"crossover/internal/auth"
+	"crossover/internal/cache"
 	"crossover/internal/competition"
 	"crossover/internal/db"
 	"crossover/internal/draft"
@@ -57,6 +59,17 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	var responseCache *cache.Store
+	if url := os.Getenv("REDIS_URL"); url != "" {
+		client, err := cache.Connect(url)
+		if err != nil {
+			return fmt.Errorf("REDIS_URL: %w", err)
+		}
+		defer client.Close()
+		responseCache = cache.New(client, pool, log)
+		responseCache.RevisionAge = envDuration("CACHE_REVISION_AGE", time.Second)
+		log.Info("Redis response caching configured")
+	}
 	queries := db.New(pool)
 	accounts, err := auth.NewService(ctx, pool)
 	if err != nil {
@@ -86,6 +99,7 @@ func run(log *slog.Logger) error {
 		}
 	}
 	events := hub.New()
+	events.OnPublish = responseCache.Forget
 	scores := scoring.NewService(pool)
 	games := live.NewService(pool, syncer, registry, events, log)
 	games.Interval = envDuration("LIVE_POLL", 30*time.Second)
@@ -172,14 +186,17 @@ func run(log *slog.Logger) error {
 	drafts := draft.NewService(pool, events, log)
 	go drafts.RunClock(ctx)
 
+	playerService := players.NewService(pool, registry)
+	playerService.Cache = responseCache
 	server := &web.Server{
+		Cache:          responseCache,
 		Queries:        queries,
 		Auth:           accounts,
 		Registry:       registry,
 		Syncer:         syncer,
 		Dynasty:        dynasty.NewService(pool, registry),
 		Roster:         rosters,
-		Players:        players.NewService(pool, registry),
+		Players:        playerService,
 		Drafts:         drafts,
 		Trades:         trade.NewService(pool),
 		Waivers:        waivers,

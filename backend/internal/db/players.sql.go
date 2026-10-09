@@ -201,6 +201,37 @@ func (q *Queries) FindPlayerByExternalID(ctx context.Context, arg FindPlayerByEx
 	return player_id, err
 }
 
+const findPlayersByExternalIDs = `-- name: FindPlayersByExternalIDs :many
+select provider, provider_id, player_id from player_external_ids
+where (provider, provider_id) in (select unnest($1::text[]), unnest($2::text[]))
+`
+
+type FindPlayersByExternalIDsParams struct {
+	Providers   []string `json:"providers"`
+	ProviderIds []string `json:"provider_ids"`
+}
+
+// Many feed ids at once; the two lists are read as pairs.
+func (q *Queries) FindPlayersByExternalIDs(ctx context.Context, arg FindPlayersByExternalIDsParams) ([]PlayerExternalID, error) {
+	rows, err := q.db.Query(ctx, findPlayersByExternalIDs, arg.Providers, arg.ProviderIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlayerExternalID{}
+	for rows.Next() {
+		var i PlayerExternalID
+		if err := rows.Scan(&i.Provider, &i.ProviderID, &i.PlayerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLeagueByCompetition = `-- name: GetLeagueByCompetition :one
 select id, dynasty_id, competition, name, settings, last_draft_at from leagues where dynasty_id = $1 and competition = $2
 `
@@ -522,14 +553,11 @@ func (q *Queries) ListMergeSuggestions(ctx context.Context) ([]ListMergeSuggesti
 const listPlayerHistory = `-- name: ListPlayerHistory :many
 select g.id, g.day, coalesce(a.abbrev, '')::text as away_abbrev,
        coalesce(h.abbrev, '')::text as home_abbrev, sl.stats,
-       coalesce((select sum(stat.value::numeric * rule.value::numeric)
-                 from jsonb_each_text(sl.stats) stat
-                 join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key), 0)::float8 as points
+       coalesce(sl.points, 0)::float8 as points
 from stat_lines sl
 join games g on g.id = sl.game_id
 left join pro_teams a on a.id = g.away_team_id
 left join pro_teams h on h.id = g.home_team_id
-left join leagues l on l.competition = g.competition
 where sl.player_id = $1 and g.status = 'final' and g.competition = $2
 order by g.starts_at desc, g.id desc
 limit 10
@@ -614,23 +642,19 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 
 const listPlayers = `-- name: ListPlayers :many
 with seasons as (
-  select distinct competition, year from player_seasons where league = ''
+  select distinct competition, year from stat_seasons
 ), reference as materialized (
   -- the season with exactly season_back newer ones in its sport
   select s.competition, s.year from seasons s
   where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $9::int
 ), scored as materialized (
+  -- points are stored with each season line, under the rules of the league
+  -- here that plays its sport
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(stat.value::numeric * rule.value::numeric) as points,
-         sum(stat.value::numeric * rule.value::numeric) filter (where (ps.competition <> 'cbb'
-           or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
-           or ps.conference in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))) as eligible_points
+         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  join leagues l on l.competition = ps.competition
-  cross join lateral jsonb_each_text(ps.stats) stat
-  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
-  where ps.league = '' and ($1::text = '' or ps.competition = $1)
+  where ps.league = '' and ps.points is not null and ($1::text = '' or ps.competition = $1)
   group by ps.player_id, ps.competition
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
@@ -638,9 +662,11 @@ with seasons as (
   from (select sc.competition, sc.eligible_points as points,
                row_number() over (partition by sc.competition order by sc.eligible_points desc) as place
         from scored sc where sc.eligible_points is not null) placed
-  join leagues l on l.competition = placed.competition
-  where placed.place <= greatest(1, (l.settings->'roster'->>'main')::int
-                                    * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id))
+  join (select l.competition,
+               greatest(1, (l.settings->'roster'->>'main')::int
+                           * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id)) as spots
+        from leagues l) sizes on sizes.competition = placed.competition
+  where placed.place <= sizes.spots
   group by placed.competition
 )
 select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
@@ -830,8 +856,7 @@ func (q *Queries) ListRosteredInactive(ctx context.Context, dynastyID pgtype.UUI
 
 const listStatSeasons = `-- name: ListStatSeasons :many
 select competition, year, max(label)::text as label
-from player_seasons
-where league = ''
+from stat_seasons
 group by competition, year
 order by competition, year desc
 `

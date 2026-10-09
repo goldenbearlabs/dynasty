@@ -23,3 +23,13 @@ func (q *Queries) Savepoint(ctx context.Context, fn func(q *Queries) error) erro
 		return fn(New(tx))
 	})
 }
+
+// Tx runs fn in a transaction of q's own: a new one when q runs on the
+// pool, a nested one when q is already inside a transaction.
+func (q *Queries) Tx(ctx context.Context, fn func(q *Queries) error) error {
+	return pgx.BeginFunc(ctx, q.db.(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}), func(tx pgx.Tx) error {
+		return fn(New(tx))
+	})
+}

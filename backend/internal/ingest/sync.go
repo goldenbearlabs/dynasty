@@ -51,10 +51,16 @@ func (s *Syncer) SyncProspects(ctx context.Context, competition string, src Pros
 		if err != nil {
 			return 0, err
 		}
-		for i, p := range prospects {
-			if err := s.upsertProspect(ctx, competition, p); err != nil {
-				return i, fmt.Errorf("prospect %s: %w", p.FullName, err)
+		err = s.q.Tx(ctx, func(q *db.Queries) error {
+			for _, p := range prospects {
+				if err := upsertProspect(ctx, q, competition, p); err != nil {
+					return fmt.Errorf("prospect %s: %w", p.FullName, err)
+				}
 			}
+			return nil
+		})
+		if err != nil {
+			return 0, err
 		}
 		return len(prospects), nil
 	})
@@ -71,10 +77,8 @@ func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSour
 			if err != nil {
 				return 0, fmt.Errorf("games on %s: %w", day.Format(time.DateOnly), err)
 			}
-			for _, game := range games {
-				if err := s.upsertGame(ctx, competition, game); err != nil {
-					return 0, err
-				}
+			if err := s.upsertGames(ctx, competition, games); err != nil {
+				return 0, err
 			}
 		}
 
@@ -98,26 +102,40 @@ func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSour
 	})
 }
 
-func (s *Syncer) upsertGame(ctx context.Context, competition string, game Game) error {
-	team := func(providerID string) pgtype.UUID {
-		id, _ := s.q.FindProTeam(ctx, db.FindProTeamParams{Competition: competition, ProviderID: providerID})
-		return id // left empty for a team we do not know, such as an all-star side
-	}
-	home, away := team(game.HomeTeam), team(game.AwayTeam)
-	if !home.Valid && !away.Valid {
-		return nil // a game between teams outside the competition is not ours to follow
-	}
-	return s.q.UpsertGame(ctx, db.UpsertGameParams{
-		Competition: competition,
-		ProviderID:  game.ProviderID,
-		Day:         sportsday.Date(sportsday.Of(game.StartsAt)),
-		StartsAt:    pgtype.Timestamptz{Time: game.StartsAt, Valid: true},
-		Status:      game.Status,
-		HomeTeamID:  home,
-		AwayTeamID:  away,
-		HomeScore:   int32(game.HomeScore),
-		AwayScore:   int32(game.AwayScore),
-		Detail:      game.Detail,
+// upsertGames stores one day's games in a single transaction, so however
+// many of them changed, readers see one new state.
+func (s *Syncer) upsertGames(ctx context.Context, competition string, games []Game) error {
+	return s.q.Tx(ctx, func(q *db.Queries) error {
+		teams, err := q.ListProTeamIDs(ctx, competition)
+		if err != nil {
+			return err
+		}
+		ids := map[string]pgtype.UUID{}
+		for _, t := range teams {
+			ids[t.ProviderID] = t.ID
+		}
+		for _, game := range games {
+			// A team we do not know, such as an all-star side, is left empty.
+			home, away := ids[game.HomeTeam], ids[game.AwayTeam]
+			if !home.Valid && !away.Valid {
+				continue // a game between teams outside the competition is not ours to follow
+			}
+			if err := q.UpsertGame(ctx, db.UpsertGameParams{
+				Competition: competition,
+				ProviderID:  game.ProviderID,
+				Day:         sportsday.Date(sportsday.Of(game.StartsAt)),
+				StartsAt:    pgtype.Timestamptz{Time: game.StartsAt, Valid: true},
+				Status:      game.Status,
+				HomeTeamID:  home,
+				AwayTeamID:  away,
+				HomeScore:   int32(game.HomeScore),
+				AwayScore:   int32(game.AwayScore),
+				Detail:      game.Detail,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -154,10 +172,8 @@ func (s *Syncer) PollLive(ctx context.Context, competition string, src GameSourc
 		if err != nil {
 			return LiveUpdate{}, err
 		}
-		for _, g := range games {
-			if err := s.upsertGame(ctx, competition, g); err != nil {
-				return LiveUpdate{}, err
-			}
+		if err := s.upsertGames(ctx, competition, games); err != nil {
+			return LiveUpdate{}, err
 		}
 	}
 
@@ -190,22 +206,51 @@ func (s *Syncer) syncBoxScore(ctx context.Context, src GameSource, game db.Game)
 	if err != nil {
 		return 0, err
 	}
-	stored := 0
-	for _, line := range lines {
-		playerID, err := s.q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: line.Provider, ProviderID: line.ProviderID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue // someone the roster feed has never listed
-		}
-		if err != nil {
-			return stored, err
-		}
-		stats, _ := json.Marshal(line.Stats)
-		if err := s.q.UpsertStatLine(ctx, db.UpsertStatLineParams{GameID: game.ID, PlayerID: playerID, Stats: stats}); err != nil {
-			return stored, err
-		}
-		stored++
+	refs := make([]ExternalID, len(lines))
+	for i, line := range lines {
+		refs[i] = ExternalID{Provider: line.Provider, ProviderID: line.ProviderID}
 	}
-	return stored, s.q.MarkGameStatsSynced(ctx, game.ID)
+	stored := 0
+	err = s.q.Tx(ctx, func(q *db.Queries) error {
+		players, err := playerIDs(ctx, q, refs)
+		if err != nil {
+			return err
+		}
+		for i, line := range lines {
+			playerID, known := players[refs[i]]
+			if !known {
+				continue // someone the roster feed has never listed
+			}
+			stats, _ := json.Marshal(line.Stats)
+			if err := q.UpsertStatLine(ctx, db.UpsertStatLineParams{GameID: game.ID, PlayerID: playerID, Stats: stats}); err != nil {
+				return err
+			}
+			stored++
+		}
+		return q.MarkGameStatsSynced(ctx, game.ID)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return stored, nil
+}
+
+// playerIDs finds the stored player behind each feed id, in one query.
+// Ids nobody here has are left out.
+func playerIDs(ctx context.Context, q *db.Queries, refs []ExternalID) (map[ExternalID]pgtype.UUID, error) {
+	arg := db.FindPlayersByExternalIDsParams{Providers: make([]string, len(refs)), ProviderIds: make([]string, len(refs))}
+	for i, ref := range refs {
+		arg.Providers[i], arg.ProviderIds[i] = ref.Provider, ref.ProviderID
+	}
+	rows, err := q.FindPlayersByExternalIDs(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	players := make(map[ExternalID]pgtype.UUID, len(rows))
+	for _, row := range rows {
+		players[ExternalID{Provider: row.Provider, ProviderID: row.ProviderID}] = row.PlayerID
+	}
+	return players, nil
 }
 
 // SyncSeasons stores every player's season totals for a competition: always
@@ -253,32 +298,47 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 	if err != nil {
 		return 0, err
 	}
-	stored := 0
-	for _, line := range lines {
-		playerID, err := s.q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: line.Provider, ProviderID: line.ProviderID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue // someone who is not in our player pool
-		}
-		if err != nil {
-			return stored, err
-		}
-		if err := s.StoreSeason(ctx, playerID, competition, line.Season); err != nil {
-			return stored, err
-		}
-		stored++
-	}
 	if len(lines) == 0 {
 		return 0, nil // a season not played yet: leave whatever is stored alone
 	}
-	return stored, s.q.DeleteStalePlayerSeasons(ctx, db.DeleteStalePlayerSeasonsParams{
-		Competition: competition, Year: int32(year), SyncedBefore: startedAt,
+	refs := make([]ExternalID, len(lines))
+	for i, line := range lines {
+		refs[i] = ExternalID{Provider: line.Provider, ProviderID: line.ProviderID}
+	}
+	stored := 0
+	err = s.q.Tx(ctx, func(q *db.Queries) error {
+		players, err := playerIDs(ctx, q, refs)
+		if err != nil {
+			return err
+		}
+		for i, line := range lines {
+			playerID, known := players[refs[i]]
+			if !known {
+				continue // someone who is not in our player pool
+			}
+			if err := storeSeason(ctx, q, playerID, competition, line.Season); err != nil {
+				return err
+			}
+			stored++
+		}
+		return q.DeleteStalePlayerSeasons(ctx, db.DeleteStalePlayerSeasonsParams{
+			Competition: competition, Year: int32(year), SyncedBefore: startedAt,
+		})
 	})
+	if err != nil {
+		return 0, err
+	}
+	return stored, nil
 }
 
 // StoreSeason writes one season line for a player.
 func (s *Syncer) StoreSeason(ctx context.Context, playerID pgtype.UUID, competition string, season Season) error {
+	return storeSeason(ctx, s.q, playerID, competition, season)
+}
+
+func storeSeason(ctx context.Context, q *db.Queries, playerID pgtype.UUID, competition string, season Season) error {
 	stats, _ := json.Marshal(season.Stats)
-	return s.q.UpsertPlayerSeason(ctx, db.UpsertPlayerSeasonParams{
+	return q.UpsertPlayerSeason(ctx, db.UpsertPlayerSeasonParams{
 		Conference: season.Conference,
 		PlayerID:   playerID, Competition: competition, Year: int32(season.Year), Label: season.Label,
 		Team: season.Team, League: season.League, Games: int32(season.Games), Stats: stats,
@@ -369,38 +429,62 @@ func (s *Syncer) syncRosters(ctx context.Context, competition string, src Source
 	return rows, err
 }
 
+// syncTeam stores one team and its roster in a single transaction: the
+// roster is fetched first, so the transaction only spans the writes.
 func (s *Syncer) syncTeam(ctx context.Context, competition string, src Source, team Team) (int, error) {
-	teamID, err := s.q.UpsertProTeam(ctx, db.UpsertProTeamParams{
-		Competition: competition,
-		ProviderID:  team.ProviderID,
-		Abbrev:      team.Abbrev,
-		Name:        team.Name,
-		LogoUrl:     team.LogoURL,
-		Conference:  team.Conference,
-	})
-	if err != nil {
-		return 0, err
-	}
 	players, err := src.Roster(ctx, team)
 	if err != nil {
 		return 0, err
 	}
-	for i, p := range players {
-		if err := s.upsertPlayer(ctx, competition, teamID, p); err != nil {
-			return i, fmt.Errorf("player %s: %w", p.FullName, err)
+	type move struct {
+		player pgtype.UUID
+		from   string
+	}
+	var moves []move
+	err = s.q.Tx(ctx, func(q *db.Queries) error {
+		teamID, err := q.UpsertProTeam(ctx, db.UpsertProTeamParams{
+			Competition: competition,
+			ProviderID:  team.ProviderID,
+			Abbrev:      team.Abbrev,
+			Name:        team.Name,
+			LogoUrl:     team.LogoURL,
+			Conference:  team.Conference,
+		})
+		if err != nil {
+			return err
+		}
+		for _, p := range players {
+			id, previous, err := upsertPlayer(ctx, q, competition, teamID, p)
+			if err != nil {
+				return fmt.Errorf("player %s: %w", p.FullName, err)
+			}
+			if previous != competition {
+				moves = append(moves, move{id, previous})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if s.OnMove != nil {
+		for _, m := range moves {
+			s.OnMove(ctx, m.player, m.from, competition)
 		}
 	}
 	return len(players), nil
 }
 
-// upsertPlayer finds the player by external id, never by name.
-func (s *Syncer) upsertPlayer(ctx context.Context, competition string, teamID pgtype.UUID, p Player) error {
+// upsertPlayer finds the player by external id, never by name. It returns
+// his id and the competition he was in before, which differs from this one
+// when he has moved.
+func upsertPlayer(ctx context.Context, q *db.Queries, competition string, teamID pgtype.UUID, p Player) (pgtype.UUID, string, error) {
 	birth, positions := columns(p)
 	p.Positions = positions
 
-	id, err := s.find(ctx, p)
+	id, err := find(ctx, q, p)
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = s.q.InsertPlayer(ctx, db.InsertPlayerParams{
+		id, err = q.InsertPlayer(ctx, db.InsertPlayerParams{
 			Provider:    p.Provider,
 			ProviderID:  p.ProviderID,
 			Competition: competition,
@@ -411,12 +495,12 @@ func (s *Syncer) upsertPlayer(ctx context.Context, competition string, teamID pg
 			Class:       p.Class,
 			HeadshotUrl: p.HeadshotURL,
 		})
-		return err
+		return id, competition, err
 	}
 	if err != nil {
-		return err
+		return id, "", err
 	}
-	previous, err := s.q.UpdatePlayer(ctx, db.UpdatePlayerParams{
+	previous, err := q.UpdatePlayer(ctx, db.UpdatePlayerParams{
 		ID:          id,
 		Competition: competition,
 		FullName:    p.FullName,
@@ -426,18 +510,15 @@ func (s *Syncer) upsertPlayer(ctx context.Context, competition string, teamID pg
 		Class:       p.Class,
 		HeadshotUrl: p.HeadshotURL,
 	})
-	if err == nil && previous != competition && s.OnMove != nil {
-		s.OnMove(ctx, id, previous, competition)
-	}
-	return err
+	return id, previous, err
 }
 
-func (s *Syncer) upsertProspect(ctx context.Context, competition string, p Player) error {
+func upsertProspect(ctx context.Context, q *db.Queries, competition string, p Player) error {
 	birth, positions := columns(p)
 
-	id, err := s.find(ctx, p)
+	id, err := find(ctx, q, p)
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = s.q.InsertProspect(ctx, db.InsertProspectParams{
+		_, err = q.InsertProspect(ctx, db.InsertProspectParams{
 			Provider:    p.Provider,
 			ProviderID:  p.ProviderID,
 			Competition: competition,
@@ -452,7 +533,7 @@ func (s *Syncer) upsertProspect(ctx context.Context, competition string, p Playe
 	if err != nil {
 		return err
 	}
-	return s.q.UpdateProspect(ctx, db.UpdateProspectParams{
+	return q.UpdateProspect(ctx, db.UpdateProspectParams{
 		ID:          id,
 		FullName:    p.FullName,
 		Positions:   positions,
@@ -465,20 +546,20 @@ func (s *Syncer) upsertProspect(ctx context.Context, competition string, p Playe
 // find returns the stored player a feed player is, by external id and
 // never by name alone. If he is only known under one of his aliases, that
 // row is him: it is given this feed's id so he is found directly next time.
-func (s *Syncer) find(ctx context.Context, p Player) (pgtype.UUID, error) {
-	id, err := s.q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: p.Provider, ProviderID: p.ProviderID})
+func find(ctx context.Context, q *db.Queries, p Player) (pgtype.UUID, error) {
+	id, err := q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: p.Provider, ProviderID: p.ProviderID})
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return id, err
 	}
 	for _, alias := range p.Aliases {
-		id, err := s.q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: alias.Provider, ProviderID: alias.ProviderID})
+		id, err := q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: alias.Provider, ProviderID: alias.ProviderID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
 		if err != nil {
 			return id, err
 		}
-		return id, s.q.AddPlayerExternalID(ctx, db.AddPlayerExternalIDParams{Provider: p.Provider, ProviderID: p.ProviderID, PlayerID: id})
+		return id, q.AddPlayerExternalID(ctx, db.AddPlayerExternalIDParams{Provider: p.Provider, ProviderID: p.ProviderID, PlayerID: id})
 	}
 	return pgtype.UUID{}, pgx.ErrNoRows
 }

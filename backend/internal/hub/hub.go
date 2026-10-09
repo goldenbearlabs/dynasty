@@ -6,6 +6,10 @@ package hub
 import "sync"
 
 type Hub struct {
+	// OnPublish, if set, is called before each message goes out: whoever
+	// receives it is about to ask the server what changed.
+	OnPublish func()
+
 	mu     sync.Mutex
 	topics map[string]map[chan []byte]struct{}
 }
@@ -35,6 +39,9 @@ func (h *Hub) Subscribe(topic string) (<-chan []byte, func()) {
 
 // Publish sends a message to everyone on a topic without blocking.
 func (h *Hub) Publish(topic string, message []byte) {
+	if h.OnPublish != nil {
+		h.OnPublish()
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for ch := range h.topics[topic] {

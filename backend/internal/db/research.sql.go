@@ -57,8 +57,7 @@ func (q *Queries) ListResearchCatalog(ctx context.Context, conferences []string)
 
 const listResearchPlayers = `-- name: ListResearchPlayers :many
 with latest as (
-  select competition, max(year) as year from player_seasons
-  where league = '' group by competition
+  select competition, max(year) as year from stat_seasons group by competition
 ), totals as (
   select ps.player_id, ps.competition, max(ps.label)::text as season,
          sum(ps.games)::integer as games,
@@ -194,11 +193,11 @@ func (q *Queries) ListResearchPlayers(ctx context.Context, arg ListResearchPlaye
 
 const listResearchSeasonPool = `-- name: ListResearchSeasonPool :many
 with selected as (
- select ps.player_id, ps.competition, ps.year, ps.label, ps.team, ps.league, ps.games, ps.stats, ps.synced_at, ps.conference from player_seasons ps
+ select ps.player_id, ps.competition, ps.year, ps.label, ps.team, ps.league, ps.games, ps.stats, ps.synced_at, ps.conference, ps.points, ps.eligible_points from player_seasons ps
  where ps.league = '' and ps.competition = $1
  and (ps.competition <> 'cbb' or cardinality($2::text[]) = 0 or ps.conference = any($2::text[]))
  and (ps.label = $3::text or ($3 = '' and ps.year = (
-   select max(year) from player_seasons where competition = $1 and league = '')))
+   select max(year) from stat_seasons where competition = $1)))
 ), totals as (
  select player_id, competition, max(label)::text as season,
         sum(games)::integer as games, string_agg(distinct nullif(team,''), ' / ')::text as team
@@ -283,10 +282,10 @@ func (q *Queries) ListResearchSeasonPool(ctx context.Context, arg ListResearchSe
 }
 
 const listResearchSeasons = `-- name: ListResearchSeasons :many
-select distinct ps.label, ps.year
-from player_seasons ps
-where ps.league = '' and ($1::text = '' or ps.competition = $1)
-order by ps.year desc, ps.label desc
+select distinct s.label, s.year
+from stat_seasons s
+where $1::text = '' or s.competition = $1
+order by s.year desc, s.label desc
 `
 
 type ListResearchSeasonsRow struct {

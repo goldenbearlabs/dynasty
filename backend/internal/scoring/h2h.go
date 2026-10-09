@@ -238,25 +238,65 @@ func regularSeasonResults(ctx context.Context, q *db.Queries, league db.League, 
 	if err != nil {
 		return nil, err
 	}
+	settled, err := q.ListPeriodScores(ctx, season.ID)
+	if err != nil {
+		return nil, err
+	}
+	points := map[[2]pgtype.UUID]float64{} // period and franchise
+	done := map[pgtype.UUID]bool{}
+	for _, s := range settled {
+		points[[2]pgtype.UUID{s.PeriodID, s.FranchiseID}] = s.Points
+		done[s.PeriodID] = true
+	}
 	var results []result
 	for _, period := range periods {
 		if period.IsPlayoff || !finished(period) {
 			continue
 		}
-		scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time)
-		if err != nil {
-			return nil, err
-		}
+		var played []db.ListSeasonMatchupsRow
 		for _, m := range matchups {
 			if m.PeriodID == period.ID && m.AwayFranchiseID.Valid {
-				results = append(results, result{
-					Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
-					HomePoints: scored[m.HomeFranchiseID].Points, AwayPoints: scored[m.AwayFranchiseID].Points,
-				})
+				played = append(played, m)
 			}
+		}
+		if !done[period.ID] && len(played) > 0 {
+			if err := settle(ctx, q, league, period, played, points); err != nil {
+				return nil, err
+			}
+		}
+		for _, m := range played {
+			results = append(results, result{
+				Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+				HomePoints: points[[2]pgtype.UUID{period.ID, m.HomeFranchiseID}],
+				AwayPoints: points[[2]pgtype.UUID{period.ID, m.AwayFranchiseID}],
+			})
 		}
 	}
 	return results, nil
+}
+
+// settle works out what each side of a finished period's matchups scored
+// and stores it, so the period is never added up again unless something
+// behind it changes: the database clears a period's scores when it does.
+func settle(ctx context.Context, q *db.Queries, league db.League, period db.Period, played []db.ListSeasonMatchupsRow, points map[[2]pgtype.UUID]float64) error {
+	return q.Tx(ctx, func(q *db.Queries) error {
+		if err := q.LockPeriod(ctx, period.ID); err != nil {
+			return err
+		}
+		scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time)
+		if err != nil {
+			return err
+		}
+		for _, m := range played {
+			for _, id := range []pgtype.UUID{m.HomeFranchiseID, m.AwayFranchiseID} {
+				points[[2]pgtype.UUID{period.ID, id}] = scored[id].Points
+				if err := q.InsertPeriodScore(ctx, db.InsertPeriodScoreParams{PeriodID: period.ID, FranchiseID: id, Points: scored[id].Points}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func finished(period db.Period) bool {

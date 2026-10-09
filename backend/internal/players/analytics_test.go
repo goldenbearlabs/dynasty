@@ -247,7 +247,7 @@ func TestBasketballAliasesShareReplacementDemand(t *testing.T) {
 	}
 }
 
-func TestMLBLeagueIndexUsesComparableRoles(t *testing.T) {
+func TestMLBLeagueIndexUsesAllRolesAndSeasonTotals(t *testing.T) {
 	rows := []db.ListResearchPlayersRow{}
 	for _, group := range []string{"hitter", "starter", "reliever", "mixed"} {
 		scale := 1.0
@@ -282,33 +282,33 @@ func TestMLBLeagueIndexUsesComparableRoles(t *testing.T) {
 	}
 	rules := map[string]analyticRules{"mlb": {Rules: settings.League{Scoring: map[string]float64{"pts": 1}, Lineup: settings.Lineup{Slots: []settings.Slot{{Name: "1B", Count: 1, Positions: []string{"1B"}}, {Name: "P", Count: 2, Positions: []string{"P"}}}}}, Managers: 1}}
 	result := analyze(rows, rules, ResearchFilter{})
+	// Independent arithmetic over all 12 season totals, not role distributions.
+	mean := 100.0
+	variance := 0.0
+	for _, row := range rows {
+		variance += math.Pow(row.Points-mean, 2) / float64(len(rows))
+	}
 	for _, p := range result.Players {
-		want := 100.0
-		if p.FullName[len(p.FullName)-1] == 'B' {
-			want -= 15 * math.Sqrt(1.5)
-		}
-		if p.FullName[len(p.FullName)-1] == 'D' {
-			want += 15 * math.Sqrt(1.5)
-		}
+		want := 100 + 15*(p.Points-mean)/math.Sqrt(variance)
 		if p.LeagueIndex == nil || math.Abs(*p.LeagueIndex-want) > 1e-9 {
-			t.Fatalf("role scale biased League+: %+v", p)
+			t.Fatalf("not league-wide season production: %+v", p)
 		}
-		if p.NormalizationGroup == "League" || p.NormalizationGroup == "Pitchers (role unknown)" {
-			t.Fatal("historical pitching workload not used")
+		if p.NormalizationGroup != "League" {
+			t.Fatal("Index+ must share one league-wide benchmark")
 		}
 	}
 	selected := analyze(rows, rules, ResearchFilter{Position: "SP"})
 	if selected.Total != 3 {
 		t.Fatal("generic P labels should be filterable by season pitching role")
 	}
-	// A two-way cohort with no peers has no invented comparable index.
+	// A two-way player compares with all qualified league peers.
 	row := rows[0]
 	row.Positions = []string{"TWP"}
 	row.FullName = "Two-way"
 	rows = append(rows, row)
 	result = analyze(rows, rules, ResearchFilter{Search: "Two-way"})
-	if result.Players[0].LeagueIndex != nil {
-		t.Fatal("singleton two-way role must not get an index")
+	if result.Players[0].LeagueIndex == nil {
+		t.Fatal("a two-way player must share the league-wide benchmark")
 	}
 }
 
@@ -377,5 +377,48 @@ func TestPitcherWorkloadQualification(t *testing.T) {
 	earlyResult := analyze(rows, rules, ResearchFilter{Search: "Early reliever"})
 	if !earlyResult.Players[0].Qualified || earlyResult.Players[0].BenchmarkMinimumGames != 5 {
 		t.Fatal("previous season workload contaminated new season")
+	}
+}
+
+func TestSeasonIndexSeparatesAvailabilityFromRate(t *testing.T) {
+	rows, rules := analyticFixture()
+	for i := range rows {
+		if rows[i].Competition != "small" {
+			continue
+		}
+		if rows[i].FullName == "smallD" {
+			rows[i].Games = 5
+			rows[i].Points = 200
+		}
+		if rows[i].FullName == "smallB" {
+			rows[i].Games = 10
+			rows[i].Points = 200
+		}
+	}
+	result := analyze(rows, rules, ResearchFilter{Competition: "small"})
+	var short, full AnalyticsPlayer
+	for _, p := range result.Players {
+		if p.FullName == "smallD" {
+			short = p
+		}
+		if p.FullName == "smallB" {
+			full = p
+		}
+	}
+	if short.LeagueIndex == nil || full.LeagueIndex == nil || *short.LeagueIndex != *full.LeagueIndex || *short.Percentile != *full.Percentile {
+		t.Fatal("equal season production must share Index+ and percentile despite different rates")
+	}
+	if *short.PositionIndex <= *full.PositionIndex || *short.PARPerGame <= *full.PARPerGame {
+		t.Fatal("positional rate metrics must remain rate based")
+	}
+	// Display-only positional/search/owner filters must not rebase Index+.
+	filtered := analyze(rows, rules, ResearchFilter{Competition: "small", Position: "PG", Search: "smallD", Owner: "champ"})
+	if len(filtered.Players) != 1 || *filtered.Players[0].LeagueIndex != *short.LeagueIndex {
+		t.Fatal("filters rebased season benchmark")
+	}
+	for _, b := range result.Benchmarks {
+		if b.Position == "PG" && (b.MeanIndex == nil || math.Abs(*b.MeanIndex-100) > 1e-9) {
+			t.Fatal("league analysis position averages must use season Index+")
+		}
 	}
 }

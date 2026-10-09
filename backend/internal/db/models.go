@@ -10,6 +10,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CacheRevision struct {
+	Singleton           bool        `json:"singleton"`
+	Namespace           pgtype.UUID `json:"namespace"`
+	Research            int64       `json:"research"`
+	Public              int64       `json:"public"`
+	ResearchTransaction int64       `json:"research_transaction"`
+	PublicTransaction   int64       `json:"public_transaction"`
+}
+
 type Draft struct {
 	ID               pgtype.UUID        `json:"id"`
 	DynastyID        pgtype.UUID        `json:"dynasty_id"`
@@ -143,6 +152,12 @@ type Period struct {
 	IsPlayoff bool        `json:"is_playoff"`
 }
 
+type PeriodScore struct {
+	PeriodID    pgtype.UUID `json:"period_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Points      float64     `json:"points"`
+}
+
 type Player struct {
 	ID              pgtype.UUID        `json:"id"`
 	Competition     string             `json:"competition"`
@@ -172,16 +187,18 @@ type PlayerNickname struct {
 }
 
 type PlayerSeason struct {
-	PlayerID    pgtype.UUID        `json:"player_id"`
-	Competition string             `json:"competition"`
-	Year        int32              `json:"year"`
-	Label       string             `json:"label"`
-	Team        string             `json:"team"`
-	League      string             `json:"league"`
-	Games       int32              `json:"games"`
-	Stats       json.RawMessage    `json:"stats"`
-	SyncedAt    pgtype.Timestamptz `json:"synced_at"`
-	Conference  string             `json:"conference"`
+	PlayerID       pgtype.UUID        `json:"player_id"`
+	Competition    string             `json:"competition"`
+	Year           int32              `json:"year"`
+	Label          string             `json:"label"`
+	Team           string             `json:"team"`
+	League         string             `json:"league"`
+	Games          int32              `json:"games"`
+	Stats          json.RawMessage    `json:"stats"`
+	SyncedAt       pgtype.Timestamptz `json:"synced_at"`
+	Conference     string             `json:"conference"`
+	Points         pgtype.Float8      `json:"points"`
+	EligiblePoints pgtype.Float8      `json:"eligible_points"`
 }
 
 type ProTeam struct {
@@ -246,6 +263,13 @@ type StatLine struct {
 	GameID   pgtype.UUID     `json:"game_id"`
 	PlayerID pgtype.UUID     `json:"player_id"`
 	Stats    json.RawMessage `json:"stats"`
+	Points   pgtype.Float8   `json:"points"`
+}
+
+type StatSeason struct {
+	Competition string `json:"competition"`
+	Year        int32  `json:"year"`
+	Label       string `json:"label"`
 }
 
 type Trade struct {

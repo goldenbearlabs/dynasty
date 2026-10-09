@@ -21,7 +21,6 @@
  import { teamIdentity } from '#lib/identity.ts';
  import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
-	import TradeAsset from '#lib/TradeAsset.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
@@ -156,9 +155,11 @@
 			.filter((d): d is string => d !== null)
 			.sort()[0];
 
-	// Picks in the drafts to come, by year.
-	const pickYears = $derived(
-		[...new Set(data.picks.map((p) => p.year))].sort().map((year) => ({ year, picks: data.picks.filter((p) => p.year === year) }))
+	const pickSports = $derived(
+		[...new Set(data.picks.map(p => [...p.competitions].sort().join(',')))].sort().map(key => {
+			const picks = data.picks.filter(p => [...p.competitions].sort().join(',') === key);
+			return { key, sports: key ? key.split(',') : [], count: picks.length, years: [...new Set(picks.map(p => p.year))].sort((a,b) => a-b).map(year => ({year, picks: picks.filter(p => p.year === year).toSorted((a,b) => a.round-b.round || a.draft_name.localeCompare(b.draft_name))})) };
+		})
 	);
 
 	// ---- one league ----
@@ -193,7 +194,7 @@
 	<header class="head">
 		<Crest name={league ? roster?.team_name || team.name : team.name} src={league ? roster?.image_url || team.image_url : team.image_url} size={56} />
 		<div class="grow">
-			<h1>{league ? roster?.team_name || team.name : team.name}</h1>
+			<div class="team-title"><h1>{league ? roster?.team_name || team.name : team.name}</h1> {#if canEdit}{#key team.id}<TeamIdentityEditor franchise={team} {leagues} identities={data.dynasty?.team_identities ?? []} />{/key}{/if}</div>
  {#if league}<p class="muted small-text">{team.name} · {league.name}</p>{/if}
 			<div class="row muted">
 				Managed by {team.manager_name}
@@ -209,7 +210,6 @@
 	</header>
 
 	<Tabs {tabs} bind:value={() => view, show} label="View" />
- {#if canEdit}{#key team.id}<TeamIdentityEditor franchise={team} {leagues} identities={data.dynasty?.team_identities ?? []} />{/key}{/if}
 
 	{#if canEdit && !mine}
 		<p class="card small-text"><span class="pill gold">Commissioner</span> Changes you make here skip the roster rules.</p>
@@ -282,25 +282,21 @@
 			{#if data.picks.length === 0}
 				<p class="muted small-text pad">No picks in upcoming drafts.</p>
 			{:else}
-				<p class="muted small-text pad">
-					Every pick in the drafts to come, in every league. Any of them can be traded, for players or picks in any league,
-					until its draft starts.{#if mine} <a href="/trades/new">Start a trade</a>.{/if}
-				</p>
-				{#each pickYears as group (group.year)}
-					<h3 class="eyebrow listhead">{group.year} <span class="muted">· {group.picks.length} {group.picks.length === 1 ? 'pick' : 'picks'}</span></h3>
-					<ul class="picks">
-						{#each group.picks as pick (pick.id)}
-							<li>
-								<TradeAsset
-									draft={pick.draft_name}
-									round={pick.round}
-									sport={pick.competitions.length === 1 ? pick.competitions[0] : ''}
-									via={pick.original_franchise_id !== team.id ? nameOf(pick.original_franchise_id) : ''}
-								/>
-							</li>
+				<div class="picks-intro muted small-text"><span>{data.picks.length} picks · Tradable until each draft starts.</span>{#if mine}<a href="/trades/new">Trade picks</a>{/if}</div>
+				<div class="pick-sports">
+				{#each pickSports as group (group.key)}
+					<section class="pick-sport">
+						<h3 class="sport-heading">{#each group.sports as sport}<SportBadge {sport} solid />{:else}<span>Shared draft</span>{/each}<span class="muted small-text">{group.count} {group.count === 1 ? 'pick' : 'picks'}</span></h3>
+						{#each group.years as year (year.year)}
+							<div class="pick-year"><h4>{year.year}</h4><ul class="picks">
+							{#each year.picks as pick (pick.id)}
+								<li><strong>Round {pick.round}</strong><span class="pick-detail"><span>{pick.draft_name}</span>{#if pick.original_franchise_id !== team.id}<span class="muted">via {nameOf(pick.original_franchise_id)}</span>{/if}</span></li>
+							{/each}
+							</ul></div>
 						{/each}
-					</ul>
+					</section>
 				{/each}
+				</div>
 			{/if}
 		</section>
 	{:else if roster && now}
@@ -625,15 +621,10 @@
 		font: 650 0.85rem var(--mono);
 		color: var(--gold);
 	}
-	.picks {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-	}
-	.picks li {
-		padding: 0.7rem 1rem;
-		border-bottom: 1px solid var(--rule);
-	}
+ .team-title{display:flex;align-items:center;gap:.6rem}.team-title h1{overflow-wrap:anywhere}.grow{min-width:0}
+ .picks-intro{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;padding:.65rem 1rem}
+ .pick-sports{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:.75rem;padding:0 1rem 1rem;align-items:start}
+ .pick-sport{border:1px solid var(--rule);border-radius:8px;overflow:hidden}.sport-heading{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.6rem .75rem;background:var(--surface-2)}.sport-heading > .muted{margin-left:auto;font-weight:400}
+ .pick-year{display:grid;grid-template-columns:3rem minmax(0,1fr);gap:.5rem;padding:.5rem .75rem;border-top:1px solid var(--rule)}.pick-year h4{font:650 .8rem var(--mono);padding-top:.25rem;color:var(--ink-faint)}
+ .picks{list-style:none;margin:0;padding:0}.picks li{display:grid;grid-template-columns:4.5rem minmax(0,1fr);gap:.5rem;padding:.25rem 0;font-size:.8rem;align-items:baseline}.pick-detail{display:grid;gap:.1rem;overflow-wrap:anywhere}
 </style>
