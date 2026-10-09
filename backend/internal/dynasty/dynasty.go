@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -125,6 +126,28 @@ func (s *Service) Create(ctx context.Context, in Setup) (db.User, error) {
 		return nil
 	})
 	return commissioner, err
+}
+
+// AddLeague gives an existing dynasty a league in one more sport, starting
+// from that sport's default rules. Every franchise is in it at once, with
+// an empty roster.
+func (s *Service) AddLeague(ctx context.Context, dynastyID pgtype.UUID, key string) (db.League, error) {
+	c, ok := s.registry.Get(key)
+	if !ok {
+		return db.League{}, problem.New("Unknown sport %q.", key)
+	}
+	rules := c.Defaults
+	rules.Continuity = nil // carrying players into another league is the commissioner's to switch on
+	raw, _ := json.Marshal(rules)
+
+	league, err := db.New(s.pool).CreateLeague(ctx, db.CreateLeagueParams{
+		DynastyID: dynastyID, Competition: c.Key, Name: c.Name, Settings: raw,
+	})
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return db.League{}, problem.New("This dynasty already has a %s league.", c.Name)
+	}
+	return league, err
 }
 
 // UpdateLeagueSettings validates and stores a league's rules.

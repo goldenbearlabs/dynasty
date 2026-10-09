@@ -42,7 +42,9 @@
 		{#if section === 'franchises'}
 			<Invites />
 		{:else if section === 'rules'}
-			<Rules dynasty={data.dynasty} competitions={data.competitions} />
+			{#key data.dynasty.leagues.length}
+				<Rules dynasty={data.dynasty} competitions={data.competitions} />
+			{/key}
 		{:else if section === 'seasons'}
 			<Seasons dynasty={data.dynasty} competitions={data.competitions} />
 		{:else if section === 'drafts'}

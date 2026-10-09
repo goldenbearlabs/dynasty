@@ -97,3 +97,34 @@ func nba(client *ingest.Client) Competition {
 		Prospects: espn.NewDraft(client, espn.Draft{Path: "basketball/leagues/nba", Provider: basketballProvider, Month: time.June, Classes: 3}),
 	}
 }
+
+// The WNBA's athlete ids are shared with the women's college game, not
+// with the men's leagues above.
+const womensBasketballProvider = "espn_womens_basketball"
+
+func wnba(client *ingest.Client) Competition {
+	rules := defaults()
+	rules.Roster.Main, rules.Roster.Reserve = 10, 4
+	rules.Lineup.Slots = []settings.Slot{
+		slot("G", 2, "G", "PG", "SG"),
+		slot("F", 2, "F", "SF", "PF"),
+		slot("C", 1, "C"),
+		slot("UTIL", 1, settings.AnyPosition),
+	}
+	rules.Scoring = basketballScoring
+
+	source := espn.New(client, espn.League{
+		Path: "basketball/wnba", Provider: womensBasketballProvider, Stats: basketballFeed,
+		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.May, // numbered by the year it is played in
+	})
+	return Competition{
+		Key: "wnba", Name: "WNBA",
+		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
+		Season: [2]string{"05-08", "09-25"},
+		Source: source, Games: source, Seasons: source,
+		// Recent picks who are not on a roster, and the next class once ESPN ranks it.
+		Prospects: espn.NewDraft(client, espn.Draft{
+			Path: "basketball/leagues/wnba", Provider: womensBasketballProvider, Month: time.April, Classes: 2,
+		}),
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -397,6 +398,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 			line := ingest.SeasonLine{Provider: s.Provider, ProviderID: a.Athlete.ID, Season: ingest.Season{
 				Year: year, Label: res.RequestedSeason.DisplayName, Team: a.Athlete.TeamShortName, Stats: map[string]float64{},
 			}}
+			averages := map[string]float64{} // per game, by canonical stat
 			for _, group := range a.Categories {
 				counted := slices.Contains(s.SeasonGroups, group.Name)
 				for i, name := range names[group.Name] {
@@ -411,6 +413,12 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 						if !counted {
 							continue
 						}
+						if base, isAverage := strings.CutPrefix(stat, "avg"); isAverage && base != "" {
+							if canonical, ok := s.Stats[strings.ToLower(base[:1])+base[1:]]; ok {
+								averages[canonical] = value
+							}
+							continue
+						}
 						canonical, ok := s.Stats[group.Name+"."+stat]
 						if !ok {
 							canonical, ok = s.Stats[stat]
@@ -419,6 +427,14 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 							line.Stats[canonical] += value
 						}
 					}
+				}
+			}
+			// Some leagues (the WNBA) list most stats only per game. The total
+			// is then rebuilt from the average, which the feed rounds to one
+			// decimal, so it can be off by a few over a season.
+			for canonical, average := range averages {
+				if _, listed := line.Stats[canonical]; !listed {
+					line.Stats[canonical] = math.Round(average * float64(line.Games))
 				}
 			}
 			if line.Games > 0 {

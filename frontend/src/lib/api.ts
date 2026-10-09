@@ -559,6 +559,8 @@ export const updateDynasty = (name: string, settings: DynastySettings) =>
 export const updateLeagueSettings = (leagueId: string, settings: LeagueSettings) =>
 	request<void>('PUT', `/leagues/${leagueId}/settings`, settings);
 
+export const addLeague = (competition: string) => request<League>('POST', '/admin/leagues', { competition });
+
 export const getSession = () => request<Session | null>('GET', '/session');
 export const logIn = (credentials: Credentials) => request<void>('POST', '/auth/login', credentials);
 export const logOut = () => request<void>('POST', '/auth/logout');

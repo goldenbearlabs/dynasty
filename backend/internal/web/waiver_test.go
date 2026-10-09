@@ -234,4 +234,25 @@ func TestWaiverFlow(t *testing.T) {
 	if got := order(); got != "Cy Bob Ann " {
 		t.Errorf("waiver order = %q after Ann's win", got)
 	}
+
+	// --- a sport added later ------------------------------------------------
+	wnba := map[string]string{"competition": "wnba"}
+	bob.want(http.StatusForbidden, "POST", "/api/admin/leagues", wnba, nil)
+	ann.want(http.StatusCreated, "POST", "/api/admin/leagues", wnba, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/admin/leagues", wnba, nil) // one league per sport
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/admin/leagues", map[string]string{"competition": "curling"}, nil)
+	ann.want(http.StatusOK, "GET", "/api/dynasty", nil, &current)
+	if len(current.Leagues) != 2 {
+		t.Fatalf("dynasty has %d leagues after adding one, want 2", len(current.Leagues))
+	}
+	// The new league's default rules are valid as they stand.
+	var added struct {
+		Leagues []struct{ ID, Competition string }
+	}
+	ann.want(http.StatusOK, "GET", "/api/dynasty", nil, &added)
+	for i, l := range added.Leagues {
+		if l.Competition == "wnba" {
+			ann.want(http.StatusNoContent, "PUT", "/api/leagues/"+l.ID+"/settings", current.Leagues[i].Settings, nil)
+		}
+	}
 }

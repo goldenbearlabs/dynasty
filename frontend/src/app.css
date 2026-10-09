@@ -33,6 +33,7 @@
 	/* one colour per sport */
 	--cbb: #d9510a;
 	--nba: #6741d9;
+	--wnba: #c2255c;
 	--nhl: #0b7285;
 	--nfl: #2b8a3e;
 	--mlb: #c92a2a;
@@ -70,6 +71,7 @@
 
 		--cbb: #ff9547;
 		--nba: #a48bff;
+		--wnba: #ff8fb3;
 		--nhl: #4fd1e0;
 		--nfl: #62d27a;
 		--mlb: #ff7676;
@@ -81,6 +83,7 @@
 /* Anything inside an element marked with a sport can use var(--sport). */
 [data-sport='cbb'] { --sport: var(--cbb); }
 [data-sport='nba'] { --sport: var(--nba); }
+[data-sport='wnba'] { --sport: var(--wnba); }
 [data-sport='nhl'] { --sport: var(--nhl); }
 [data-sport='nfl'] { --sport: var(--nfl); }
 [data-sport='mlb'] { --sport: var(--mlb); }

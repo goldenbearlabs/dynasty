@@ -37,7 +37,7 @@ type Stat struct {
 type Registry []Competition
 
 func NewRegistry(client *ingest.Client) Registry {
-	return Registry{cbb(client), nba(client), nhl(client), nfl(client), mlb(client)}
+	return Registry{cbb(client), nba(client), wnba(client), nhl(client), nfl(client), mlb(client)}
 }
 
 func (r Registry) Get(key string) (Competition, bool) {

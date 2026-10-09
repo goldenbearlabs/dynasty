@@ -65,6 +65,27 @@ func (s *Server) createDynasty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+// addLeague starts a league in one more sport for the existing dynasty.
+func (s *Server) addLeague(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Competition string `json:"competition"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	d, err := s.Queries.GetDynasty(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	league, err := s.Dynasty.AddLeague(r.Context(), d.ID, body.Competition)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, league)
+}
+
 func (s *Server) updateDynasty(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name     string           `json:"name"`

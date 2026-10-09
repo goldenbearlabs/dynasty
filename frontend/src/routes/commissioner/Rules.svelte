@@ -2,7 +2,7 @@
 	// The dynasty's name and overall title, and each league's rules.
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
-	import { updateDynasty, updateLeagueSettings, type Competition, type Dynasty } from '#lib/api.ts';
+	import { addLeague, updateDynasty, updateLeagueSettings, type Competition, type Dynasty } from '#lib/api.ts';
 	import LeagueSettingsForm from '#lib/LeagueSettingsForm.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 
@@ -32,6 +32,10 @@
 			failed = { id, message: (e as Error).message };
 		}
 	}
+
+	// Sports the dynasty does not play yet.
+	const unplayed = $derived(competitions.filter((c) => !leagues.some((l) => l.competition === c.key)));
+	let adding = $state('');
 
 	const saveDynasty = () =>
 		save('dynasty', () =>
@@ -86,6 +90,28 @@
 			)}
 		</details>
 	{/each}
+
+	{#if unplayed.length > 0}
+		<div class="card stack tight">
+			<h3>Add a sport</h3>
+			<p class="muted small-text">
+				Every franchise joins the new league with an empty roster. It starts with that sport's default rules,
+				which you can then change above.
+			</p>
+			{#if failed.id === 'league'}<p role="alert">{failed.message}</p>{/if}
+			<div class="row">
+				<select aria-label="Sport to add" bind:value={adding}>
+					<option value="">Choose a sport</option>
+					{#each unplayed as c (c.key)}
+						<option value={c.key}>{c.name}</option>
+					{/each}
+				</select>
+				<button class="primary" disabled={!adding} onclick={() => save('league', async () => void (await addLeague(adding)))}>
+					Add league
+				</button>
+			</div>
+		</div>
+	{/if}
 </section>
 
 <style>
