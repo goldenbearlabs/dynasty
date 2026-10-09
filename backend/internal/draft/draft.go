@@ -74,7 +74,7 @@ func loadState(ctx context.Context, q *db.Queries, draftID pgtype.UUID) (State, 
 // onClock is the next pick in order that is neither made nor skipped.
 func onClock(picks []db.ListDraftPicksRow) *db.ListDraftPicksRow {
 	for i := range picks {
-		if !picks[i].PlayerID.Valid && !picks[i].SkippedAt.Valid {
+		if !picks[i].PlayerID.Valid && !picks[i].SkippedAt.Valid && !picks[i].PassedAt.Valid {
 			return &picks[i]
 		}
 	}
@@ -145,7 +145,7 @@ func (s *Service) Pick(ctx context.Context, in PickRequest) error {
 		switch {
 		case in.PickID.Valid:
 			i := slices.IndexFunc(picks, func(p db.ListDraftPicksRow) bool { return p.ID == in.PickID })
-			if i < 0 || picks[i].PlayerID.Valid || !mine(&picks[i]) {
+			if i < 0 || picks[i].PlayerID.Valid || picks[i].PassedAt.Valid || !mine(&picks[i]) {
 				return problem.New("That pick is not yours to make.")
 			}
 			if current == nil || picks[i].ID != current.ID {
@@ -158,7 +158,7 @@ func (s *Service) Pick(ctx context.Context, in PickRequest) error {
 			pick = current
 		default:
 			i := slices.IndexFunc(picks, func(p db.ListDraftPicksRow) bool {
-				return !p.PlayerID.Valid && p.SkippedAt.Valid && p.CurrentFranchiseID == in.Actor.ID
+				return !p.PlayerID.Valid && p.SkippedAt.Valid && !p.PassedAt.Valid && p.CurrentFranchiseID == in.Actor.ID
 			})
 			if i < 0 {
 				return problem.New("It is not your pick.")
@@ -171,6 +171,31 @@ func (s *Service) Pick(ctx context.Context, in PickRequest) error {
 		}
 		// Making up a skipped pick leaves the clock of whoever is up alone.
 		return advance(ctx, q, draft, current != nil && pick.ID == current.ID)
+	})
+}
+
+// Pass gives up the pick on the clock for good: the franchise takes nobody
+// with it, and it cannot be made up later. Only a rookie draft allows it.
+func (s *Service) Pass(ctx context.Context, draftID pgtype.UUID, actor db.Franchise) error {
+	return s.change(ctx, draftID, false, func(q *db.Queries, draft db.Draft) error {
+		switch {
+		case draft.Status != "live":
+			return problem.New("This draft is not live.")
+		case draft.Kind == "startup":
+			return problem.New("Picks cannot be passed in a startup draft.")
+		}
+		picks, err := q.ListDraftPicks(ctx, draftID)
+		if err != nil {
+			return err
+		}
+		current := onClock(picks)
+		if current == nil || (current.CurrentFranchiseID != actor.ID && !actor.IsCommissioner) {
+			return problem.New("It is not your pick.")
+		}
+		if err := q.PassDraftPick(ctx, current.ID); err != nil {
+			return err
+		}
+		return advance(ctx, q, draft, true)
 	})
 }
 
@@ -231,6 +256,14 @@ func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franch
 	if err != nil {
 		return err
 	}
+	if draft.Kind != "startup" {
+		// A rookie draft takes only players new to the pool since the league
+		// last drafted, and holds them as rights until they are signed.
+		if last := leagues[i].LastDraftAt; last.Valid && !player.EligibleSince.Time.After(last.Time) {
+			return problem.New("%s was already in the pool at the last draft, so he is a free agent, not a rookie.", player.FullName)
+		}
+		list = settings.ListRights
+	}
 
 	if err := roster.AddIn(ctx, q, roster.Change{
 		League: leagues[i], Franchise: franchise, PlayerID: playerID, List: list, Source: roster.Draft, PickID: pickID,
@@ -251,7 +284,7 @@ func advance(ctx context.Context, q *db.Queries, draft db.Draft, restartClock bo
 	if err != nil {
 		return err
 	}
-	if draft.Status == "live" && !slices.ContainsFunc(picks, func(p db.ListDraftPicksRow) bool { return !p.PlayerID.Valid }) {
+	if draft.Status == "live" && !slices.ContainsFunc(picks, func(p db.ListDraftPicksRow) bool { return !p.PlayerID.Valid && !p.PassedAt.Valid }) {
 		return complete(ctx, q, draft)
 	}
 
@@ -271,7 +304,25 @@ func complete(ctx context.Context, q *db.Queries, draft db.Draft) error {
 	if err := q.SetDraftStatus(ctx, db.SetDraftStatusParams{ID: draft.ID, Status: "complete"}); err != nil {
 		return err
 	}
-	return q.MarkLeaguesDrafted(ctx, draft.ID)
+	if err := q.MarkLeaguesDrafted(ctx, draft.ID); err != nil {
+		return err
+	}
+	// The picks of a rookie draft now have their league's signing window.
+	leagues, err := q.ListDraftLeagues(ctx, draft.ID)
+	if err != nil {
+		return err
+	}
+	days := 0
+	for _, league := range leagues {
+		rules, err := settings.Parse[settings.League](league.Settings)
+		if err != nil {
+			return err
+		}
+		days = max(days, rules.Draft.SigningDays)
+	}
+	return q.StartSigningWindow(ctx, db.StartSigningWindowParams{
+		DraftID: draft.ID, RightsUntil: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true},
+	})
 }
 
 // change runs fn with the draft locked, then tells the room what changed.
@@ -294,6 +345,13 @@ func (s *Service) change(ctx context.Context, draftID pgtype.UUID, structural bo
 		return err
 	}
 	s.publish(ctx, draftID, before, structural)
+	// A draft that has just finished leaves a year without one on the
+	// books: the drafts further ahead are created so their picks can be traded.
+	if after, err := db.New(s.pool).GetDraft(ctx, draftID); err == nil && after.Status == "complete" && before.Draft.Status != "complete" {
+		if _, err := s.CreateFuture(ctx, after.DynastyID); err != nil {
+			s.log.Warn("create future drafts", "err", err)
+		}
+	}
 	return nil
 }
 

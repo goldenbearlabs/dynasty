@@ -81,8 +81,9 @@ func defaults() settings.League {
 			NewEntrantsDraftOnly: true,
 		},
 		Waivers: settings.Waivers{Mode: settings.WaiversNone, Days: 2, Budget: 100},
-		Draft:   settings.Draft{Rounds: 3, Order: settings.OrderLinear, FutureYears: 3},
-		Trades:  settings.Trades{Approval: settings.ApprovalNone},
+		// Rounds 0: half the reserve list, rounded up. A week to sign the picks.
+		Draft:  settings.Draft{Order: settings.OrderLinear, FutureYears: 3, SigningDays: 7},
+		Trades: settings.Trades{Approval: settings.ApprovalNone},
 	}
 }
 

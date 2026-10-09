@@ -97,11 +97,25 @@ type Waivers struct {
 	Budget int    `json:"budget"` // FAAB only: what each franchise can bid in a season
 }
 
+// Draft holds the rules of a league's yearly rookie draft.
 type Draft struct {
+	// Rounds in a rookie draft. 0 means half the reserve list, rounded up,
+	// so the draft class is sized to the list it has to be signed to.
 	Rounds           int    `json:"rounds"`
 	Order            string `json:"order"`              // OrderLinear | OrderSnake
 	PickClockSeconds int    `json:"pick_clock_seconds"` // 0 means untimed
 	FutureYears      int    `json:"future_years"`       // how far ahead picks can be traded
+	// SigningDays is how long after a rookie draft a franchise has to sign
+	// its picks to the reserve list before they are released.
+	SigningDays int `json:"signing_days"`
+}
+
+// RookieRounds is how many rounds the league's rookie draft has.
+func (l League) RookieRounds() int {
+	if l.Draft.Rounds > 0 {
+		return l.Draft.Rounds
+	}
+	return max(1, (l.Roster.Reserve+1)/2)
 }
 
 type Trades struct {
@@ -148,6 +162,9 @@ const (
 
 	ListMain    = "main"
 	ListReserve = "reserve"
+	// ListRights holds rookie-draft picks not yet signed: owned, but on
+	// neither list and counted against no limit.
+	ListRights = "rights"
 
 	AnyPosition = "*"
 )
@@ -196,7 +213,8 @@ func (l League) Validate(c Catalog) error {
 		oneOf("waivers.mode", l.Waivers.Mode, WaiversNone, WaiversRolling, WaiversFAAB),
 		between("waivers.days", l.Waivers.Days, 1, 14),
 		between("waivers.budget", l.Waivers.Budget, 0, 100000),
-		between("draft.rounds", l.Draft.Rounds, 1, 100),
+		between("draft.rounds", l.Draft.Rounds, 0, 100),
+		between("draft.signing_days", l.Draft.SigningDays, 1, 60),
 		oneOf("draft.order", l.Draft.Order, OrderLinear, OrderSnake),
 		between("draft.pick_clock_seconds", l.Draft.PickClockSeconds, 0, 7*24*3600),
 		between("draft.future_years", l.Draft.FutureYears, 0, 10),

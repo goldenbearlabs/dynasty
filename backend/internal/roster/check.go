@@ -17,10 +17,11 @@ type Entry struct {
 	List              string
 	Prospect          bool
 	StarterIneligible bool
+	Rookie            bool // signed from a rookie draft, and still on the reserve list
 }
 
 func reserveEligible(limits settings.Roster, e Entry) bool {
-	return limits.ReserveEligibility == settings.ReserveAnyone || e.Prospect ||
+	return limits.ReserveEligibility == settings.ReserveAnyone || e.Prospect || e.Rookie ||
 		(limits.ReserveEligibility == settings.ReserveProspectsOrIneligible && e.StarterIneligible)
 }
 
@@ -31,6 +32,7 @@ func Overage(limits settings.Roster, entries []Entry) int {
 	main, reserve, ineligible := 0, 0, 0
 	for _, e := range entries {
 		switch {
+		case e.List == settings.ListRights: // unsigned picks are on no list
 		case e.List == settings.ListMain:
 			main++
 		case !reserveEligible(limits, e):
@@ -62,6 +64,9 @@ func Check(limits settings.Roster, before, after []Entry) error {
 func explain(limits settings.Roster, entries []Entry) error {
 	main, reserve := 0, 0
 	for _, e := range entries {
+		if e.List == settings.ListRights {
+			continue
+		}
 		if e.List == settings.ListMain {
 			main++
 			continue

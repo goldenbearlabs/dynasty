@@ -95,11 +95,22 @@ update draft_picks set
   auto_picked = @auto_picked
 where id = @id;
 
+-- name: PassDraftPick :exec
+update draft_picks set passed_at = now() where id = @id;
+
+-- name: StartupDraftExists :one
+-- Whether a league has ever been in a startup draft, finished or not.
+select exists (
+  select 1 from drafts d
+  join draft_leagues dl on dl.draft_id = d.id
+  where d.kind = 'startup' and dl.league_id = @league_id
+);
+
 -- name: SkipDraftPick :exec
 update draft_picks set skipped_at = now() where id = @id;
 
 -- name: ClearDraftPick :exec
-update draft_picks set player_id = null, league_id = null, picked_at = null, auto_picked = false, skipped_at = null
+update draft_picks set player_id = null, league_id = null, picked_at = null, auto_picked = false, skipped_at = null, passed_at = null
 where id = @id;
 
 -- name: LastMadeDraftPick :one

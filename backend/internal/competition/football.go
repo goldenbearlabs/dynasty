@@ -31,7 +31,6 @@ func nfl(client *ingest.Client) Competition {
 		"receptions": 1, "rec_yds": 0.1, "rec_td": 6,
 		"fumbles_lost": -2,
 	}
-	rules.Draft.Rounds = 4
 
 	source := espn.New(client, espn.League{
 		Path: "football/nfl", Provider: "espn_football",

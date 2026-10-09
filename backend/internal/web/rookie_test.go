@@ -1,0 +1,215 @@
+package web_test
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"crossover/internal/dbtest"
+	"crossover/internal/dynasty"
+	"crossover/internal/players"
+	"crossover/internal/roster"
+)
+
+// TestRookieDraft walks a rookie draft: who can be drafted, passing a pick,
+// holding the picks as rights, and signing or losing them afterwards.
+func TestRookieDraft(t *testing.T) {
+	pool := dbtest.Open(t)
+	dbtest.Reset(t, pool)
+	ctx := context.Background()
+	const marker = "rookie_test"
+	removePlayers := func() { pool.Exec(ctx, `delete from players where note = $1`, marker) }
+	removePlayers()
+	t.Cleanup(func() { dbtest.Reset(t, pool); removePlayers() })
+
+	server, registry := startServer(t, pool)
+	ann, bob := newBrowser(t, server.URL), newBrowser(t, server.URL)
+	nba, _ := registry.Get("nba")
+	rules := nba.Defaults // a reserve list of three, so two rounds
+	rules.Waivers.Mode = "rolling"
+	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
+		Name: "Rookie Test", Settings: dynastySettings(10),
+		Leagues:    []dynasty.LeagueSetup{{Competition: "nba", Settings: rules}},
+		Franchises: []dynasty.FranchiseSetup{{Name: "Ann", ManagerName: "Ann"}, {Name: "Bob", ManagerName: "Bob"}},
+		Account:    dynasty.Account{Email: "ann@example.com", Password: "correct horse"},
+	}, nil)
+	var view struct {
+		Leagues    []struct{ ID string }
+		Franchises []struct{ ID, Name, Slug string }
+	}
+	ann.want(http.StatusOK, "GET", "/api/dynasty", nil, &view)
+	league := view.Leagues[0].ID
+	slug := map[string]string{}
+	for _, f := range view.Franchises {
+		slug[f.Name] = f.Slug
+	}
+	var invites []struct {
+		Name        string
+		InviteToken string `json:"invite_token"`
+	}
+	ann.want(http.StatusOK, "GET", "/api/admin/franchises", nil, &invites)
+	for _, invite := range invites {
+		if invite.Name == "Bob" {
+			bob.claim(invite.InviteToken, "bob@example.com")
+		}
+	}
+
+	// --- the coming rookie drafts exist from the start ------------------------
+	var drafts []struct {
+		ID, Kind string
+		Year     int
+		Picks    int
+	}
+	ann.want(http.StatusOK, "GET", "/api/drafts", nil, &drafts)
+	if len(drafts) != 3 {
+		t.Fatalf("a new league has %d drafts on the books, want its next three", len(drafts))
+	}
+	next := drafts[0]
+	for _, d := range drafts {
+		if d.Kind != "seasonal" || d.Picks != 4 { // two rounds for two franchises: half the reserve list of three, rounded up
+			t.Fatalf("draft = %+v, want a rookie draft with 4 picks", d)
+		}
+		if d.Year < next.Year {
+			next = d
+		}
+	}
+
+	// --- one startup draft per league ------------------------------------------
+	startup := map[string]any{"name": "Startup", "kind": "startup", "year": 2026, "league_ids": []string{league},
+		"rounds": 1, "order": "snake", "franchise_order": []string{}, "pick_clock_seconds": 0}
+	ann.want(http.StatusCreated, "POST", "/api/admin/drafts", startup, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/admin/drafts", startup, nil)
+
+	// --- only players new since the last draft are rookies ----------------------
+	ann.want(http.StatusCreated, "POST", "/api/admin/players", []players.NewPlayer{
+		{Competition: "nba", FullName: "Zk Veteran", Status: "active", Note: marker},
+		{Competition: "nba", FullName: "Zk Rookie One", Status: "active", Note: marker},
+		{Competition: "nba", FullName: "Zk Rookie Two", Status: "active", Note: marker},
+		{Competition: "nba", FullName: "Zk Rookie Three", Status: "active", Note: marker},
+	}, nil)
+	sql := func(query string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sql(`update leagues set last_draft_at = now() - interval '1 day' where id = $1`, league)
+	sql(`update players set eligible_since = now() - interval '2 days' where full_name = 'Zk Veteran' and note = $1`, marker)
+	type listed struct {
+		ID          string
+		FullName    string  `json:"full_name"`
+		OwnerName   string  `json:"owner_name"`
+		WaiverUntil *string `json:"waiver_until"`
+	}
+	find := func(query string) map[string]listed {
+		t.Helper()
+		var page struct{ Players []listed }
+		ann.want(http.StatusOK, "GET", "/api/players?q=Zk+"+query, nil, &page)
+		byName := map[string]listed{}
+		for _, p := range page.Players {
+			byName[p.FullName] = p
+		}
+		return byName
+	}
+	id := map[string]string{}
+	for name, p := range find("") {
+		id[name] = p.ID
+	}
+	draftURL := "/api/drafts/" + next.ID
+	if pool := find("&draft_id=" + next.ID); len(pool) != 3 || pool["Zk Veteran"].ID != "" {
+		t.Fatalf("the rookie pool = %v; want the three rookies and not the veteran", pool)
+	}
+
+	// --- picking, and passing ---------------------------------------------------
+	ann.want(http.StatusNoContent, "POST", "/api/admin/drafts/"+next.ID+"/start", nil, nil)
+	pick := func(b *browser, want int, player string) {
+		t.Helper()
+		b.want(want, "POST", draftURL+"/pick", map[string]string{"player_id": id[player], "list": "main"}, nil)
+	}
+	bob.want(http.StatusUnprocessableEntity, "POST", draftURL+"/pass", nil, nil) // not Bob's pick
+	pick(ann, http.StatusUnprocessableEntity, "Zk Veteran")                      // a free agent, not a rookie
+	pick(ann, http.StatusNoContent, "Zk Rookie One")
+	bob.want(http.StatusNoContent, "POST", draftURL+"/pass", nil, nil)
+	pick(ann, http.StatusNoContent, "Zk Rookie Two")
+	var state struct {
+		Draft struct{ Status string }
+		Picks []struct {
+			ID       string
+			PassedAt *string `json:"passed_at"`
+		}
+	}
+	ann.want(http.StatusOK, "GET", draftURL, nil, &state)
+	if state.Draft.Status != "live" || state.Picks[1].PassedAt == nil {
+		t.Fatalf("after a pass: %+v; want the draft still live and the second pick passed", state)
+	}
+	// A passed pick is gone for good.
+	bob.want(http.StatusUnprocessableEntity, "POST", draftURL+"/pick", map[string]string{"player_id": id["Zk Rookie Three"], "pick_id": state.Picks[1].ID}, nil)
+	pick(bob, http.StatusNoContent, "Zk Rookie Three")
+	ann.want(http.StatusOK, "GET", draftURL, nil, &state)
+	if state.Draft.Status != "complete" {
+		t.Fatalf("the draft is %q with every pick made or passed, want complete", state.Draft.Status)
+	}
+
+	// --- the picks are held as rights, with a week to sign them ------------------
+	type held struct {
+		Rosters []struct {
+			Overage int
+			Players []struct {
+				PlayerID    string `json:"player_id"`
+				FullName    string `json:"full_name"`
+				List        string
+				RightsUntil *string `json:"rights_until"`
+			}
+		}
+	}
+	lists := func(b *browser, team string) map[string]string {
+		t.Helper()
+		var h held
+		b.want(http.StatusOK, "GET", "/api/franchises/"+slug[team], nil, &h)
+		out := map[string]string{}
+		for _, p := range h.Rosters[0].Players {
+			out[p.FullName] = p.List
+			if p.List == "rights" && p.RightsUntil == nil {
+				t.Errorf("%s is held without a deadline", p.FullName)
+			}
+		}
+		if h.Rosters[0].Overage != 0 {
+			t.Errorf("%s is over its limits by %d; unsigned picks count against nothing", team, h.Rosters[0].Overage)
+		}
+		return out
+	}
+	if l := lists(ann, "Ann"); l["Zk Rookie One"] != "rights" || l["Zk Rookie Two"] != "rights" {
+		t.Fatalf("Ann's picks are held as %v, want rights", l)
+	}
+	move := func(b *browser, want int, action, player, list string) {
+		t.Helper()
+		b.want(want, "POST", "/api/leagues/"+league+"/roster/"+action, map[string]string{"player_id": id[player], "list": list}, nil)
+	}
+	move(ann, http.StatusUnprocessableEntity, "move", "Zk Rookie One", "main") // signed to the reserve list first
+	// He is not a prospect, and this league's reserve list is for prospects: a signed rookie may sit there all the same.
+	move(ann, http.StatusNoContent, "move", "Zk Rookie One", "reserve")
+	if l := lists(ann, "Ann"); l["Zk Rookie One"] != "reserve" {
+		t.Fatalf("after signing: %v", l)
+	}
+
+	// --- released: by choice, or by the deadline ---------------------------------
+	move(bob, http.StatusNoContent, "drop", "Zk Rookie Three", "")
+	if p := find("")["Zk Rookie Three"]; p.OwnerName != "" || p.WaiverUntil != nil {
+		t.Fatalf("a released pick = %+v; want a free agent straight away, not on waivers", p)
+	}
+	rosters := roster.NewService(pool)
+	if n, err := rosters.ReleaseUnsigned(ctx); err != nil || n != 0 {
+		t.Fatalf("released %d before any deadline (err %v), want none", n, err)
+	}
+	sql(`update roster_entries set rights_until = now() - interval '1 minute' where player_id = $1`, id["Zk Rookie Two"])
+	if n, err := rosters.ReleaseUnsigned(ctx); err != nil || n != 1 {
+		t.Fatalf("released %d at the deadline (err %v), want the one unsigned pick", n, err)
+	}
+	after := find("")
+	if after["Zk Rookie Two"].OwnerName != "" || after["Zk Rookie One"].OwnerName != "Ann" {
+		t.Fatalf("after the deadline: %+v; want the unsigned pick free and the signed one kept", after)
+	}
+	// Once he goes up to the main roster he is an ordinary player: he cannot go back to a prospects-only reserve list.
+	move(ann, http.StatusNoContent, "move", "Zk Rookie One", "main")
+	move(ann, http.StatusUnprocessableEntity, "move", "Zk Rookie One", "reserve")
+}

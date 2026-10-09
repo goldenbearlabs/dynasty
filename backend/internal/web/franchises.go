@@ -65,7 +65,7 @@ func (s *Server) getFranchise(w http.ResponseWriter, r *http.Request) {
 					player.LockedUntil = &until
 				}
 				lr.Players = append(lr.Players, player)
-				entries = append(entries, roster.Entry{PlayerID: p.PlayerID, List: p.List, Prospect: p.Status == "prospect"})
+				entries = append(entries, roster.Entry{PlayerID: p.PlayerID, List: p.List, Prospect: p.Status == "prospect", Rookie: p.Rookie})
 			}
 		}
 		lr.Overage = roster.Overage(rules.Roster, entries)

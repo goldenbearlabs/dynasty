@@ -26,7 +26,7 @@ func (q *Queries) AddDraftLeague(ctx context.Context, arg AddDraftLeagueParams) 
 }
 
 const clearDraftPick = `-- name: ClearDraftPick :exec
-update draft_picks set player_id = null, league_id = null, picked_at = null, auto_picked = false, skipped_at = null
+update draft_picks set player_id = null, league_id = null, picked_at = null, auto_picked = false, skipped_at = null, passed_at = null
 where id = $1
 `
 
@@ -133,7 +133,7 @@ func (q *Queries) GetDraft(ctx context.Context, id pgtype.UUID) (Draft, error) {
 }
 
 const getDraftPick = `-- name: GetDraftPick :one
-select id, draft_id, round, position, original_franchise_id, current_franchise_id, player_id, league_id, picked_at, auto_picked, skipped_at from draft_picks where id = $1
+select id, draft_id, round, position, original_franchise_id, current_franchise_id, player_id, league_id, picked_at, auto_picked, skipped_at, passed_at from draft_picks where id = $1
 `
 
 func (q *Queries) GetDraftPick(ctx context.Context, id pgtype.UUID) (DraftPick, error) {
@@ -151,6 +151,7 @@ func (q *Queries) GetDraftPick(ctx context.Context, id pgtype.UUID) (DraftPick, 
 		&i.PickedAt,
 		&i.AutoPicked,
 		&i.SkippedAt,
+		&i.PassedAt,
 	)
 	return i, err
 }
@@ -202,7 +203,7 @@ func (q *Queries) InsertDraftQueue(ctx context.Context, arg InsertDraftQueuePara
 }
 
 const lastMadeDraftPick = `-- name: LastMadeDraftPick :one
-select id, draft_id, round, position, original_franchise_id, current_franchise_id, player_id, league_id, picked_at, auto_picked, skipped_at from draft_picks
+select id, draft_id, round, position, original_franchise_id, current_franchise_id, player_id, league_id, picked_at, auto_picked, skipped_at, passed_at from draft_picks
 where draft_id = $1 and player_id is not null
 order by picked_at desc, position desc
 limit 1
@@ -223,6 +224,7 @@ func (q *Queries) LastMadeDraftPick(ctx context.Context, draftID pgtype.UUID) (D
 		&i.PickedAt,
 		&i.AutoPicked,
 		&i.SkippedAt,
+		&i.PassedAt,
 	)
 	return i, err
 }
@@ -276,7 +278,7 @@ func (q *Queries) ListDraftLeagues(ctx context.Context, draftID pgtype.UUID) ([]
 }
 
 const listDraftPicks = `-- name: ListDraftPicks :many
-select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current_franchise_id, k.player_id, k.league_id, k.picked_at, k.auto_picked, k.skipped_at,
+select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current_franchise_id, k.player_id, k.league_id, k.picked_at, k.auto_picked, k.skipped_at, k.passed_at,
        coalesce(p.full_name, '')::text    as player_name,
        coalesce(p.positions, '{}')::text[] as player_positions,
        coalesce(p.headshot_url, '')::text as player_headshot,
@@ -300,6 +302,7 @@ type ListDraftPicksRow struct {
 	PickedAt            pgtype.Timestamptz `json:"picked_at"`
 	AutoPicked          bool               `json:"auto_picked"`
 	SkippedAt           pgtype.Timestamptz `json:"skipped_at"`
+	PassedAt            pgtype.Timestamptz `json:"passed_at"`
 	PlayerName          string             `json:"player_name"`
 	PlayerPositions     []string           `json:"player_positions"`
 	PlayerHeadshot      string             `json:"player_headshot"`
@@ -327,6 +330,7 @@ func (q *Queries) ListDraftPicks(ctx context.Context, draftID pgtype.UUID) ([]Li
 			&i.PickedAt,
 			&i.AutoPicked,
 			&i.SkippedAt,
+			&i.PassedAt,
 			&i.PlayerName,
 			&i.PlayerPositions,
 			&i.PlayerHeadshot,
@@ -543,6 +547,15 @@ func (q *Queries) MarkLeaguesDrafted(ctx context.Context, draftID pgtype.UUID) e
 	return err
 }
 
+const passDraftPick = `-- name: PassDraftPick :exec
+update draft_picks set passed_at = now() where id = $1
+`
+
+func (q *Queries) PassDraftPick(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, passDraftPick, id)
+	return err
+}
+
 const removeFromDraftQueues = `-- name: RemoveFromDraftQueues :exec
 delete from draft_queue where draft_id = $1 and player_id = $2
 `
@@ -598,6 +611,22 @@ update draft_picks set skipped_at = now() where id = $1
 func (q *Queries) SkipDraftPick(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, skipDraftPick, id)
 	return err
+}
+
+const startupDraftExists = `-- name: StartupDraftExists :one
+select exists (
+  select 1 from drafts d
+  join draft_leagues dl on dl.draft_id = d.id
+  where d.kind = 'startup' and dl.league_id = $1
+)
+`
+
+// Whether a league has ever been in a startup draft, finished or not.
+func (q *Queries) StartupDraftExists(ctx context.Context, leagueID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, startupDraftExists, leagueID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const updateDraftPickSlot = `-- name: UpdateDraftPickSlot :exec

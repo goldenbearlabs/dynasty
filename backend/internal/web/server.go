@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/trades", s.member(s.proposeTrade))
 	mux.HandleFunc("POST /api/trades/{id}/{action}", s.member(s.answerTrade))
 	mux.HandleFunc("POST /api/drafts/{id}/pick", s.member(s.makePick))
+	mux.HandleFunc("POST /api/drafts/{id}/pass", s.member(s.passPick))
 	mux.HandleFunc("GET /api/drafts/{id}/queue", s.member(s.getQueue))
 	mux.HandleFunc("PUT /api/drafts/{id}/queue", s.member(s.setQueue))
 	mux.HandleFunc("POST /api/drafts/{id}/queue/import", s.member(s.importRanking))

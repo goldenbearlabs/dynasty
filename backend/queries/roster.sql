@@ -5,7 +5,7 @@ select pg_advisory_xact_lock(hashtextextended(@league_id::text || @franchise_id:
 
 -- name: ListRosterEntries :many
 -- The facts roster limits depend on.
-select r.player_id, r.list, p.status, coalesce(t.conference, '')::text as conference
+select r.player_id, r.list, r.rookie, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
@@ -13,7 +13,7 @@ where r.league_id = @league_id and r.franchise_id = @franchise_id;
 
 -- name: ListFranchiseRoster :many
 -- Every player a franchise holds, across all its leagues, for display.
-select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at,
+select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie,
        p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev
 from roster_entries r
@@ -34,8 +34,22 @@ delete from roster_entries
 where league_id = @league_id and franchise_id = @franchise_id and player_id = @player_id;
 
 -- name: SetRosterList :exec
-update roster_entries set list = @list, reserved_at = @reserved_at
+update roster_entries set list = @list, reserved_at = @reserved_at, rookie = @rookie,
+       rights_until = case when @list::text = 'rights' then rights_until end
 where league_id = @league_id and franchise_id = @franchise_id and player_id = @player_id;
+
+-- name: StartSigningWindow :exec
+-- When a rookie draft ends, every pick still unsigned in its leagues gets
+-- the same deadline.
+update roster_entries set rights_until = @rights_until
+where list = 'rights' and rights_until is null
+  and league_id in (select league_id from draft_leagues where draft_id = @draft_id);
+
+-- name: ListExpiredRights :many
+select r.league_id, r.franchise_id, r.player_id, f.dynasty_id
+from roster_entries r
+join franchises f on f.id = r.franchise_id
+where r.list = 'rights' and r.rights_until <= now();
 
 -- name: InsertTransaction :exec
 insert into transactions (dynasty_id, league_id, franchise_id, kind, player_id, draft_pick_id, trade_id, detail)

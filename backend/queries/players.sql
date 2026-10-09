@@ -138,9 +138,12 @@ where (@competition::text = '' or p.competition = @competition)
         and p.competition = (select l.competition from leagues l where l.id = sqlc.narg('available_in'))))
   and (sqlc.narg('draft_id')::uuid is null or (
         r.player_id is null
-        and p.competition in (select l.competition from draft_leagues dl
-                              join leagues l on l.id = dl.league_id
-                              where dl.draft_id = sqlc.narg('draft_id'))))
+        and exists (select 1 from draft_leagues dl
+                    join leagues l on l.id = dl.league_id
+                    join drafts d on d.id = dl.draft_id
+                    where dl.draft_id = sqlc.narg('draft_id') and l.competition = p.competition
+                      -- a rookie draft offers only players new to the pool since the league last drafted
+                      and (d.kind = 'startup' or l.last_draft_at is null or p.eligible_since > l.last_draft_at))))
 order by case @sort_by::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
@@ -168,9 +171,12 @@ where (@competition::text = '' or p.competition = @competition)
         and p.competition = (select l.competition from leagues l where l.id = sqlc.narg('available_in'))))
   and (sqlc.narg('draft_id')::uuid is null or (
         r.player_id is null
-        and p.competition in (select l.competition from draft_leagues dl
-                              join leagues l on l.id = dl.league_id
-                              where dl.draft_id = sqlc.narg('draft_id'))));
+        and exists (select 1 from draft_leagues dl
+                    join leagues l on l.id = dl.league_id
+                    join drafts d on d.id = dl.draft_id
+                    where dl.draft_id = sqlc.narg('draft_id') and l.competition = p.competition
+                      -- a rookie draft offers only players new to the pool since the league last drafted
+                      and (d.kind = 'startup' or l.last_draft_at is null or p.eligible_since > l.last_draft_at))));
 
 -- name: CountPlayersByCompetition :many
 select competition, count(*) as players from players group by competition;

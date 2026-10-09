@@ -121,7 +121,7 @@ func collegeConferenceIDs() []string {
 
 func nba(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 14, 6 // 9 starters and 5 on the bench
+	rules.Roster.Main, rules.Roster.Reserve = 14, 3 // 9 starters and 5 on the bench
 	rules.Lineup = basketballLineup(3, 3, 2)
 	rules.Scoring = basketballScoring
 
@@ -147,7 +147,7 @@ func wnba(client *ingest.Client) Competition {
 	rules := defaults()
 	// The league is 15 teams of 12, so 16 franchises can hold little more
 	// than their starters before the waiver wire is empty: 6 and 2.
-	rules.Roster.Main, rules.Roster.Reserve = 8, 2
+	rules.Roster.Main, rules.Roster.Reserve = 8, 1
 	rules.Lineup = basketballLineup(2, 2, 1)
 	rules.Scoring = basketballScoring
 
