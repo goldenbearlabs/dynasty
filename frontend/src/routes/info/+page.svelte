@@ -152,11 +152,12 @@
 					<ul>
 						<li>
 							<strong>{plural(rookieRounds(g.rules), 'round')} a year</strong>{g.rules.draft.rounds ? '' : ', half the reserve list rounded up'},
-							for players new to the pool since the last draft. A pick can be passed.
+							open to anyone not on a roster: players new to the pool and free agents alike. A pick can be passed.
 						</li>
 						<li>
 							Picks are held, not rostered. After the draft there {g.rules.draft.signing_days === 1 ? 'is 1 day' : `are ${g.rules.draft.signing_days} days`}
-							to sign each one to the reserve list, making room if it is full. A pick left unsigned becomes a free agent.
+							to sign each one, to the reserve list or the main roster, making room if need be. A pick released or left unsigned
+							goes on waivers for a day, then becomes a free agent.
 						</li>
 						<li>The next {plural(g.rules.draft.future_years, 'year')} of picks exist already and can be traded, for any league's players or picks</li>
 					</ul>

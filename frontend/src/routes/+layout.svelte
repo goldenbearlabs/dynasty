@@ -25,7 +25,8 @@
 			(t) => t.status === 'proposed' && t.parties.some((p) => p.franchise_id === data.me?.id && !p.accepted_at)
 		).length
 	);
-	const usesWaivers = $derived(data.dynasty?.leagues.some((l) => l.settings.waivers.mode !== 'none') ?? false);
+	// Every league has waivers of a kind: at the least, released draft picks spend a day on them.
+	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
 	const links = $derived<Link[]>([
 		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
 		{ href: '/league', label: 'League', icon: 'home' },

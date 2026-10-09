@@ -319,6 +319,7 @@
 			{#if on(roster, 'rights').length > 0}
 				{@const due = deadline(roster)}
 				{@const room = roster.limits.reserve - on(roster, 'reserve').length}
+				{@const mainRoom = roster.limits.main - on(roster, 'main').length}
 				<section class="panel signing">
 					<h2 class="bar">
 						<span class="pill gold">Sign</span> Draft picks to sign
@@ -326,15 +327,13 @@
 					</h2>
 					<p class="pad small-text muted">
 						{#if due}
-							Sign each pick to the reserve list by {clockTime(due)}. Any left unsigned become free agents.
+							Sign each pick to the reserve list or the main roster by {clockTime(due)}. Any left unsigned go on waivers for a
+							day, then become free agents.
 						{:else}
-							These picks can be signed to the reserve list now; the deadline is set when the draft ends.
+							These picks can be signed now; the deadline is set when the draft ends.
 						{/if}
-						{#if room > 0}
-							The reserve list has room for {room} more.
-						{:else}
-							The reserve list is full ({roster.limits.reserve}): drop or trade someone from it below to make room.
-						{/if}
+						Room: {Math.max(room, 0)} on the reserve list, {Math.max(mainRoom, 0)} on the main roster.
+						{#if room <= 0 && mainRoom <= 0}Drop or trade someone below to make room.{/if}
 					</p>
 					<table>
 						<tbody>
@@ -351,7 +350,8 @@
 									</td>
 									{#if canEdit}
 										<td class="actions">
-											<button class="small primary" disabled={mine && room <= 0} onclick={() => change(roster, 'move', player, 'reserve')}>Sign</button>
+											<button class="small primary" disabled={mine && room <= 0} onclick={() => change(roster, 'move', player, 'reserve')}>Sign to reserve</button>
+											<button class="small" disabled={mine && mainRoom <= 0} onclick={() => change(roster, 'move', player, 'main')}>Sign to main</button>
 											<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Release</button>
 										</td>
 									{/if}

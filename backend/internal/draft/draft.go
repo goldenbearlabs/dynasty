@@ -257,11 +257,8 @@ func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franch
 		return err
 	}
 	if draft.Kind != "startup" {
-		// A rookie draft takes only players new to the pool since the league
-		// last drafted, and holds them as rights until they are signed.
-		if last := leagues[i].LastDraftAt; last.Valid && !player.EligibleSince.Time.After(last.Time) {
-			return problem.New("%s was already in the pool at the last draft, so he is a free agent, not a rookie.", player.FullName)
-		}
+		// A rookie draft is open to anyone unrostered, new to the pool or a
+		// free agent, and holds its picks as rights until they are signed.
 		list = settings.ListRights
 	}
 

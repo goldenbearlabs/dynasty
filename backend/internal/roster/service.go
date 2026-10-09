@@ -144,12 +144,18 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 		}); err != nil {
 			return nil, err
 		}
-		// A player cut from the reserve list, or a pick never signed, goes
-		// straight to free agency; only the main roster drops to waivers.
-		if rules.Waivers.Mode != settings.WaiversNone && roster[i].List == settings.ListMain {
+		// A released draft pick is on waivers for a day in every league; anyone
+		// else goes on them for as long as the league's own rule says, if it has one.
+		clears := time.Time{}
+		switch {
+		case roster[i].List == settings.ListRights:
+			clears = time.Now().Add(ReleasedPickWaiver)
+		case rules.Waivers.Mode != settings.WaiversNone:
+			clears = time.Now().AddDate(0, 0, rules.Waivers.Days)
+		}
+		if !clears.IsZero() {
 			if err := q.PutOnWaivers(ctx, db.PutOnWaiversParams{
-				LeagueID: c.League.ID, PlayerID: c.PlayerID,
-				ClearsAt: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, rules.Waivers.Days), Valid: true},
+				LeagueID: c.League.ID, PlayerID: c.PlayerID, ClearsAt: pgtype.Timestamptz{Time: clears, Valid: true},
 			}); err != nil {
 				return nil, err
 			}
@@ -158,8 +164,12 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 	})
 }
 
+// ReleasedPickWaiver is how long a rookie-draft pick stays on waivers after
+// it is released or left unsigned, before he becomes a free agent.
+const ReleasedPickWaiver = 24 * time.Hour
+
 // ReleaseUnsigned releases every rookie-draft pick whose time to be signed
-// has run out. It reports how many were released.
+// has run out, onto waivers. It reports how many were released.
 func (s *Service) ReleaseUnsigned(ctx context.Context) (int, error) {
 	expired, err := db.New(s.pool).ListExpiredRights(ctx)
 	if err != nil {
@@ -168,6 +178,11 @@ func (s *Service) ReleaseUnsigned(ctx context.Context) (int, error) {
 	for _, e := range expired {
 		err := db.InTx(ctx, s.pool, func(q *db.Queries) error {
 			if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{LeagueID: e.LeagueID, FranchiseID: e.FranchiseID, PlayerID: e.PlayerID}); err != nil {
+				return err
+			}
+			if err := q.PutOnWaivers(ctx, db.PutOnWaiversParams{
+				LeagueID: e.LeagueID, PlayerID: e.PlayerID, ClearsAt: pgtype.Timestamptz{Time: time.Now().Add(ReleasedPickWaiver), Valid: true},
+			}); err != nil {
 				return err
 			}
 			return q.InsertTransaction(ctx, db.InsertTransactionParams{
@@ -232,11 +247,8 @@ func (s *Service) Move(ctx context.Context, c Change) error {
 			switch {
 			case c.List == entry.List:
 			case entry.List == settings.ListRights:
-				// Signing a rookie-draft pick: to the reserve list, where he may
-				// stay whatever the league's rule for it.
-				if c.List != settings.ListReserve && managed {
-					return nil, problem.New("A drafted player is signed to the reserve list first.")
-				}
+				// Signing a rookie-draft pick, to either list if it has room. On
+				// the reserve list he may stay whatever the league's rule for it.
 				rookie = c.List == settings.ListReserve
 			case c.List == settings.ListReserve:
 				reserved = reservedNow(managed && !roster[i].Prospect)

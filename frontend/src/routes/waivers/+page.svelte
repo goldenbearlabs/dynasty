@@ -13,7 +13,7 @@
 
 	let { data }: PageProps = $props();
 
-	const leagues = $derived((data.dynasty?.leagues ?? []).filter((l) => l.settings.waivers.mode !== 'none'));
+	const leagues = $derived(data.dynasty?.leagues ?? []);
 	const tabs = $derived(leagues.map((l) => ({ value: l.competition, label: l.name, sport: l.competition })));
 	let competition = $state(untrack(() => page.url.searchParams.get('competition') ?? ''));
 	const league = $derived(leagues.find((l) => l.competition === competition) ?? leagues[0]);
@@ -68,15 +68,20 @@
 	</header>
 
 	{#if leagues.length === 0}
-		<Empty icon="clock" title="No league uses waivers">A commissioner can turn them on in a league's rules.</Empty>
+		<Empty icon="clock" title="No leagues yet">Waivers appear here once there is a league.</Empty>
 	{:else if error}
 		<p role="alert">Could not load waivers: {error}</p>
 	{:else if waivers}
 		<p class="row muted small-text">
 			<span>
-				A dropped player is on waivers for {waivers.rules.days}
-				{waivers.rules.days === 1 ? 'day' : 'days'}, then goes to
-				{faab ? 'the highest bid; the waiver order breaks ties' : 'the claim highest in the waiver order'}.
+				{#if waivers.rules.mode === 'none'}
+					Only draft picks that were released or left unsigned go on waivers here, for a day; then the claim highest in
+					the waiver order gets the player.
+				{:else}
+					A dropped player is on waivers for {waivers.rules.days}
+					{waivers.rules.days === 1 ? 'day' : 'days'} (a released draft pick, for one), then goes to
+					{faab ? 'the highest bid; the waiver order breaks ties' : 'the claim highest in the waiver order'}.
+				{/if}
 			</span>
 			{#if data.me && waivers.weekly_limit > 0}
 				<span class="pill" class:bad={waivers.acquisitions >= waivers.weekly_limit}>
