@@ -1,0 +1,1250 @@
+<title>Crossover Dynasty</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #F3F5F2;
+    --surface:    #FFFFFF;
+    --surface-2:  #E9EDE8;
+    --ink:        #141C18;
+    --ink-2:      #44524B;
+    --ink-3:      #6E7D75;
+    --rule:       #CFD7D0;
+    --rule-soft:  #E1E7E0;
+    --accent:     #1B5E9B;
+    --accent-ink: #154B7D;
+    --gold:       #96661F;
+    --gold-bg:    #F2E8D4;
+    --live:       #2B6F53;
+    --live-bg:    #DDEBE2;
+    --warn:       #9A4A20;
+    --warn-bg:    #F6E3D8;
+
+    --f-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --f-body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --s1: 0.5rem; --s2: 0.875rem; --s3: 1.25rem; --s4: 2rem; --s5: 3.25rem; --s6: 5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0D1311;
+      --surface:    #151D19;
+      --surface-2:  #1D2723;
+      --ink:        #E4EAE5;
+      --ink-2:      #AAB8B0;
+      --ink-3:      #7D8C84;
+      --rule:       #2C3833;
+      --rule-soft:  #222E29;
+      --accent:     #6FA8DC;
+      --accent-ink: #9AC4E8;
+      --gold:       #D6A95A;
+      --gold-bg:    #2C2416;
+      --live:       #6FBF95;
+      --live-bg:    #152A20;
+      --warn:       #E09168;
+      --warn-bg:    #2E1D13;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0D1311;
+    --surface:    #151D19;
+    --surface-2:  #1D2723;
+    --ink:        #E4EAE5;
+    --ink-2:      #AAB8B0;
+    --ink-3:      #7D8C84;
+    --rule:       #2C3833;
+    --rule-soft:  #222E29;
+    --accent:     #6FA8DC;
+    --accent-ink: #9AC4E8;
+    --gold:       #D6A95A;
+    --gold-bg:    #2C2416;
+    --live:       #6FBF95;
+    --live-bg:    #152A20;
+    --warn:       #E09168;
+    --warn-bg:    #2E1D13;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 var(--s3) var(--s6);
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    padding: var(--s5) 0 var(--s4);
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 var(--s3);
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(2.6rem, 7vw, 4.6rem);
+    line-height: 0.96;
+    letter-spacing: -0.028em;
+    text-wrap: balance;
+    margin: 0 0 var(--s3);
+  }
+  .standfirst {
+    font-size: 1.22rem;
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 58ch;
+    margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  .decisions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1) var(--s3);
+    margin-top: var(--s4);
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .decisions span { display: inline-flex; gap: 0.5em; align-items: baseline; }
+  .decisions b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- layout ---------- */
+  .cols { display: block; }
+  @media (min-width: 1000px) {
+    .cols { display: grid; grid-template-columns: 170px minmax(0,1fr); gap: var(--s5); align-items: start; }
+    nav.toc { position: sticky; top: var(--s3); padding-top: var(--s5); }
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
+  @media (min-width: 1000px) { nav.toc ol { flex-direction: column; gap: 0.3rem; } }
+  nav.toc { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: 0.04em; }
+  nav.toc a { color: var(--ink-3); text-decoration: none; display: block; padding: 2px 0; border-bottom: 1px solid transparent; }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+  nav.toc .num { color: var(--rule); margin-right: 0.5em; }
+
+  section { padding-top: var(--s5); }
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(1.55rem, 3.2vw, 2.1rem);
+    line-height: 1.08;
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+    margin: 0 0 var(--s2);
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--rule);
+  }
+  h2 .h2num {
+    font-family: var(--f-mono);
+    font-size: 0.55em;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    vertical-align: 0.35em;
+    margin-right: 0.7em;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.1rem;
+    letter-spacing: -0.005em;
+    margin: var(--s4) 0 var(--s1);
+  }
+  h4 {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: var(--s3) 0 var(--s1);
+  }
+  p { max-width: var(--measure); margin: 0 0 var(--s2); }
+  ul, ol.body { max-width: var(--measure); padding-left: 1.2em; margin: 0 0 var(--s2); }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; color: var(--ink-2); }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: 0.86em;
+    background: var(--surface-2);
+    padding: 0.1em 0.36em;
+    border-radius: 2px;
+  }
+  pre {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: var(--surface);
+    border: 1px solid var(--rule-soft);
+    border-left: 2px solid var(--accent);
+    padding: var(--s3);
+    overflow-x: auto;
+    margin: var(--s2) 0 var(--s3);
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .c { color: var(--ink-3); }
+  pre .k { color: var(--accent); font-weight: 500; }
+  pre .hl { color: var(--gold); font-weight: 600; }
+
+  /* ---------- tables ---------- */
+  .scroll { overflow-x: auto; margin: var(--s2) 0 var(--s3); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 620px; }
+  th, td { text-align: left; padding: 0.6rem 0.9rem 0.6rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td.mono, th.mono { font-family: var(--f-mono); font-size: 12px; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.15em 0.45em;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .chip.ok   { color: var(--live); background: var(--live-bg); border-color: transparent; }
+  .chip.warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+  .chip.gold { color: var(--gold); background: var(--gold-bg); border-color: transparent; }
+
+  /* ---------- figure ---------- */
+  figure { margin: var(--s4) 0; }
+  figure svg { width: 100%; max-width: 100%; height: auto; display: block; color: var(--ink-2); }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--ink-3);
+    max-width: 62ch;
+    margin-top: var(--s2);
+    padding-top: var(--s1);
+    border-top: 1px solid var(--rule-soft);
+  }
+  figcaption b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---------- callout ---------- */
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule-soft);
+    border-left: 2px solid var(--gold);
+    padding: var(--s2) var(--s3);
+    margin: var(--s3) 0;
+    max-width: var(--measure);
+    font-size: 15.5px;
+  }
+  .note h4 { margin-top: 0; color: var(--gold); }
+  .note p:last-child { margin-bottom: 0; }
+
+  /* ---------- milestone ladder ---------- */
+  .ladder { margin: var(--s3) 0; border-top: 1px solid var(--rule); }
+  .rung {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0,1fr);
+    gap: var(--s3);
+    padding: var(--s3) 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  @media (min-width: 720px) { .rung { grid-template-columns: 4.5rem minmax(0,1fr) 9rem; } }
+  .rung .tag {
+    font-family: var(--f-mono);
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+  .rung h3 { margin: 0 0 0.25rem; font-size: 1.02rem; }
+  .rung p { margin: 0; font-size: 15px; color: var(--ink-2); max-width: 56ch; }
+  .rung .est {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: 0.3rem;
+  }
+  .rung .done { display: inline-block; margin-top: 0.5rem; }
+
+  /* ---------- two-up ---------- */
+  .twoup { display: grid; gap: var(--s3); margin: var(--s3) 0; }
+  @media (min-width: 760px) { .twoup { grid-template-columns: 1fr 1fr; gap: var(--s4); } }
+  .twoup > div > h4 { margin-top: 0; }
+  .twoup ul { max-width: none; }
+
+  hr.end { border: none; border-top: 2px solid var(--ink); margin: var(--s5) 0 var(--s3); }
+  .colophon { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.04em; max-width: none; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Build Plan &middot; revision 2 &middot; 7 October 2026</p>
+    <h1>Crossover Dynasty</h1>
+    <p class="standfirst">A multi-sport dynasty league where <strong>one franchise owns rosters, reserve lists and draft picks in every sport</strong>, a high school recruit can stay with you through college and into the NBA, and one trade can move an NBA first-rounder for an NHL goaltender. Go, Postgres, SvelteKit, one small server.</p>
+    <div class="decisions">
+      <span>Model <b>one dynasty, one franchise, a roster per sport</b></span>
+      <span>Rules <b>every league rule is a setting</b></span>
+      <span>Format <b>total points or head-to-head, per league</b></span>
+      <span>Lineups <b>managers set starters</b></span>
+      <span>Free agency <b>open</b></span>
+      <span>Startup draft <b>per sport or combined</b></span>
+    </div>
+  </header>
+
+  <div class="cols">
+
+    <nav class="toc" aria-label="Contents">
+      <ol>
+        <li><a href="#core"><span class="num">01</span>The core idea</a></li>
+        <li><a href="#lean"><span class="num">02</span>Keeping it lean</a></li>
+        <li><a href="#settings"><span class="num">03</span>League settings</a></li>
+        <li><a href="#players"><span class="num">04</span>Players &amp; continuity</a></li>
+        <li><a href="#sources"><span class="num">05</span>Data sources</a></li>
+        <li><a href="#schema"><span class="num">06</span>Schema</a></li>
+        <li><a href="#rosters"><span class="num">07</span>Rosters &amp; lineups</a></li>
+        <li><a href="#draft"><span class="num">08</span>Drafts</a></li>
+        <li><a href="#trades"><span class="num">09</span>Trades</a></li>
+        <li><a href="#scoring"><span class="num">10</span>Scoring &amp; titles</a></li>
+        <li><a href="#stack"><span class="num">11</span>Stack &amp; layout</a></li>
+        <li><a href="#api"><span class="num">12</span>API &amp; frontend</a></li>
+        <li><a href="#deploy"><span class="num">13</span>Auth &amp; deployment</a></li>
+        <li><a href="#milestones"><span class="num">14</span>Milestones</a></li>
+        <li><a href="#open"><span class="num">15</span>Open questions</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- ================= 01 ================= -->
+      <section id="core">
+        <h2><span class="h2num">01</span>The core idea</h2>
+
+        <p>Four entities carry the design:</p>
+
+        <ul>
+          <li><strong>Dynasty</strong>: your friend group's whole universe. Created once in a setup wizard, where you pick which sports to include (any subset of CBB, NBA, NHL, NFL, MLB) and the cross-sport rules.</li>
+          <li><strong>League</strong>: one per chosen sport, inside the dynasty. It lives for years and has a new <em>season</em> each year. All of its rules sit in one settings document.</li>
+          <li><strong>Franchise</strong>: one per manager, spanning every league in the dynasty.</li>
+          <li><strong>Asset</strong>: a rostered player or a draft pick. Each belongs to one league and one franchise.</li>
+        </ul>
+
+        <p>A cross-league trade needs no special machinery. A trade is a list of asset transfers, and each transfer names its own league. When they all share a league it is an ordinary trade; when they don't, it is a cross-sport trade. Same table, same code path, same database transaction.</p>
+
+        <figure>
+          <svg viewBox="0 0 764 330" role="img" aria-label="Two franchises each hold five per-sport rosters. One trade moves an NBA draft pick from the left franchise to the right, and an NHL player from the right franchise to the left, both committing in a single transaction.">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,0 10,5 0,10" fill="var(--accent)"/>
+              </marker>
+            </defs>
+
+            <rect x="236" y="56" width="288" height="236" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity="0.45"/>
+            <text x="380" y="78" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" letter-spacing="1.4" fill="currentColor">ONE TRANSACTION</text>
+            <text x="380" y="272" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.7">both legs commit, or neither</text>
+
+            <rect x="24" y="70" width="180" height="204" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <text x="36" y="90" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" letter-spacing="1.2" fill="currentColor">WISMER DYNASTY</text>
+            <line x1="24" y1="96" x2="204" y2="96" stroke="currentColor" stroke-width="1" opacity="0.35"/>
+            <rect x="34" y="104" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="44" y="121" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">CBB</text>
+            <rect x="34" y="134" width="160" height="26" rx="2" fill="var(--accent)" opacity="0.16"/>
+            <rect x="34" y="134" width="160" height="26" rx="2" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="44" y="151" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">NBA</text>
+            <rect x="34" y="164" width="160" height="26" rx="2" fill="var(--accent)" opacity="0.16"/>
+            <rect x="34" y="164" width="160" height="26" rx="2" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="44" y="181" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">NHL</text>
+            <rect x="34" y="194" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="44" y="211" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">NFL</text>
+            <rect x="34" y="224" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="44" y="241" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">MLB</text>
+
+            <rect x="560" y="70" width="180" height="204" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <text x="572" y="90" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" letter-spacing="1.2" fill="currentColor">SAM'S SPOILERS</text>
+            <line x1="560" y1="96" x2="740" y2="96" stroke="currentColor" stroke-width="1" opacity="0.35"/>
+            <rect x="570" y="104" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="580" y="121" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">CBB</text>
+            <rect x="570" y="134" width="160" height="26" rx="2" fill="var(--accent)" opacity="0.16"/>
+            <rect x="570" y="134" width="160" height="26" rx="2" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="580" y="151" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">NBA</text>
+            <rect x="570" y="164" width="160" height="26" rx="2" fill="var(--accent)" opacity="0.16"/>
+            <rect x="570" y="164" width="160" height="26" rx="2" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="580" y="181" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">NHL</text>
+            <rect x="570" y="194" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="580" y="211" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">NFL</text>
+            <rect x="570" y="224" width="160" height="26" rx="2" fill="currentColor" opacity="0.07"/>
+            <text x="580" y="241" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor" opacity="0.75">MLB</text>
+
+            <line x1="206" y1="147" x2="556" y2="147" stroke="var(--accent)" stroke-width="1.75" marker-end="url(#ar)"/>
+            <rect x="286" y="130" width="188" height="15" fill="var(--paper)"/>
+            <text x="380" y="142" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">2027 NBA 1st-round pick</text>
+
+            <line x1="556" y1="181" x2="206" y2="181" stroke="var(--accent)" stroke-width="1.75" marker-end="url(#ar)"/>
+            <rect x="290" y="186" width="180" height="15" fill="var(--paper)"/>
+            <text x="380" y="197" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">Auston Matthews &middot; NHL</text>
+          </svg>
+          <figcaption><b>Assets never leave their own league; only ownership changes.</b> The pick stays an NBA pick and the player stays on an NHL roster. What crosses the league boundary is the claim on them.</figcaption>
+        </figure>
+      </section>
+
+      <!-- ================= 02 ================= -->
+      <section id="lean">
+        <h2><span class="h2num">02</span>Keeping it lean</h2>
+
+        <p>You asked for clean, reusable and readable, and you also asked for nearly everything to be customizable. Those two pull against each other unless the code follows a few rules. These are the ones the rest of the plan is built on.</p>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Rule</th><th>What it means in the code</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Sport differences are data</strong></td><td>One <code>Competition</code> registry entry per sport lists its positions, its stat names, its default settings and its fetcher. No <code>if sport == "nhl"</code> anywhere outside the fetchers. Adding college football later is a new registry entry and a fetcher.</td></tr>
+              <tr><td><strong>League rules are one settings document</strong></td><td>One typed Go struct per league, stored as <code>jsonb</code>, validated on save. The setup wizard and the commissioner's settings page are the same form. A new rule is a new field with a default.</td></tr>
+              <tr><td><strong>One rule decides who is available</strong></td><td>A player is available in a league when he plays in that league's competition and is on nobody's roster there. Startup drafts, seasonal drafts and free agency all use this one query.</td></tr>
+              <tr><td><strong>One check guards every roster move</strong></td><td>Free agent adds, draft picks, trades and CBB graduations all call the same <code>roster.Check</code> with the proposed change. Roster limits are enforced in exactly one place.</td></tr>
+              <tr><td><strong>Points are computed, never stored</strong></td><td>Raw stat lines are stored; fantasy points are stat lines multiplied by the league's scoring rules at read time. Change a rule and every total is already correct.</td></tr>
+              <tr><td><strong>Every change is logged once</strong></td><td>An append-only <code>transactions</code> table records every add, drop, pick, trade and graduation. It is the activity feed and the audit trail.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre><code><span class="c">// The only place sport-specific knowledge lives.</span>
+<span class="k">type</span> Competition <span class="k">struct</span> {
+    Key       string          <span class="c">// "cbb", "nba", "nhl", "nfl", "mlb"</span>
+    Name      string
+    Positions []string        <span class="c">// "PG","SG",... drives lineup slot validation</span>
+    Stats     []StatDef       <span class="c">// canonical stat keys the scoring form offers</span>
+    Defaults  LeagueSettings  <span class="c">// sensible starting rules for this sport</span>
+    Fetcher   ingest.Fetcher
+}</code></pre>
+      </section>
+
+      <!-- ================= 03 ================= -->
+      <section id="settings">
+        <h2><span class="h2num">03</span>League settings</h2>
+
+        <p>The setup wizard creates the dynasty, lets you tick the sports you want, then shows each league's settings prefilled with that sport's defaults. The commissioner can reopen the same form at any time. Every change is logged.</p>
+
+        <pre><code><span class="c">// leagues.settings for an NBA league (every value editable)</span>
+{
+  <span class="hl">"roster"</span>: { "main": 14, "reserve": 6, "reserve_eligibility": "prospects_only" },
+  <span class="hl">"lineup"</span>: {
+    "period": "day",             <span class="c">// day | week</span>
+    "lock":   "game_start",      <span class="c">// game_start | period_start</span>
+    "slots": [
+      { "name": "G",    "positions": ["PG","SG"], "count": 2 },
+      { "name": "F",    "positions": ["SF","PF"], "count": 2 },
+      { "name": "C",    "positions": ["C"],       "count": 1 },
+      { "name": "UTIL", "positions": ["*"],       "count": 2 }
+    ]
+  },
+  <span class="hl">"scoring"</span>: { "pts": 1, "reb": 1.2, "ast": 1.5, "stl": 3, "blk": 3, "tov": -1 },
+  <span class="hl">"format"</span>:  { "type": "head_to_head", "matchup_days": 7, "playoff_teams": 4 },
+                                 <span class="c">// or { "type": "total_points" }</span>
+  <span class="hl">"free_agency"</span>: { "mode": "open", "new_entrants_draft_only": true },
+  <span class="hl">"draft"</span>:   { "rounds": 3, "order": "linear", "pick_clock_seconds": 0, "future_years": 3 },
+  <span class="hl">"trades"</span>:  { "deadline": null, "approval": "none" },
+  <span class="hl">"continuity"</span>: null           <span class="c">// on the CBB league: { "into": "nba", "land_on": "reserve" }</span>
+}
+
+<span class="c">// dynasties.settings</span>
+{
+  "sports": ["cbb", "nba", "nhl", "nfl", "mlb"],
+  "overall_title": { "enabled": true, "points_by_finish": [10, 7, 5, 3, 2, 1] }
+}</code></pre>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Group</th><th>What the commissioner controls</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">roster</td><td>Main roster size, reserve list size, and who may sit on reserve.</td></tr>
+              <tr><td class="mono">lineup</td><td>Starting slots by position, whether lineups are set daily or weekly, and when they lock.</td></tr>
+              <tr><td class="mono">scoring</td><td>Points per stat. The form lists that sport's stats from the registry; leave one out and it scores nothing.</td></tr>
+              <tr><td class="mono">format</td><td>Season-long total points, or head-to-head matchups with a playoff. Chosen per league.</td></tr>
+              <tr><td class="mono">free_agency</td><td>Open or closed between drafts, and whether new entrants are held for the next draft.</td></tr>
+              <tr><td class="mono">draft</td><td>Rounds, linear or snake order, pick clock (0 means untimed), and how many future years of picks can be traded.</td></tr>
+              <tr><td class="mono">trades</td><td>Optional deadline, and whether trades need commissioner approval.</td></tr>
+              <tr><td class="mono">continuity</td><td>Whether this league's players carry into another league under the same franchise. Used for CBB into NBA.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= 04 ================= -->
+      <section id="players">
+        <h2><span class="h2num">04</span>Players &amp; continuity</h2>
+
+        <p><strong>One person is one row in <code>players</code>, for their whole career.</strong> The row carries a <code>competition</code> (where he plays, or is headed) and a <code>status</code> of <code>prospect</code>, <code>active</code> or <code>inactive</code>. A high school recruit is a CBB prospect. A European teenager is an NBA prospect. An NHL draftee still in junior is an NHL prospect.</p>
+
+        <p>This works for basketball because of something I confirmed on the live feeds: ESPN keeps the same athlete id from college into the NBA. Cooper Flagg is <code>5041939</code> in both. When the NBA fetcher sees an id that already exists as a CBB player, it updates that row's competition to <code>nba</code>. No name matching is needed for that step.</p>
+
+        <figure>
+          <svg viewBox="0 0 764 250" role="img" aria-label="A single player row moves from high school recruit to college to the NBA. The franchise that drafted him in the CBB seasonal draft keeps him on its CBB roster, and when he turns pro he moves to the same franchise's NBA reserve list if continuity is on, or is released into the NBA draft pool if it is off.">
+            <defs>
+              <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,0 10,5 0,10" fill="currentColor"/>
+              </marker>
+              <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,0 10,5 0,10" fill="var(--accent)"/>
+              </marker>
+            </defs>
+
+            <text x="24" y="22" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" letter-spacing="1.2" fill="currentColor">THE PLAYER (ONE ROW, ONE ID)</text>
+
+            <rect x="24" y="34" width="180" height="46" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <text x="36" y="53" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">High school recruit</text>
+            <text x="36" y="69" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.75">cbb &middot; prospect</text>
+
+            <rect x="292" y="34" width="180" height="46" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <text x="304" y="53" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">College player</text>
+            <text x="304" y="69" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.75">cbb &middot; active</text>
+
+            <rect x="560" y="34" width="180" height="46" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <text x="572" y="53" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">NBA player</text>
+            <text x="572" y="69" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.75">nba &middot; active</text>
+
+            <line x1="206" y1="57" x2="288" y2="57" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+            <text x="247" y="50" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">enrolls</text>
+            <line x1="474" y1="57" x2="556" y2="57" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+            <text x="515" y="50" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">turns pro</text>
+
+            <text x="24" y="128" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" letter-spacing="1.2" fill="currentColor">YOUR FRANCHISE'S RIGHTS TO HIM</text>
+
+            <rect x="24" y="140" width="180" height="46" rx="3" fill="currentColor" fill-opacity="0.07" stroke="none"/>
+            <text x="36" y="159" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">CBB seasonal draft</text>
+            <text x="36" y="175" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.75">you pick him</text>
+
+            <rect x="292" y="140" width="180" height="46" rx="3" fill="currentColor" fill-opacity="0.07" stroke="none"/>
+            <text x="304" y="159" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">CBB league roster</text>
+            <text x="304" y="175" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.75">reserve, then main</text>
+
+            <rect x="560" y="140" width="180" height="46" rx="3" fill="var(--accent)" fill-opacity="0.16" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="572" y="159" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">NBA league reserve</text>
+            <text x="572" y="175" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)">same franchise</text>
+
+            <line x1="206" y1="163" x2="288" y2="163" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+            <line x1="474" y1="163" x2="556" y2="163" stroke="var(--accent)" stroke-width="1.75" marker-end="url(#ar3)"/>
+            <text x="515" y="156" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" fill="var(--accent)">continuity on</text>
+
+            <path d="M 382 188 L 382 222 L 556 222" fill="none" stroke="currentColor" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#ar2)"/>
+            <text x="394" y="214" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">continuity off</text>
+            <text x="564" y="226" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">released to the NBA draft pool</text>
+          </svg>
+          <figcaption><b>Continuity is a roster entry moving between two leagues under the same franchise.</b> Because the graduate is already on an NBA roster, the one availability rule keeps him out of the NBA seasonal draft without any basketball-specific code.</figcaption>
+        </figure>
+
+        <h3>Who is in each seasonal draft</h3>
+        <p>The pool is always &ldquo;plays in this competition, on nobody's roster in this league.&rdquo; What differs per sport is only who has recently entered the pool:</p>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>League</th><th>New entrants each year</th><th>Where they come from</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip">CBB</span></td><td>High school recruits, plus any unrostered college player (transfers included)</td><td>ESPN recruiting feed (385 players in the 2027 class), with manual entry as backup</td></tr>
+              <tr><td><span class="chip">NBA</span></td><td>International players and unrostered NBA players. CBB graduates only when continuity is off</td><td>ESPN NBA draft feed for drafted internationals; manual entry for the rest</td></tr>
+              <tr><td><span class="chip">NHL</span></td><td>Draft picks not yet in the league, players ranked for the next draft, and unrostered players</td><td>The last five draft classes from the NHL's records (with permanent player ids), Central Scouting's rankings for the next draft once published, and each club's own prospect list</td></tr>
+              <tr><td><span class="chip">NFL</span></td><td>Real rookies and unrostered players</td><td>ESPN NFL draft feed and team rosters</td></tr>
+              <tr><td><span class="chip">MLB</span></td><td>Real draft picks and unrostered players</td><td>MLB draft feed (ids carry through to the majors)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Three admin tools that make this workable</h3>
+        <ul>
+          <li><strong>Add players.</strong> A form for one player and a paste-in CSV for a list. This covers anyone the feeds miss: an unranked recruit, a 17-year-old in Spain.</li>
+          <li><strong>Merge two rows.</strong> Two sources use a different id before and after a player arrives: ESPN recruits, and anything entered by hand. (NHL prospects and MLB draft picks keep one id for life, and NFL and NBA rookies simply appear on rosters.) When the real player appears, the admin page suggests matches by name and the commissioner confirms. Merging moves the roster entry, picks and stats onto one row.</li>
+          <li><strong>Review queue.</strong> Any rostered player who has dropped out of his competition's feed is listed for the commissioner: a college player who left without reaching the NBA, a retirement, a release overseas.</li>
+        </ul>
+
+        <div class="note">
+          <h4>Open free agency needs one guard</h4>
+          <p>With open free agency, someone could add the real-life first overall pick the minute he appears in the feed, and the seasonal draft would be pointless. So the plan includes a default rule: <strong>a player who entered the pool after the league's last draft can only be acquired in the next draft.</strong> After that draft, anyone left undrafted becomes a normal free agent. It is one date comparison (<code>players.eligible_since</code> against the last draft's completion time) and one setting to turn it off.</p>
+        </div>
+      </section>
+
+      <!-- ================= 05 ================= -->
+      <section id="sources">
+        <h2><span class="h2num">05</span>Data sources</h2>
+
+        <p>Every feed below was called against the live API on 7 October 2026 and returned usable data. All are free and need no key.</p>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Sport</th><th>Teams &amp; rosters</th><th>Box scores</th><th>Prospects</th><th>Watch out for</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="chip">CBB</span></td>
+                <td class="mono">site.api.espn.com &hellip;/mens-college-basketball/teams/{id}?enable=roster</td>
+                <td class="mono">&hellip;/summary?event={id}</td>
+                <td class="mono">sports.core.api.espn.com &hellip;/recruiting/{year}/athletes</td>
+                <td>Teams list is 1.4&nbsp;MB, so page it. Rosters carry class year (FR/SO/JR/SR). Recruit ids differ from athlete ids, so recruits need a merge when they enroll.</td>
+              </tr>
+              <tr>
+                <td><span class="chip">NBA</span></td>
+                <td class="mono">&hellip;/basketball/nba/teams/{id}?enable=roster</td>
+                <td class="mono">&hellip;/summary?event={id}</td>
+                <td class="mono">&hellip;/nba/seasons/{year}/draft/rounds</td>
+                <td>Same athlete id as college (checked on one player; confirm on a full draft class in M1). Shooting stats arrive as text like <code>12-22</code> and need splitting.</td>
+              </tr>
+              <tr>
+                <td><span class="chip">NFL</span></td>
+                <td class="mono">&hellip;/football/nfl/teams/{id}?enable=roster</td>
+                <td class="mono">&hellip;/summary?event={id}</td>
+                <td class="mono">&hellip;/nfl/seasons/{year}/draft/rounds</td>
+                <td>Box score is split into passing, rushing, receiving groups. Draft entries use their own id space.</td>
+              </tr>
+              <tr>
+                <td><span class="chip">NHL</span></td>
+                <td class="mono">api-web.nhle.com/v1/roster/{abbr}/current</td>
+                <td class="mono">/v1/gamecenter/{id}/boxscore</td>
+                <td class="mono">/v1/draft/picks/{year}/{round}</td>
+                <td><code>current</code> answers with a redirect, so follow redirects. Names are objects (<code>firstName.default</code>). Rosters and box scores are grouped by forwards, defense, goalies. Draft picks have no player id.</td>
+              </tr>
+              <tr>
+                <td><span class="chip">MLB</span></td>
+                <td class="mono">statsapi.mlb.com/api/v1/teams/{id}/roster?rosterType=40Man</td>
+                <td class="mono">/api/v1/game/{pk}/boxscore</td>
+                <td class="mono">/api/v1/draft/{year}</td>
+                <td><code>currentTeam</code> is empty on many active players; take team from the roster call. The draft feed is 1.3&nbsp;MB.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <h4>ESPN's endpoints are undocumented</h4>
+          <p>Three of the five sports depend on endpoints ESPN has never promised to keep stable. Two cheap defenses belong in the first ingestion milestone: keep each provider behind its own small adapter package, and save the latest raw response for each URL to a <code>raw_payloads</code> table before parsing it. When a feed changes shape you can see exactly what it returned and re-run the sync after fixing the parser.</p>
+        </div>
+
+        <h4>Fetch schedule</h4>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Job</th><th>Out of season</th><th>In season</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">teams</td><td>weekly</td><td>weekly</td><td>Rarely changes.</td></tr>
+              <tr><td class="mono">players</td><td>daily</td><td>every 6 hours</td><td>CBB is about 360 requests; spread it across an hour at one request per second.</td></tr>
+              <tr><td class="mono">games</td><td>none</td><td>hourly</td><td>Schedule and start times. Lineup locks depend on these.</td></tr>
+              <tr><td class="mono">box scores</td><td>none</td><td>every 15 minutes</td><td>Only for sports the dynasty plays. A live game is fetched each run, a finished game once, and once more the next day for stat corrections.</td></tr>
+              <tr><td class="mono">prospects</td><td>weekly</td><td>weekly</td><td>Draft and recruiting feeds. Daily during each sport's real draft week.</td></tr>
+              <tr><td class="mono">stat history</td><td>nightly</td><td>nightly</td><td>Every player's season totals, a whole league per request. The first run backfills ten seasons; later runs refresh the newest two.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Every job is safe to run twice, logs to <code>ingest_runs</code>, and can be triggered by hand from the admin page.</p>
+      </section>
+
+      <!-- ================= 06 ================= -->
+      <section id="schema">
+        <h2><span class="h2num">06</span>Schema</h2>
+
+        <p>About twenty tables in four groups. Columns that hold a key design decision are highlighted.</p>
+
+        <h3>Dynasty, leagues, franchises</h3>
+        <pre><code><span class="k">create table</span> dynasties (
+  id        uuid primary key default gen_random_uuid(),
+  name      text not null,
+  <span class="hl">settings  jsonb not null</span>              <span class="c">-- sports chosen, overall title</span>
+);
+
+<span class="k">create table</span> franchises (
+  id            uuid primary key default gen_random_uuid(),
+  dynasty_id    uuid not null references dynasties(id),
+  name          text not null,
+  manager_name  text not null,
+  slug          text not null,
+  invite_token  text not null unique,   <span class="c">-- personal sign-in link</span>
+  is_commissioner boolean not null default false,
+  unique (dynasty_id, slug)
+);
+
+<span class="k">create table</span> leagues (
+  id          uuid primary key default gen_random_uuid(),
+  dynasty_id  uuid not null references dynasties(id),
+  competition text not null,            <span class="c">-- registry key: cbb|nba|nhl|nfl|mlb</span>
+  name        text not null,
+  <span class="hl">settings    jsonb not null,</span>           <span class="c">-- every rule in section 03</span>
+  unique (dynasty_id, competition)
+);
+
+<span class="c">-- a league lives for years; each year is a season</span>
+<span class="k">create table</span> seasons (
+  id          uuid primary key default gen_random_uuid(),
+  league_id   uuid not null references leagues(id),
+  year        int  not null,
+  starts_on   date not null, ends_on date not null,
+  status      text not null default 'upcoming', <span class="c">-- upcoming|active|complete</span>
+  champion_franchise_id uuid references franchises(id),
+  unique (league_id, year)
+);</code></pre>
+
+        <h3>Real-world data</h3>
+        <pre><code><span class="k">create table</span> pro_teams (
+  id          uuid primary key default gen_random_uuid(),
+  competition text not null,
+  provider_id text not null,            <span class="c">-- the feed's own team id</span>
+  abbrev      text not null, name text not null, logo_url text,
+  unique (competition, provider_id)
+);
+
+<span class="k">create table</span> players (
+  id             uuid primary key default gen_random_uuid(),
+  <span class="hl">competition    text not null,</span>         <span class="c">-- changes when he moves, e.g. cbb → nba</span>
+  <span class="hl">status         text not null,</span>         <span class="c">-- prospect|active|inactive</span>
+  <span class="hl">eligible_since timestamptz not null default now(),</span> <span class="c">-- entered this competition's pool</span>
+  full_name      text not null,
+  positions      text[] not null default '{}',
+  birth_date     date,
+  pro_team_id    uuid references pro_teams(id),
+  class          text,                  <span class="c">-- CBB: FR|SO|JR|SR</span>
+  note           text,                  <span class="c">-- "Real Madrid", "Class of 2027, committed to Duke"</span>
+  headshot_url   text,
+  updated_at     timestamptz not null default now()
+);
+
+<span class="c">-- Fetchers find players through this table, so a re-run never duplicates anyone.</span>
+<span class="c">-- Hand-entered players simply have no row here until merged.</span>
+<span class="k">create table</span> player_external_ids (
+  provider    text not null,            <span class="c">-- id space: espn_basketball|espn_football|mlbam|nhle|...</span>
+  provider_id text not null,
+  player_id   uuid not null references players(id) on delete cascade,
+  <span class="hl">primary key (provider, provider_id)</span>
+);
+
+<span class="k">create table</span> games (
+  id          uuid primary key default gen_random_uuid(),
+  competition text not null,
+  provider_id text not null,
+  starts_at   timestamptz not null,     <span class="c">-- lineup locks read this</span>
+  status      text not null,            <span class="c">-- scheduled|live|final</span>
+  home_team_id uuid references pro_teams(id),
+  away_team_id uuid references pro_teams(id),
+  unique (competition, provider_id)
+);
+
+<span class="k">create table</span> stat_lines (
+  game_id   uuid references games(id),
+  player_id uuid references players(id),
+  <span class="hl">stats     jsonb not null,</span>             <span class="c">-- {"pts":30,"reb":3,"ast":1,...} canonical keys</span>
+  primary key (game_id, player_id)
+);</code></pre>
+
+        <h3>Rosters, lineups, schedule</h3>
+        <pre><code><span class="k">create table</span> roster_entries (
+  league_id    uuid not null references leagues(id),
+  franchise_id uuid not null references franchises(id),
+  player_id    uuid not null references players(id),
+  <span class="hl">list         text not null check (list in ('main','reserve')),</span>
+  acquired_via text not null,           <span class="c">-- draft|trade|free_agent|graduated</span>
+  acquired_at  timestamptz not null default now(),
+  <span class="hl">primary key (league_id, player_id)</span>   <span class="c">-- one roster per league, enforced by the database</span>
+);
+
+<span class="c">-- A lineup stays in force until the manager sets a newer one.</span>
+<span class="k">create table</span> lineup_entries (
+  league_id    uuid not null references leagues(id),
+  franchise_id uuid not null references franchises(id),
+  <span class="hl">effective_on date not null,</span>
+  slot         text not null,           <span class="c">-- "G", "UTIL", ... from settings</span>
+  slot_index   int  not null,
+  player_id    uuid not null references players(id),
+  primary key (league_id, franchise_id, effective_on, slot, slot_index)
+);
+
+<span class="c">-- scoring periods; weeks by default</span>
+<span class="k">create table</span> periods (
+  id         uuid primary key default gen_random_uuid(),
+  season_id  uuid not null references seasons(id),
+  seq        int  not null,
+  starts_on  date not null, ends_on date not null,
+  is_playoff boolean not null default false,
+  unique (season_id, seq)
+);
+
+<span class="c">-- only head-to-head leagues have rows here</span>
+<span class="k">create table</span> matchups (
+  period_id   uuid not null references periods(id),
+  franchise_a uuid not null references franchises(id),
+  franchise_b uuid not null references franchises(id),
+  primary key (period_id, franchise_a)
+);</code></pre>
+
+        <h3>Drafts, trades, history</h3>
+        <pre><code><span class="k">create table</span> drafts (
+  id          uuid primary key default gen_random_uuid(),
+  dynasty_id  uuid not null references dynasties(id),
+  kind        text not null,            <span class="c">-- startup|seasonal</span>
+  year        int  not null,
+  status      text not null default 'scheduled', <span class="c">-- scheduled|live|paused|complete</span>
+  clock_expires_at timestamptz,         <span class="c">-- stored, so a restart never loses the clock</span>
+  completed_at     timestamptz
+);
+
+<span class="c">-- one league for a normal draft; several for a combined startup draft</span>
+<span class="k">create table</span> draft_leagues (
+  draft_id  uuid references drafts(id),
+  league_id uuid references leagues(id),
+  primary key (draft_id, league_id)
+);
+
+<span class="c">-- A pick is a tradeable asset before it is used and a record after.</span>
+<span class="k">create table</span> draft_picks (
+  id           uuid primary key default gen_random_uuid(),
+  draft_id     uuid not null references drafts(id),
+  round        int  not null,
+  position     int,                     <span class="c">-- overall order; null until the commissioner sets it</span>
+  <span class="hl">original_franchise_id uuid not null references franchises(id),</span>
+  <span class="hl">current_franchise_id  uuid not null references franchises(id),</span>
+  player_id    uuid references players(id),  <span class="c">-- filled when the pick is made</span>
+  picked_at    timestamptz,
+  auto_picked  boolean not null default false
+);
+
+<span class="k">create table</span> trades (
+  id          uuid primary key default gen_random_uuid(),
+  dynasty_id  uuid not null references dynasties(id),
+  status      text not null default 'proposed',
+              <span class="c">-- proposed|accepted|rejected|cancelled|executed|reversed</span>
+  proposed_by uuid not null references franchises(id),
+  note        text,
+  created_at  timestamptz not null default now(),
+  resolved_at timestamptz
+);
+
+<span class="k">create table</span> trade_parties (          <span class="c">-- a separate table, so three-way trades work</span>
+  trade_id     uuid references trades(id) on delete cascade,
+  franchise_id uuid references franchises(id),
+  accepted_at  timestamptz,
+  primary key (trade_id, franchise_id)
+);
+
+<span class="k">create table</span> trade_items (
+  id             uuid primary key default gen_random_uuid(),
+  trade_id       uuid not null references trades(id) on delete cascade,
+  from_franchise uuid not null references franchises(id),
+  to_franchise   uuid not null references franchises(id),
+  <span class="hl">league_id      uuid references leagues(id),</span>   <span class="c">-- each player item names its own league</span>
+  player_id      uuid references players(id),
+  draft_pick_id  uuid references draft_picks(id),
+  check (num_nonnulls(player_id, draft_pick_id) = 1)
+);
+
+<span class="c">-- Append-only: the activity feed and the audit trail.</span>
+<span class="k">create table</span> transactions (
+  id           bigserial primary key,
+  dynasty_id   uuid not null references dynasties(id),
+  league_id    uuid references leagues(id),
+  franchise_id uuid references franchises(id),
+  kind         text not null,  <span class="c">-- add|drop|pick|trade|graduated|move_list|settings|commissioner</span>
+  player_id    uuid, draft_pick_id uuid, trade_id uuid,
+  detail       jsonb,
+  created_at   timestamptz not null default now()
+);
+
+<span class="c">-- plus two small ingestion tables: ingest_runs and raw_payloads</span></code></pre>
+        <p>Keeping <code>original_franchise_id</code> beside <code>current_franchise_id</code> is what lets the page say &ldquo;2028 NHL 1st (via Sam).&rdquo; Future seasonal drafts are created ahead of time as <code>scheduled</code> rows, as many years out as the league's <code>future_years</code> setting, so future picks exist and can be traded.</p>
+      </section>
+
+      <!-- ================= 07 ================= -->
+      <section id="rosters">
+        <h2><span class="h2num">07</span>Rosters &amp; lineups</h2>
+
+        <h3>Main roster and reserve list</h3>
+        <p>Each franchise has a main roster and a reserve list in every league, with sizes from settings. Only main-roster players can be put in a starting lineup. Reserve players never score. A manager can move a player between the two lists at any time, subject to the sizes and the reserve eligibility rule.</p>
+
+        <h3>One check for every roster move</h3>
+        <p><code>roster.Check(league, franchise, change)</code> answers one question: after this change, is the franchise within its main and reserve limits, and is each reserve player eligible to be there? Free agent adds, draft picks, trades, list moves and graduations all call it.</p>
+        <p>One exception is deliberate. A CBB graduation, or the commissioner shrinking roster sizes, can push a franchise over a limit through no action of its own. Those changes go through, and the franchise is marked over the limit. <strong>While over, it can only make moves that reduce the overage.</strong></p>
+
+        <h3>Free agency</h3>
+        <p>When a league's free agency is open, any manager can add an available player at any time, first come first served, if <code>roster.Check</code> passes. Drops are always allowed. Adds pause while that league's draft is live, so the draft pool cannot change under the room. New entrants wait for the next draft, as described in section 04.</p>
+
+        <h3>Lineups</h3>
+        <ul>
+          <li>The league's <code>slots</code> setting defines the starting positions. A player fits a slot if one of his positions is in the slot's list.</li>
+          <li>A lineup is saved with an effective date and stays in force until a newer one is saved. Nobody has to re-enter a lineup every day, and no nightly copy job is needed.</li>
+          <li>Daily leagues can change the lineup for any future date. Weekly leagues can only change it from the start of a scoring period.</li>
+          <li>Locks come from <code>games.starts_at</code>. With <code>game_start</code> locking, a player cannot be moved in or out once his game that day (or his first game that week) has started. The commissioner can override a lock.</li>
+          <li>A sports day follows US Eastern time and turns over at 5am, so a late West Coast or Hawaii game counts for the evening it is played on.</li>
+          <li>A player who is dropped, traded or moved to reserve leaves the lineup from that day on. If his game that day has already started, the change takes effect the next day, so points already scored stand.</li>
+        </ul>
+      </section>
+
+      <!-- ================= 08 ================= -->
+      <section id="draft">
+        <h2><span class="h2num">08</span>Drafts</h2>
+
+        <p>Startup and seasonal drafts run on the same code. The only real difference is who is already on a roster when the draft begins: nobody at startup, most players in later years.</p>
+
+        <div class="twoup">
+          <div>
+            <h4>Per-sport draft</h4>
+            <p>The draft covers one league. Used for every seasonal draft, and for startup if you draft each sport separately.</p>
+            <h4>Combined startup draft</h4>
+            <p>The draft covers several leagues at once. Any pick can be spent on a player from any included sport, and the pick lands him on that sport's roster. In the code this is the same draft with more than one row in <code>draft_leagues</code>; the availability rule and <code>roster.Check</code> already work per league.</p>
+          </div>
+          <div>
+            <h4>Commissioner controls</h4>
+            <ul>
+              <li>Generate picks from rounds and an order (linear or snake).</li>
+              <li>Then edit freely before the draft starts: reassign any pick, reorder, add or remove picks.</li>
+              <li>Start, pause, resume, undo the last pick, pick on someone's behalf.</li>
+              <li>Set the pick clock, or 0 for no clock.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>How the room works</h3>
+        <ul>
+          <li>The server holds the truth. Each pick is written to the database first, then announced to everyone over a websocket.</li>
+          <li>The clock is a stored deadline, not a countdown in memory. A two-minute live draft and an eight-hours-per-pick slow draft are the same feature with a different number, and both survive a server restart.</li>
+          <li>When the clock expires the server picks the first available player from that manager's queue. With an empty queue the pick is skipped, and the manager can make it up at any time while the draft is live.</li>
+          <li>Free agency in a league is paused while its draft is running, and when a draft completes, everyone it passed over becomes a free agent.</li>
+          <li>When picking, the manager chooses main roster or reserve for the player, if he is eligible for reserve.</li>
+          <li>A browser that reconnects receives the full current state, then live updates.</li>
+        </ul>
+      </section>
+
+      <!-- ================= 09 ================= -->
+      <section id="trades">
+        <h2><span class="h2num">09</span>Trades</h2>
+
+        <ol class="body">
+          <li><strong>Check each affected league.</strong> A trade touching NBA and NHL must leave both franchises legal in both leagues. The engine runs <code>roster.Check</code> once per league and franchise, and a rejection names the league that failed.</li>
+          <li><strong>Execute in one database transaction and re-check inside it.</strong> Ownership can change between proposal and acceptance. Inside the transaction, lock every roster entry and pick involved, confirm each still belongs to its sender, then move everything and write the log rows. Any failure undoes all of it.</li>
+          <li><strong>Assets move by update.</strong> The only changes are <code>roster_entries.franchise_id</code> and <code>draft_picks.current_franchise_id</code>. A traded starter is removed from the old franchise's future lineups.</li>
+        </ol>
+
+        <p>Roster limits are checked when the last party accepts, not when the offer is made, so a manager can receive an offer first and make room second. A trade is <code>proposed</code>, becomes <code>executed</code> when every party has accepted (and the commissioner has approved, if that setting is on), or ends as <code>rejected</code> or <code>cancelled</code>. Picks can be traded only until their draft starts. The commissioner can reverse an executed trade, which runs the same engine with the items flipped. There is no valuation or fairness logic anywhere.</p>
+      </section>
+
+      <!-- ================= 10 ================= -->
+      <section id="scoring">
+        <h2><span class="h2num">10</span>Scoring &amp; titles</h2>
+
+        <p>Each fetcher converts its box score into the same shape: a set of canonical stat keys per player per game. NBA's <code>"12-22"</code> becomes <code>fgm: 12, fga: 22</code>; NHL's goalie line becomes <code>saves</code> and <code>goals_against</code>. From there a single query scores every sport:</p>
+
+        <pre><code><span class="c">-- fantasy points per franchise per day, for any sport</span>
+<span class="k">select</span> l.franchise_id, g.starts_at::date <span class="k">as</span> day,
+       sum(s.value::numeric * rule.value::numeric) <span class="k">as</span> points
+<span class="k">from</span>   active_lineups l                       <span class="c">-- view: the lineup in force on each date</span>
+<span class="k">join</span>   games g       <span class="k">on</span> g.starts_at::date = l.day
+<span class="k">join</span>   stat_lines sl <span class="k">on</span> sl.game_id = g.id <span class="k">and</span> sl.player_id = l.player_id
+<span class="k">join</span>   leagues lg    <span class="k">on</span> lg.id = l.league_id
+<span class="k">cross join lateral</span> jsonb_each_text(sl.stats) s
+<span class="k">join lateral</span> jsonb_each_text(lg.settings-&gt;'scoring') rule <span class="k">on</span> rule.key = s.key
+<span class="k">group by</span> 1, 2;</code></pre>
+
+        <p>At ten franchises this is fast enough to run on every page load. If it ever is not, the same query can fill a cache table without changing anything else.</p>
+
+        <div class="twoup">
+          <div>
+            <h4>Total points format</h4>
+            <p>Standings are the sum of daily points over the season. No schedule to generate. The leader when the season closes is the champion.</p>
+          </div>
+          <div>
+            <h4>Head-to-head format</h4>
+            <p>A round-robin schedule is generated into <code>matchups</code> when the season starts. Each period's result comes from the two franchises' period totals. The top <code>playoff_teams</code> enter a bracket whose matchups are added as each round finishes.</p>
+          </div>
+        </div>
+
+        <p>The two formats share stat ingestion, lineups and the scoring query. They differ only in one <code>Standings</code> function and the schedule generator.</p>
+
+        <h3>Live scores</h3>
+        <ul>
+          <li>One loop on the server polls the feeds every 30 seconds, only for sports the dynasty plays and only while a game is live or due to start. With nothing in play it makes no requests.</li>
+          <li>Each poll is one scoreboard request per sport plus one box score per live game. The result is written to the database first.</li>
+          <li>Browsers hold a websocket per sport's scoreboard or per game page and receive each change as it is stored. No browser polls, so the load on the feeds is the same for one viewer or twenty.</li>
+          <li>Pages that show fantasy points (standings, matchups, the lineup page) listen on the same connection and re-read their totals when a score changes, so points are still computed in one place.</li>
+        </ul>
+
+        <h3>Head-to-head details</h3>
+        <ul>
+          <li>The schedule is a round robin of <code>matchup_days</code>-long periods; with an odd number of franchises one has a bye each period.</li>
+          <li>Standings rank by share of matchups won (a tie counts half), then by points.</li>
+          <li>The last periods of the season are the playoffs. Each round is set when the one before it ends, re-seeded so the best remaining seed plays the worst; the better seed wins a tie.</li>
+          <li>The winner of the final is the default champion when the commissioner closes the season.</li>
+        </ul>
+
+        <h3>Titles</h3>
+        <ul>
+          <li><strong>Five league titles.</strong> When a season ends the system proposes the champion and the commissioner confirms, which writes <code>seasons.champion_franchise_id</code>.</li>
+          <li><strong>Overall title, optional.</strong> Each franchise earns points for its finishing place in each league (the <code>points_by_finish</code> list), summed across all leagues for that year. It is computed from the season results; nothing extra is stored.</li>
+        </ul>
+      </section>
+
+      <!-- ================= 11 ================= -->
+      <section id="stack">
+        <h2><span class="h2num">11</span>Stack &amp; layout</h2>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">HTTP</td><td class="mono">net/http ServeMux</td><td>The standard library router handles methods and path parameters. No dependency needed.</td></tr>
+              <tr><td class="mono">Database</td><td class="mono">pgx/v5 + sqlc</td><td>You write plain SQL and get typed Go functions generated from it. No ORM.</td></tr>
+              <tr><td class="mono">Migrations</td><td class="mono">goose</td><td>Plain <code>.sql</code> files, built into the binary, applied on startup.</td></tr>
+              <tr><td class="mono">Websocket</td><td class="mono">coder/websocket</td><td>Used only by the draft room.</td></tr>
+              <tr><td class="mono">Scheduler</td><td class="mono">robfig/cron/v3</td><td>Runs the fetchers and the draft clock check inside the one process.</td></tr>
+              <tr><td class="mono">Frontend</td><td class="mono">SvelteKit, static build</td><td>Small bundles. The build output is embedded in the Go binary, so there is no Node in production.</td></tr>
+              <tr><td class="mono">TLS</td><td class="mono">Caddy</td><td>Automatic HTTPS certificates from a six-line config.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre><code>CBB/
+├── backend/
+│   ├── main.go                <span class="c"># wires everything; the only binary</span>
+│   ├── migrations/*.sql
+│   ├── queries/*.sql          <span class="c"># sqlc input</span>
+│   └── internal/
+│       ├── db/                <span class="c"># sqlc output</span>
+│       ├── competition/       <span class="c"># the registry: one file per sport</span>
+│       ├── settings/          <span class="c"># settings structs, defaults, validation</span>
+│       ├── ingest/            <span class="c"># Fetcher interface, upsert, merge; espn/ mlbam/ nhle/</span>
+│       ├── roster/            <span class="c"># Check, add, drop, list moves, graduation</span>
+│       ├── lineup/            <span class="c"># slots, locks</span>
+│       ├── draft/             <span class="c"># picks, clock, websocket hub</span>
+│       ├── trade/             <span class="c"># propose, accept, execute, reverse</span>
+│       ├── scoring/           <span class="c"># points query, standings, schedule, titles</span>
+│       └── web/               <span class="c"># handlers, session, embedded frontend</span>
+├── frontend/                  <span class="c"># SvelteKit</span>
+├── docker-compose.yml
+└── Caddyfile</code></pre>
+        <p>Each package owns one concern and exposes a handful of functions. Handlers in <code>web/</code> stay thin: parse the request, call one package function, write the result.</p>
+      </section>
+
+      <!-- ================= 12 ================= -->
+      <section id="api">
+        <h2><span class="h2num">12</span>API &amp; frontend</h2>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Group</th><th>Routes</th></tr></thead>
+            <tbody>
+              <tr><td>Setup</td><td class="mono">GET /api/competitions &nbsp;<span class="c">← registry: positions, stats, defaults</span><br>POST /api/dynasty<br>GET|PUT /api/dynasty/settings<br>GET|PUT /api/leagues/{id}/settings</td></tr>
+              <tr><td>Players</td><td class="mono">GET /api/players?competition=&amp;q=&amp;pos=&amp;available_in=<br>GET /api/players/{id}</td></tr>
+              <tr><td>Franchises</td><td class="mono">GET /api/franchises<br>GET /api/franchises/{slug} &nbsp;<span class="c">← every roster, reserve list and pick</span></td></tr>
+              <tr><td>Rosters</td><td class="mono">POST /api/leagues/{id}/roster/add<br>POST /api/leagues/{id}/roster/drop<br>POST /api/leagues/{id}/roster/move &nbsp;<span class="c">← main ↔ reserve</span><br>GET|PUT /api/leagues/{id}/lineup?date=</td></tr>
+              <tr><td>Standings</td><td class="mono">GET /api/leagues/{id}/standings<br>GET /api/leagues/{id}/matchups?period=<br>GET /api/dynasty/overall</td></tr>
+              <tr><td>Drafts</td><td class="mono">GET /api/drafts/{id}<br>WS /api/drafts/{id}/ws<br>POST /api/drafts/{id}/pick<br>PUT /api/drafts/{id}/queue</td></tr>
+              <tr><td>Trades</td><td class="mono">GET /api/trades<br>POST /api/trades<br>POST /api/trades/{id}/accept | reject | cancel</td></tr>
+              <tr><td>Feed</td><td class="mono">GET /api/activity</td></tr>
+              <tr><td>Commissioner</td><td class="mono">POST /api/admin/players &nbsp;<span class="c">← one, or CSV</span><br>POST /api/admin/players/merge<br>GET /api/admin/review-queue<br>POST /api/admin/drafts &nbsp;&middot;&nbsp; PUT /api/admin/drafts/{id}/picks<br>POST /api/admin/drafts/{id}/start | pause | undo<br>POST /api/admin/trades/{id}/approve | reverse<br>POST /api/admin/seasons/{id}/close<br>POST /api/admin/sync/{competition}/{job}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Pages</h4>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Route</th><th>What it is</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">/setup</td><td>Create the dynasty: pick sports, review each league's settings, add franchises.</td></tr>
+              <tr><td class="mono">/</td><td>The front door: a sign-in form, or straight to your team if you are signed in. Offers setup when no dynasty exists.</td></tr>
+              <tr><td class="mono">/league</td><td>Your roster meters, every franchise, drafts, and the activity feed.</td></tr>
+              <tr><td class="mono">/trades</td><td>Open offers, completed trades, and declined ones.</td></tr>
+              <tr><td class="mono">/scores, /game/[id]</td><td>Live scoreboards and box scores, with each line's fantasy value and owner.</td></tr>
+              <tr><td class="mono">/matchup/[id]</td><td>A head-to-head matchup: both totals and the starters behind them.</td></tr>
+              <tr><td class="mono">/league/[sport]</td><td>Standings or matchups, rosters, available players.</td></tr>
+              <tr><td class="mono">/franchise/[slug]</td><td>Anyone's full sheet: main rosters, reserve lists, picks.</td></tr>
+              <tr><td class="mono">/lineup/[sport]</td><td>Set starters for a day or week; shows each player's games, points and locks.</td></tr>
+              <tr><td class="mono">/players</td><td>Search across all sports, with a filter for &ldquo;available.&rdquo;</td></tr>
+              <tr><td class="mono">/trade/new</td><td>Two panes, one per franchise, each showing assets from every sport.</td></tr>
+              <tr><td class="mono">/draft/[id]</td><td>The draft room.</td></tr>
+              <tr><td class="mono">/commissioner</td><td>Settings, draft setup, add and merge players, review queue, sync status.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Two reusable pieces keep the frontend small. A single <strong>settings form</strong> is generated from the registry and serves both the setup wizard and the commissioner page. A single <strong>player list</strong> component, with search, filters and a row action, serves the player browser, free agency, the draft board and the trade machine.</p>
+
+        <p>In the trade machine, sport is a filter and not a boundary: both panes show every asset a franchise owns, and the selected items can span sports. A strip under each pane shows the roster change per league (for example &ldquo;NBA &minus;1, NHL +1&rdquo;) so legality is visible before sending.</p>
+      </section>
+
+      <!-- ================= 13 ================= -->
+      <section id="deploy">
+        <h2><span class="h2num">13</span>Auth &amp; deployment</h2>
+
+        <h3>Accounts</h3>
+        <p>Each manager has an account: an email and a password. The commissioner creates theirs during setup. Everyone else gets an invite link for their franchise; opening it lets them choose their email and password, and the link then stops working. A forgotten password is fixed the same way: the commissioner issues a new link, which also signs out anywhere the old password was used. No email is ever sent.</p>
+        <p>Signing in issues a JWT, kept in a cookie that page scripts cannot read. It lasts 30 days and is renewed on each visit, so a manager who comes back is taken straight to their team. The signing key is generated on first start and stored in the database, so there is nothing to configure.</p>
+        <p>The authorization rule is unchanged: every request that changes something checks that the signed-in franchise owns the thing being changed, or is a commissioner. Open trade offers are visible only to their parties and commissioners.</p>
+
+        <h3>Deployment</h3>
+        <pre><code><span class="k">services:</span>
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile, caddy_data:/data]
+  app:                        <span class="c"># API + fetchers + embedded frontend</span>
+    build: .
+    environment:
+      DATABASE_URL: postgres://cd:${DB_PASS}@db:5432/crossover
+      SESSION_SECRET: ${SESSION_SECRET}
+    depends_on: [db]
+  db:
+    image: postgres:17-alpine
+    volumes: [pgdata:/var/lib/postgresql/data]</code></pre>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Concern</th><th>Answer</th></tr></thead>
+            <tbody>
+              <tr><td>Host</td><td>One small VPS with 2 vCPU and 4&nbsp;GB of memory, around $5 a month.</td></tr>
+              <tr><td>Deploy</td><td><code>git pull &amp;&amp; docker compose up -d --build</code>. Migrations run on startup.</td></tr>
+              <tr><td>Backups</td><td>Nightly <code>pg_dump</code>, copied off the server. Player data can be re-fetched; rosters, lineups and trade history cannot.</td></tr>
+              <tr><td>Monitoring</td><td><code>/healthz</code>, structured logs, and the sync status page fed by <code>ingest_runs</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= 14 ================= -->
+      <section id="milestones">
+        <h2><span class="h2num">14</span>Milestones</h2>
+
+        <p>The scope roughly doubled with scoring, lineups and free agency, so this is no longer a few weekends. The order below gets you to a playable startup draft as early as possible and adds scoring before your first season needs it. Estimates assume hobby pace.</p>
+
+        <div class="ladder">
+          <div class="rung">
+            <div class="tag">M0</div>
+            <div>
+              <h3>Skeleton</h3>
+              <p>Compose file, Postgres, migrations, sqlc, health check, SvelteKit build embedded in the binary.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">1 evening</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M1</div>
+            <div>
+              <h3>Registry and ingestion</h3>
+              <p>The competition registry, teams and players for all five sports, prospect feeds (CBB recruits, NHL prospects, MLB draft picks), raw payload storage, the player browser. Still to do: confirming the college-to-NBA id match on a full draft class.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">2&ndash;3 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M2</div>
+            <div>
+              <h3>Dynasty setup and rosters</h3>
+              <p>Settings structs and form, setup wizard, franchises and invite links, main and reserve lists, <code>roster.Check</code>, free agency, the commissioner's add-player and merge tools, activity feed.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">2&ndash;3 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M3</div>
+            <div>
+              <h3>Drafts</h3>
+              <p>Pick generation and editing, the draft room, stored clock, queues, per-sport and combined modes. <strong>After this you can hold your startup draft.</strong></p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">2 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M4</div>
+            <div>
+              <h3>Trades</h3>
+              <p>Trade machine, per-league checks, atomic execution, commissioner approval and reversal, future-year picks. Accounts with sign-in were added alongside.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">1&ndash;2 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M5</div>
+            <div>
+              <h3>Stats, lineups, total-points standings</h3>
+              <p>Games and box score fetchers, canonical stats, lineup setting with locks, the scoring query, seasons, total-points standings and titles, the overall title.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">3 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M6</div>
+            <div>
+              <h3>Head-to-head and continuity automation</h3>
+              <p>Schedule generation, matchups, playoff brackets. Automatic CBB-to-NBA graduation and the review queue. Live scoring was added alongside: a server loop polls games in play and pushes scoreboards and box scores over websockets.</p>
+              <span class="chip ok done">Built 7 Oct</span>
+            </div>
+            <div class="est">2 weekends</div>
+          </div>
+          <div class="rung">
+            <div class="tag">M7</div>
+            <div>
+              <h3>Ship</h3>
+              <p>VPS, domain, HTTPS, backups tested by restoring one. This can happen any time after M3; it is listed last only because nothing depends on it.</p>
+            </div>
+            <div class="est">1 evening</div>
+          </div>
+        </div>
+
+        <p>One timing note: box scores are historical, so stats for a season already under way can be fetched after the fact. Lineups cannot be set retroactively, so a league only starts scoring properly from the day M5 is live.</p>
+      </section>
+
+      <!-- ================= 15 ================= -->
+      <section id="open">
+        <h2><span class="h2num">15</span>Open questions</h2>
+
+        <p>Each of these has a default written into the plan. They are listed so you can overrule any of them before the code depends on it.</p>
+
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Question</th><th>Default in this plan</th></tr></thead>
+            <tbody>
+              <tr><td>With open free agency, can a brand-new rookie or recruit be added before the seasonal draft?</td><td>No. New entrants can only be drafted; undrafted ones become free agents afterwards. One setting turns this off.</td></tr>
+              <tr><td>Who may sit on the reserve list?</td><td>Prospects only: players who have not yet reached the competition's top level. The alternative setting is &ldquo;anyone.&rdquo;</td></tr>
+              <tr><td>Where does a CBB graduate land in the NBA league?</td><td>On the franchise's NBA reserve list, even if that puts it over the limit; the franchise must then get back under before making other moves.</td></tr>
+              <tr><td>What about a rostered CBB player who leaves college but does not reach the NBA?</td><td>He appears in the commissioner's review queue. The commissioner either carries him over as an NBA prospect or releases him.</td></tr>
+              <tr><td>Does every franchise play in every league of the dynasty?</td><td>Yes. Nobody sits a sport out.</td></tr>
+              <tr><td>How is the overall title scored, and which seasons count as one year?</td><td>Points by finishing place in each league, summed. Seasons are grouped by the year they start in (2026 NFL with 2026&ndash;27 NBA).</td></tr>
+              <tr><td>What happens when a draft clock runs out and the manager's queue is empty?</td><td>The pick is skipped and can be made later. No automatic &ldquo;best available,&rdquo; since that would need a ranking and you ruled out valuation logic.</td></tr>
+              <tr><td>Is there a limit on free agent adds, or a waiting period after a drop?</td><td>No limits. A dropped player is available to everyone at once.</td></tr>
+              <tr><td>Will there ever be more than one dynasty on the server?</td><td>The schema allows it, but the first version's screens assume one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Not planned</h3>
+        <p>Trade valuation or fairness scoring, waiver priority or bidding, push notifications, a mobile app, real accounts with passwords, and public league pages.</p>
+      </section>
+
+      <hr class="end">
+      <p class="colophon">Feeds checked live 2026-10-07: ESPN rosters, box scores, drafts and recruiting for CBB, NBA and NFL; statsapi.mlb.com rosters, box scores and draft; api-web.nhle.com rosters, box scores and draft.</p>
+
+    </main>
+  </div>
+</div>

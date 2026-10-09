@@ -1,0 +1,34 @@
+<script lang="ts">
+	import DraftCard from '#lib/DraftCard.svelte';
+	import Empty from '#lib/ui/Empty.svelte';
+	import type { PageProps } from './$types';
+
+	let { data }: PageProps = $props();
+</script>
+
+<svelte:head><title>Drafts</title></svelte:head>
+
+<div class="stack">
+	<div class="spread">
+		<h1>Drafts</h1>
+		{#if data.me?.is_commissioner}<a class="button primary" href="/commissioner?section=drafts">New draft</a>{/if}
+	</div>
+
+	{#if data.drafts.length === 0}
+		<Empty icon="draft" title="No drafts yet">
+			The commissioner creates drafts: a startup draft to fill the rosters, then one each year per league.
+		</Empty>
+	{:else}
+		<div class="list">
+			{#each data.drafts as draft (draft.id)}<DraftCard {draft} />{/each}
+		</div>
+	{/if}
+</div>
+
+<style>
+	.list {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+		gap: 0.8rem;
+	}
+</style>

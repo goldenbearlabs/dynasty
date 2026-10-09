@@ -1,0 +1,44 @@
+# Production: `docker compose up -d --build` runs all three services.
+# Development: `make db` starts only Postgres; the app runs on the host.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [app]
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://crossover:${DB_PASSWORD:-crossover}@db:5432/crossover
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crossover
+      POSTGRES_USER: crossover
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-crossover}
+    ports: ["127.0.0.1:5433:5432"] # 5433 on the host; reachable only from this machine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crossover"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  caddy_data:

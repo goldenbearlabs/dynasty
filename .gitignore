@@ -1,0 +1,16 @@
+# secrets and OS files
+.env
+.DS_Store
+
+.env
+.DS_Store
+
+# backend
+backend/crossover
+backend/internal/web/dist/*
+!backend/internal/web/dist/.gitkeep
+
+# frontend
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit

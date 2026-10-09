@@ -1,0 +1,414 @@
+/*
+ * The design system: colour and type tokens, then base styles for plain
+ * elements (headings, controls, tables) and a few shared classes. Components
+ * style themselves from these tokens and never use literal colours.
+ */
+
+:root {
+	color-scheme: light dark;
+
+	/* surfaces and text */
+	--ground: #f3f4f8;
+	--surface: #ffffff;
+	--surface-2: #f7f8fb;
+	--ink: #10131c;
+	--ink-soft: #5b6275;
+	--ink-faint: #8b91a3;
+	--rule: #e0e3ec;
+	--rule-strong: #c9cedb;
+
+	/* brand, and gold for anything about picks, titles or the commissioner */
+	--brand: #2f4fe0;
+	--brand-ink: #ffffff;
+	--brand-soft: #e7ebff;
+	--gold: #a16a0a;
+	--gold-soft: #fbf0d6;
+
+	/* meaning */
+	--good: #1c8a4c;
+	--good-soft: #dff3e7;
+	--bad: #c5303f;
+	--bad-soft: #fbe4e6;
+
+	/* one colour per sport */
+	--cbb: #d9510a;
+	--nba: #6741d9;
+	--nhl: #0b7285;
+	--nfl: #2b8a3e;
+	--mlb: #c92a2a;
+
+	--shadow: none;
+	--radius: 6px;
+	--radius-small: 5px;
+
+	--display: 'Bricolage Grotesque Variable', 'Arial Narrow', system-ui, sans-serif;
+	--body: 'Instrument Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ground: #0b0e15;
+		--surface: #141822;
+		--surface-2: #1a1f2c;
+		--ink: #eceef5;
+		--ink-soft: #a0a7ba;
+		--ink-faint: #70778b;
+		--rule: #252b3a;
+		--rule-strong: #343b4f;
+
+		--brand: #8499ff;
+		--brand-ink: #0b0e15;
+		--brand-soft: #1b2347;
+		--gold: #f0c050;
+		--gold-soft: #2e2610;
+
+		--good: #5fd39a;
+		--good-soft: #12301f;
+		--bad: #ff8a8f;
+		--bad-soft: #3a1619;
+
+		--cbb: #ff9547;
+		--nba: #a48bff;
+		--nhl: #4fd1e0;
+		--nfl: #62d27a;
+		--mlb: #ff7676;
+
+		--shadow: none;
+	}
+}
+
+/* Anything inside an element marked with a sport can use var(--sport). */
+[data-sport='cbb'] { --sport: var(--cbb); }
+[data-sport='nba'] { --sport: var(--nba); }
+[data-sport='nhl'] { --sport: var(--nhl); }
+[data-sport='nfl'] { --sport: var(--nfl); }
+[data-sport='mlb'] { --sport: var(--mlb); }
+
+/* ---- base ---- */
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--ground);
+	color: var(--ink);
+	font: 15px/1.5 var(--body);
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--display);
+	line-height: 1.15;
+	letter-spacing: -0.015em;
+	text-wrap: balance;
+	margin: 0;
+}
+h1 {
+	font-size: clamp(1.7rem, 4vw, 2.3rem);
+	font-weight: 750;
+}
+h2 {
+	font-size: 1.25rem;
+	font-weight: 700;
+}
+h3 {
+	font-size: 1rem;
+	font-weight: 650;
+}
+p {
+	margin: 0;
+}
+a {
+	color: var(--brand);
+	text-decoration: none;
+}
+a:hover {
+	text-decoration: underline;
+}
+code {
+	font: 0.85em var(--mono);
+	background: var(--surface-2);
+	border: 1px solid var(--rule);
+	border-radius: 4px;
+	padding: 0.05em 0.35em;
+}
+:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 2px;
+}
+
+/* ---- controls ---- */
+
+input,
+select,
+textarea,
+button {
+	font: inherit;
+	color: inherit;
+}
+input,
+select,
+textarea {
+	background: var(--surface);
+	border: 1px solid var(--rule-strong);
+	border-radius: var(--radius-small);
+	padding: 0.5rem 0.65rem;
+	min-width: 0;
+}
+input::placeholder,
+textarea::placeholder {
+	color: var(--ink-faint);
+}
+input[type='checkbox'] {
+	width: 1.05rem;
+	height: 1.05rem;
+	padding: 0;
+	accent-color: var(--brand);
+}
+input[type='number'] {
+	width: 5.5rem;
+	font-variant-numeric: tabular-nums;
+}
+textarea {
+	width: 100%;
+	font: 0.85rem/1.5 var(--mono);
+}
+
+button,
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	background: var(--surface);
+	border: 1px solid var(--rule-strong);
+	border-radius: var(--radius-small);
+	padding: 0.5rem 0.85rem;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+	white-space: nowrap;
+	transition:
+		background 0.12s,
+		border-color 0.12s;
+}
+button:hover:not(:disabled),
+.button:hover {
+	border-color: var(--ink-faint);
+	text-decoration: none;
+}
+button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+button.primary,
+.button.primary {
+	background: var(--brand);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+button.primary:hover:not(:disabled),
+.button.primary:hover {
+	filter: brightness(1.08);
+	border-color: var(--brand);
+}
+button.quiet {
+	background: transparent;
+	border-color: transparent;
+	color: var(--ink-soft);
+}
+button.quiet:hover:not(:disabled) {
+	background: var(--surface-2);
+	border-color: transparent;
+	color: var(--ink);
+}
+button.danger {
+	color: var(--bad);
+}
+button.small,
+.button.small {
+	padding: 0.28rem 0.6rem;
+	font-size: 0.82rem;
+}
+
+/* A labelled control: the label text sits above the control. */
+label.field {
+	display: grid;
+	gap: 0.3rem;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--ink-soft);
+}
+label.field > :is(input, select, textarea) {
+	font-size: 0.95rem;
+	font-weight: 400;
+	color: var(--ink);
+}
+label.check {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+/* ---- layout helpers ---- */
+
+/* A wrapping row of controls or chips. */
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.6rem 0.9rem;
+}
+.row.end {
+	align-items: end;
+}
+/* A vertical run of blocks with even gaps. */
+.stack {
+	display: grid;
+	gap: 1rem;
+	align-content: start;
+}
+.stack.tight {
+	gap: 0.6rem;
+}
+.spread {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem 1rem;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--rule);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+	padding: 0.85rem 1rem;
+}
+.card.flush {
+	padding: 0;
+	overflow: hidden;
+}
+
+/* Open sections for data-heavy views: hierarchy comes from dividers. */
+.panel {
+	background: var(--surface);
+	border-block: 1px solid var(--rule);
+	min-width: 0;
+}
+
+/* The small uppercase label above a section or a number. */
+.eyebrow {
+	font: 600 0.7rem/1.2 var(--mono);
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--ink-faint);
+}
+
+/* ---- tables ---- */
+
+.scroll {
+	overflow-x: auto;
+}
+table {
+	width: 100%;
+	border-collapse: collapse;
+}
+th,
+td {
+	text-align: left;
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: middle;
+}
+th {
+	font: 600 0.68rem/1.2 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-faint);
+	background: var(--surface-2);
+	white-space: nowrap;
+}
+tbody tr:last-child td {
+	border-bottom: none;
+}
+tbody tr:hover td {
+	background: var(--surface-2);
+}
+td.actions {
+	text-align: right;
+	white-space: nowrap;
+}
+td.actions > * + * {
+	margin-left: 0.35rem;
+}
+.num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- text ---- */
+
+.muted {
+	color: var(--ink-soft);
+}
+.small-text {
+	font-size: 0.85rem;
+}
+
+/* A small status label. Colour comes from a modifier or an enclosing sport. */
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	font: 650 0.66rem/1 var(--mono);
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	padding: 0.28rem 0.45rem;
+	border-radius: 5px;
+	background: var(--surface-2);
+	color: var(--ink-soft);
+	border: 1px solid var(--rule);
+	white-space: nowrap;
+}
+.pill.brand {
+	background: var(--brand-soft);
+	color: var(--brand);
+	border-color: transparent;
+}
+.pill.gold {
+	background: var(--gold-soft);
+	color: var(--gold);
+	border-color: transparent;
+}
+.pill.good {
+	background: var(--good-soft);
+	color: var(--good);
+	border-color: transparent;
+}
+.pill.bad {
+	background: var(--bad-soft);
+	color: var(--bad);
+	border-color: transparent;
+}
+
+[role='alert'] {
+	background: var(--bad-soft);
+	color: var(--bad);
+	border-radius: var(--radius-small);
+	padding: 0.65rem 0.85rem;
+	font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition: none !important;
+		animation: none !important;
+	}
+}
