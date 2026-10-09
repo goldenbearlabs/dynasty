@@ -93,7 +93,7 @@ type FreeAgency struct {
 // up the best claim gets him. Unclaimed, he becomes a free agent.
 type Waivers struct {
 	Mode   string `json:"mode"`   // WaiversNone | WaiversRolling | WaiversFAAB
-	Days   int    `json:"days"`   // how long a dropped player stays on waivers
+	Hours  int    `json:"hours"`  // how long a released player stays on waivers
 	Budget int    `json:"budget"` // FAAB only: what each franchise can bid in a season
 }
 
@@ -211,7 +211,7 @@ func (l League) Validate(c Catalog) error {
 		oneOf("free_agency.mode", l.FreeAgency.Mode, FreeAgencyOpen, FreeAgencyClosed),
 		between("free_agency.weekly_limit", l.FreeAgency.WeeklyLimit, 0, 100),
 		oneOf("waivers.mode", l.Waivers.Mode, WaiversNone, WaiversRolling, WaiversFAAB),
-		between("waivers.days", l.Waivers.Days, 1, 14),
+		between("waivers.hours", l.Waivers.Hours, 1, 14*24),
 		between("waivers.budget", l.Waivers.Budget, 0, 100000),
 		between("draft.rounds", l.Draft.Rounds, 0, 100),
 		between("draft.signing_days", l.Draft.SigningDays, 1, 60),

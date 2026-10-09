@@ -98,6 +98,7 @@ type Claim struct {
 	PlayerID     pgtype.UUID `json:"player_id"`
 	DropPlayerID pgtype.UUID `json:"drop_player_id"` // optional: released if the claim wins
 	Bid          int         `json:"bid"`            // FAAB only
+	List         string      `json:"list"`           // where he lands: main (the default) or reserve
 }
 
 // Claim puts in, or replaces, a franchise's claim for a player on waivers.
@@ -116,6 +117,12 @@ func (s *Service) Claim(ctx context.Context, league db.League, franchise db.Fran
 	}
 	if rules.Waivers.Mode != settings.WaiversFAAB {
 		c.Bid = 0
+	}
+	if c.List == "" {
+		c.List = settings.ListMain
+	}
+	if c.List != settings.ListMain && c.List != settings.ListReserve {
+		return problem.New("A claimed player goes to the main roster or the reserve list.")
 	}
 	if c.Bid < 0 {
 		return problem.New("A bid cannot be negative.")
@@ -138,7 +145,7 @@ func (s *Service) Claim(ctx context.Context, league db.League, franchise db.Fran
 	}
 	return q.PutWaiverClaim(ctx, db.PutWaiverClaimParams{
 		LeagueID: league.ID, FranchiseID: franchise.ID,
-		PlayerID: c.PlayerID, DropPlayerID: c.DropPlayerID, Bid: int32(c.Bid),
+		PlayerID: c.PlayerID, DropPlayerID: c.DropPlayerID, Bid: int32(c.Bid), List: c.List,
 	})
 }
 
@@ -218,6 +225,10 @@ func settle(ctx context.Context, q *db.Queries, w db.Waiver) error {
 			switch {
 			case err == nil:
 				awarded, result, reason = true, "won", ""
+				// The winner goes to the back of the order.
+				if err := setOrder(ctx, q, league, toBack(order, claim.FranchiseID)); err != nil {
+					return err
+				}
 			case errors.As(err, &refused):
 				reason = refused.Error()
 			default:
@@ -248,8 +259,77 @@ func award(ctx context.Context, q *db.Queries, league db.League, claim db.Waiver
 			return err
 		}
 	}
-	change.PlayerID, change.List, change.Bid = claim.PlayerID, settings.ListMain, int(claim.Bid)
+	change.PlayerID, change.List, change.Bid = claim.PlayerID, claim.List, int(claim.Bid)
 	return roster.AddIn(ctx, q, change)
+}
+
+// toBack is the order with one franchise moved to the end.
+func toBack(order []Standing, franchiseID pgtype.UUID) []pgtype.UUID {
+	var ids []pgtype.UUID
+	for _, s := range order {
+		if s.FranchiseID != franchiseID {
+			ids = append(ids, s.FranchiseID)
+		}
+	}
+	return append(ids, franchiseID)
+}
+
+// setOrder stores a league's waiver order, in the caller's transaction.
+func setOrder(ctx context.Context, q *db.Queries, league db.League, ids []pgtype.UUID) error {
+	if err := q.ClearWaiverOrder(ctx, league.ID); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if err := q.InsertWaiverOrder(ctx, db.InsertWaiverOrderParams{LeagueID: league.ID, FranchiseID: id, Position: int32(i + 1)}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetOrder replaces a league's waiver order with the one given, which must
+// name each of the dynasty's franchises once. It is how the commissioner
+// overrides the order, and how a new season sets it.
+func (s *Service) SetOrder(ctx context.Context, league db.League, ids []pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		franchises, err := q.ListFranchises(ctx, league.DynastyID)
+		if err != nil {
+			return err
+		}
+		seen := map[pgtype.UUID]bool{}
+		for _, id := range ids {
+			known := slices.ContainsFunc(franchises, func(f db.Franchise) bool { return f.ID == id })
+			if !known || seen[id] {
+				return problem.New("The waiver order must name every franchise once.")
+			}
+			seen[id] = true
+		}
+		if len(ids) != len(franchises) {
+			return problem.New("The waiver order must name every franchise once.")
+		}
+		return setOrder(ctx, q, league, ids)
+	})
+}
+
+// ResetOrder sets the order from a ranking that may not name everyone: the
+// franchises it leaves out (new since it was made) go last, by name.
+func (s *Service) ResetOrder(ctx context.Context, league db.League, ranked []pgtype.UUID) error {
+	franchises, err := db.New(s.pool).ListFranchises(ctx, league.DynastyID)
+	if err != nil {
+		return err
+	}
+	var order []pgtype.UUID
+	for _, id := range ranked {
+		if slices.ContainsFunc(franchises, func(f db.Franchise) bool { return f.ID == id }) && !slices.Contains(order, id) {
+			order = append(order, id)
+		}
+	}
+	for _, f := range franchises { // already in name order
+		if !slices.Contains(order, f.ID) {
+			order = append(order, f.ID)
+		}
+	}
+	return s.SetOrder(ctx, league, order)
 }
 
 // budgetLeft is a franchise's remaining FAAB budget; zero without FAAB,

@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/dynasty", s.commissioner(s.updateDynasty))
 	mux.HandleFunc("PUT /api/leagues/{id}/settings", s.commissioner(s.updateLeagueSettings))
 	mux.HandleFunc("POST /api/admin/leagues", s.commissioner(s.addLeague))
+	mux.HandleFunc("PUT /api/admin/leagues/{id}/waiver-order", s.commissioner(s.setWaiverOrder))
 	mux.HandleFunc("GET /api/admin/franchises", s.commissioner(s.listInvites))
 	mux.HandleFunc("POST /api/admin/franchises", s.commissioner(s.addFranchise))
 	mux.HandleFunc("PUT /api/admin/franchises/{id}", s.commissioner(s.updateFranchise))

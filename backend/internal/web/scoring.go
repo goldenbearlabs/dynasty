@@ -71,7 +71,14 @@ func (s *Server) createSeason(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
-	if _, err := s.Queries.GetLeague(r.Context(), body.LeagueID); err != nil {
+	league, err := s.Queries.GetLeague(r.Context(), body.LeagueID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	// How the season before finished, read before there is a new one.
+	last, err := s.Scoring.Standings(r.Context(), league)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -79,6 +86,18 @@ func (s *Server) createSeason(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	// A new season sets the waiver order: last season's standings, worst
+	// first. The commissioner can rearrange it. A first season has nothing
+	// to go on and keeps the order as it is.
+	if last.Season != nil && len(last.Rows) > 0 {
+		var order []pgtype.UUID
+		for i := len(last.Rows) - 1; i >= 0; i-- {
+			order = append(order, last.Rows[i].FranchiseID)
+		}
+		if err := s.Waivers.ResetOrder(r.Context(), league, order); err != nil {
+			s.Log.Warn("set the waiver order for a new season", "league", league.Name, "err", err)
+		}
 	}
 	writeJSON(w, http.StatusCreated, season)
 }

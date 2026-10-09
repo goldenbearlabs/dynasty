@@ -144,29 +144,25 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 		}); err != nil {
 			return nil, err
 		}
-		// A released draft pick is on waivers for a day in every league; anyone
-		// else goes on them for as long as the league's own rule says, if it has one.
-		clears := time.Time{}
-		switch {
-		case roster[i].List == settings.ListRights:
-			clears = time.Now().Add(ReleasedPickWaiver)
-		case rules.Waivers.Mode != settings.WaiversNone:
-			clears = time.Now().AddDate(0, 0, rules.Waivers.Days)
-		}
-		if !clears.IsZero() {
-			if err := q.PutOnWaivers(ctx, db.PutOnWaiversParams{
-				LeagueID: c.League.ID, PlayerID: c.PlayerID, ClearsAt: pgtype.Timestamptz{Time: clears, Valid: true},
-			}); err != nil {
-				return nil, err
-			}
+		// Whoever is released, from whichever list, waits on waivers first.
+		if err := waive(ctx, q, rules, c.League.ID, c.PlayerID); err != nil {
+			return nil, err
 		}
 		return slices.Delete(roster, i, i+1), lineup.Bench(ctx, q, c.League.ID, c.Franchise.ID, c.PlayerID)
 	})
 }
 
-// ReleasedPickWaiver is how long a rookie-draft pick stays on waivers after
-// it is released or left unsigned, before he becomes a free agent.
-const ReleasedPickWaiver = 24 * time.Hour
+// waive puts a released player on waivers for as long as the league's rule
+// says, in the caller's transaction. A league without waivers skips it.
+func waive(ctx context.Context, q *db.Queries, rules settings.League, leagueID, playerID pgtype.UUID) error {
+	if rules.Waivers.Mode == settings.WaiversNone {
+		return nil
+	}
+	clears := time.Now().Add(time.Duration(rules.Waivers.Hours) * time.Hour)
+	return q.PutOnWaivers(ctx, db.PutOnWaiversParams{
+		LeagueID: leagueID, PlayerID: playerID, ClearsAt: pgtype.Timestamptz{Time: clears, Valid: true},
+	})
+}
 
 // ReleaseUnsigned releases every rookie-draft pick whose time to be signed
 // has run out, onto waivers. It reports how many were released.
@@ -180,9 +176,15 @@ func (s *Service) ReleaseUnsigned(ctx context.Context) (int, error) {
 			if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{LeagueID: e.LeagueID, FranchiseID: e.FranchiseID, PlayerID: e.PlayerID}); err != nil {
 				return err
 			}
-			if err := q.PutOnWaivers(ctx, db.PutOnWaiversParams{
-				LeagueID: e.LeagueID, PlayerID: e.PlayerID, ClearsAt: pgtype.Timestamptz{Time: time.Now().Add(ReleasedPickWaiver), Valid: true},
-			}); err != nil {
+			league, err := q.GetLeague(ctx, e.LeagueID)
+			if err != nil {
+				return err
+			}
+			rules, err := settings.Parse[settings.League](league.Settings)
+			if err != nil {
+				return err
+			}
+			if err := waive(ctx, q, rules, e.LeagueID, e.PlayerID); err != nil {
 				return err
 			}
 			return q.InsertTransaction(ctx, db.InsertTransactionParams{

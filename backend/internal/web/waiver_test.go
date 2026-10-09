@@ -2,10 +2,12 @@ package web_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"crossover/internal/dbtest"
 	"crossover/internal/dynasty"
@@ -34,7 +36,8 @@ func TestWaiverFlow(t *testing.T) {
 	rules.Lineup.Slots = nil
 	rules.FreeAgency.NewEntrantsDraftOnly = false
 	rules.FreeAgency.WeeklyLimit = 2
-	rules.Waivers.Mode, rules.Waivers.Days = "rolling", 2
+	rules.Waivers.Mode, rules.Waivers.Hours = "rolling", 48
+	rules.Roster.ReserveEligibility = "anyone"
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
 		Name:    "Waiver Test",
 		Leagues: []dynasty.LeagueSetup{{Competition: "nba", Settings: rules}},
@@ -201,7 +204,7 @@ func TestWaiverFlow(t *testing.T) {
 	}
 	ann.want(http.StatusOK, "GET", "/api/dynasty", nil, &current)
 	faab := current.Leagues[0].Settings
-	faab["waivers"] = map[string]any{"mode": "faab", "days": 1, "budget": 100}
+	faab["waivers"] = map[string]any{"mode": "faab", "hours": 24, "budget": 100}
 	ann.want(http.StatusNoContent, "PUT", league+"/settings", faab, nil)
 
 	place("Zw Four", "Cy")
@@ -233,6 +236,81 @@ func TestWaiverFlow(t *testing.T) {
 	}
 	if got := order(); got != "Cy Bob Ann " {
 		t.Errorf("waiver order = %q after Ann's win", got)
+	}
+
+	// --- the waiver order: the commissioner's override, and a new season -------
+	// (the order is Cy, Bob, Ann at this point)
+	reorder := func(names ...string) map[string]any {
+		ids := []string{}
+		for _, n := range names {
+			ids = append(ids, team[n])
+		}
+		return map[string]any{"franchise_ids": ids}
+	}
+	bob.want(http.StatusForbidden, "PUT", "/api/admin"+league[4:]+"/waiver-order", reorder("Bob", "Ann", "Cy"), nil)
+	ann.want(http.StatusUnprocessableEntity, "PUT", "/api/admin"+league[4:]+"/waiver-order", reorder("Bob", "Ann"), nil)       // someone missing
+	ann.want(http.StatusUnprocessableEntity, "PUT", "/api/admin"+league[4:]+"/waiver-order", reorder("Bob", "Bob", "Cy"), nil) // someone twice
+	ann.want(http.StatusNoContent, "PUT", "/api/admin"+league[4:]+"/waiver-order", reorder("Bob", "Ann", "Cy"), nil)
+	if got := order(); got != "Bob Ann Cy " {
+		t.Fatalf("waiver order = %q after the commissioner set it", got)
+	}
+
+	// A claim can ask for the reserve list, and a win sends the franchise to the back.
+	b := map[string]any{"player_id": id["Zw Five"], "bid": 5, "list": "bench"}
+	ann.want(http.StatusUnprocessableEntity, "POST", league+"/waivers/claims", b, nil) // no such list
+	b["list"] = "reserve"
+	ann.want(http.StatusNoContent, "POST", league+"/waivers/claims", b, nil)
+	clear("Zw Five")
+	var held struct {
+		Rosters []struct {
+			Players []struct {
+				FullName string `json:"full_name"`
+				List     string
+			}
+		}
+	}
+	ann.want(http.StatusOK, "GET", "/api/franchises/"+slug["Ann"], nil, &held)
+	onReserve := false
+	for _, p := range held.Rosters[0].Players {
+		onReserve = onReserve || (p.FullName == "Zw Five" && p.List == "reserve")
+	}
+	if got := order(); !onReserve || got != "Bob Cy Ann " {
+		t.Fatalf("after a claim to the reserve list: on reserve = %v, order = %q; want true and Ann at the back", onReserve, got)
+	}
+
+	// A first season leaves the order alone; the next one sets it from how the last finished, worst first.
+	year := time.Now().Year()
+	season := func(year int) string {
+		t.Helper()
+		var created struct{ ID string }
+		ann.want(http.StatusCreated, "POST", "/api/admin/seasons", map[string]any{
+			"league_id": league[len("/api/leagues/"):], "year": year,
+			"starts_on": fmt.Sprintf("%d-01-01", year), "ends_on": fmt.Sprintf("%d-12-31", year),
+		}, &created)
+		return created.ID
+	}
+	first := season(year)
+	if got := order(); got != "Bob Cy Ann " {
+		t.Fatalf("waiver order = %q after a first season, want it unchanged", got)
+	}
+	var tables []struct {
+		Rows []struct {
+			FranchiseID string `json:"franchise_id"`
+		}
+	}
+	ann.want(http.StatusOK, "GET", "/api/standings", nil, &tables)
+	finish := ""
+	for _, row := range tables[0].Rows { // best first
+		for name, teamID := range team {
+			if teamID == row.FranchiseID {
+				finish = name + " " + finish // so the string reads worst first
+			}
+		}
+	}
+	ann.want(http.StatusNoContent, "POST", "/api/admin/seasons/"+first+"/close", map[string]string{"champion_franchise_id": tables[0].Rows[0].FranchiseID}, nil)
+	season(year + 1)
+	if got := order(); got != finish {
+		t.Fatalf("waiver order = %q for the new season, want last season's standings reversed: %q", got, finish)
 	}
 
 	// --- a sport added later ------------------------------------------------

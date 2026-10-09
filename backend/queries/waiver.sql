@@ -23,10 +23,10 @@ delete from waivers where league_id = @league_id and player_id = @player_id;
 
 -- name: PutWaiverClaim :exec
 -- A franchise has one live claim per player; claiming again replaces it.
-insert into waiver_claims (league_id, franchise_id, player_id, drop_player_id, bid)
-values (@league_id, @franchise_id, @player_id, @drop_player_id, @bid)
+insert into waiver_claims (league_id, franchise_id, player_id, drop_player_id, bid, list)
+values (@league_id, @franchise_id, @player_id, @drop_player_id, @bid, @list)
 on conflict (league_id, franchise_id, player_id) where status = 'pending'
-do update set drop_player_id = excluded.drop_player_id, bid = excluded.bid, created_at = now();
+do update set drop_player_id = excluded.drop_player_id, bid = excluded.bid, list = excluded.list, created_at = now();
 
 -- name: ListPendingClaims :many
 select * from waiver_claims
@@ -35,7 +35,7 @@ order by created_at;
 
 -- name: ListFranchiseClaims :many
 -- A franchise's live claims, then the ones settled most recently.
-select c.id, c.player_id, c.bid, c.status, c.reason, c.created_at, c.resolved_at,
+select c.id, c.player_id, c.bid, c.list, c.status, c.reason, c.created_at, c.resolved_at,
        p.full_name as player_name,
        coalesce(d.full_name, '')::text as drop_player_name
 from waiver_claims c
@@ -53,18 +53,26 @@ where id = @id and franchise_id = @franchise_id and status = 'pending';
 update waiver_claims set status = @status, reason = @reason, resolved_at = now() where id = @id;
 
 -- name: ListWaiverStandings :many
--- Every franchise in waiver order for one league: whoever has gone longest
--- without winning a claim is first. spent is what its winning bids have
--- cost since the league's current season began.
+-- Every franchise in one league's waiver order, first claim first. A
+-- franchise the order does not name yet (one added since it was set) comes
+-- last. spent is what its winning bids have cost since the league's
+-- current season began.
 select f.id as franchise_id, f.name, f.slug,
-       coalesce(sum(c.bid) filter (where c.status = 'won' and c.resolved_at >= coalesce(
-         (select max(s.starts_on) from seasons s where s.league_id = @league_id and s.starts_on <= current_date)::timestamptz,
-         '-infinity')), 0)::int as spent
+       coalesce((select sum(c.bid) from waiver_claims c
+                 where c.franchise_id = f.id and c.league_id = @league_id and c.status = 'won'
+                   and c.resolved_at >= coalesce(
+                     (select max(s.starts_on) from seasons s where s.league_id = @league_id and s.starts_on <= current_date)::timestamptz,
+                     '-infinity')), 0)::int as spent
 from franchises f
-left join waiver_claims c on c.franchise_id = f.id and c.league_id = @league_id
+left join waiver_order o on o.franchise_id = f.id and o.league_id = @league_id
 where f.dynasty_id = @dynasty_id
-group by f.id
-order by max(c.resolved_at) filter (where c.status = 'won') asc nulls first, f.name;
+order by o.position nulls last, f.name;
+
+-- name: ClearWaiverOrder :exec
+delete from waiver_order where league_id = @league_id;
+
+-- name: InsertWaiverOrder :exec
+insert into waiver_order (league_id, franchise_id, position) values (@league_id, @franchise_id, @position);
 
 -- name: CountAcquisitions :one
 -- Free agent adds and waiver claims a franchise has made itself since a

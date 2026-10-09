@@ -72,7 +72,8 @@ func (c Competition) Catalog(otherLeagues []string) settings.Catalog {
 // own roster, lineup, scoring and draft length.
 func defaults() settings.League {
 	return settings.League{
-		Roster: settings.Roster{ReserveEligibility: settings.ReserveProspects},
+		// A free agent can be added to either list.
+		Roster: settings.Roster{ReserveEligibility: settings.ReserveAnyone},
 		Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday", Lock: settings.LockGameStart},
 		// Head to head, a week at a time: the format the scoring was balanced for.
 		Format: settings.Format{Type: settings.FormatHeadToHead, MatchupDays: 7, PlayoffTeams: 6},
@@ -80,7 +81,8 @@ func defaults() settings.League {
 			Mode:                 settings.FreeAgencyOpen,
 			NewEntrantsDraftOnly: true,
 		},
-		Waivers: settings.Waivers{Mode: settings.WaiversNone, Days: 2, Budget: 100},
+		// Anyone released waits a day on waivers; claims go by the waiver order.
+		Waivers: settings.Waivers{Mode: settings.WaiversRolling, Hours: 24, Budget: 100},
 		// Rounds 0: half the reserve list, rounded up. A week to sign the picks.
 		Draft:  settings.Draft{Order: settings.OrderLinear, FutureYears: 3, SigningDays: 7},
 		Trades: settings.Trades{Approval: settings.ApprovalNone},

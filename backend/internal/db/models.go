@@ -298,4 +298,11 @@ type WaiverClaim struct {
 	Reason       string             `json:"reason"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	ResolvedAt   pgtype.Timestamptz `json:"resolved_at"`
+	List         string             `json:"list"`
+}
+
+type WaiverOrder struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Position    int32       `json:"position"`
 }
