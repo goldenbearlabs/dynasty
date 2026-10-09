@@ -8,12 +8,18 @@ import (
 	"crossover/internal/settings"
 )
 
+type Conference struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type Competition struct {
-	Key       string          `json:"key"`
-	Name      string          `json:"name"`
-	Positions []string        `json:"positions"` // what a lineup slot may list
-	Stats     []Stat          `json:"stats"`     // what scoring may reward
-	Defaults  settings.League `json:"defaults"`  // starting rules for a new league
+	Conferences []Conference    `json:"conferences"`
+	Key         string          `json:"key"`
+	Name        string          `json:"name"`
+	Positions   []string        `json:"positions"` // what a lineup slot may list
+	Stats       []Stat          `json:"stats"`     // what scoring may reward
+	Defaults    settings.League `json:"defaults"`  // starting rules for a new league
 
 	// Season is when the real regular season usually runs, as month-day
 	// pairs ("10-20" to "04-12"). It only prefills the form for a new
@@ -55,7 +61,11 @@ func (c Competition) Catalog(otherLeagues []string) settings.Catalog {
 	for i, s := range c.Stats {
 		stats[i] = s.Key
 	}
-	return settings.Catalog{Positions: c.Positions, Stats: stats, OtherLeagues: otherLeagues}
+	conferences := make([]string, len(c.Conferences))
+	for i, conference := range c.Conferences {
+		conferences[i] = conference.ID
+	}
+	return settings.Catalog{Positions: c.Positions, Stats: stats, Conferences: conferences, OtherLeagues: otherLeagues}
 }
 
 // defaults are the rules every sport starts from; each sport then sets its

@@ -520,3 +520,47 @@ func TestSyncRostersTrimsToPool(t *testing.T) {
 		t.Errorf("after narrowing: players = %q, teams = %q; want only the passer and his team", players, teams)
 	}
 }
+
+// Conference metadata introduced after imports is filled even for seasons
+// outside the regular history window, then left alone on subsequent syncs.
+func TestSyncBackfillsOldConferenceMetadata(t *testing.T) {
+	pool := dbtest.Open(t)
+	ctx := context.Background()
+	const provider = "test_conference_backfill"
+	cleanup := func() { pool.Exec(ctx, `delete from players where note = $1`, provider) }
+	cleanup()
+	defer cleanup()
+	var id pgtype.UUID
+	if err := pool.QueryRow(ctx, `insert into players (competition,status,full_name,note) values ('cbb','inactive','Conference backfill',$1) returning id`, provider).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into player_external_ids (provider,provider_id,player_id) values ($1,'known',$2)`, provider, id); err != nil {
+		t.Fatal(err)
+	}
+	syncer := ingest.NewSyncer(db.New(pool), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	old := ingest.Season{Year: 1800, Label: "1799-1800", Team: "TEST", Games: 10, Stats: map[string]float64{"pts": 100}}
+	if err := syncer.StoreSeason(ctx, id, "cbb", old); err != nil {
+		t.Fatal(err)
+	}
+	old.Conference = "2"
+	src := &seasonFeed{latest: 2026, byYear: map[int][]ingest.SeasonLine{1800: {{Provider: provider, ProviderID: "known", Season: old}}}}
+	if err := syncer.SyncSeasons(ctx, "cbb", src, 2); err != nil {
+		t.Fatal(err)
+	}
+	var conference string
+	if err := pool.QueryRow(ctx, `select conference from player_seasons where player_id=$1 and year=1800`, id).Scan(&conference); err != nil {
+		t.Fatal(err)
+	}
+	if conference != "2" {
+		t.Fatal("older season metadata was not filled")
+	}
+	src.asked = nil
+	if err := syncer.SyncSeasons(ctx, "cbb", src, 2); err != nil {
+		t.Fatal(err)
+	}
+	for _, year := range src.asked {
+		if year == 1800 {
+			t.Fatal("complete historical metadata was fetched again")
+		}
+	}
+}

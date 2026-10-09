@@ -16,8 +16,9 @@ import (
 // Research is the player's current identity and the last ten recorded final
 // games. Points use today's league rules, just like the live game pages.
 type Research struct {
-	Player db.GetPlayerProfileRow    `json:"player"`
-	Games  []db.ListPlayerHistoryRow `json:"games"`
+	ScoringSource string                    `json:"scoring_source"`
+	Player        db.GetPlayerProfileRow    `json:"player"`
+	Games         []db.ListPlayerHistoryRow `json:"games"`
 }
 
 func (s *Service) Research(ctx context.Context, id pgtype.UUID) (Research, error) {
@@ -30,7 +31,28 @@ func (s *Service) Research(ctx context.Context, id pgtype.UUID) (Research, error
 	if err != nil {
 		return Research{}, err
 	}
-	return Research{Player: player, Games: games}, nil
+	rules, err := scoringRules(ctx, q, player.Competition)
+	if err != nil {
+		return Research{}, err
+	}
+	source := "league"
+	if rules == nil {
+		source = "defaults"
+		if c, ok := s.registry.Get(player.Competition); ok {
+			rules = c.Defaults.Scoring
+		}
+	}
+	for i := range games {
+		var stats map[string]float64
+		if err := json.Unmarshal(games[i].Stats, &stats); err != nil {
+			return Research{}, err
+		}
+		games[i].Points = 0
+		for stat, value := range stats {
+			games[i].Points += value * rules[stat]
+		}
+	}
+	return Research{Player: player, Games: games, ScoringSource: source}, nil
 }
 
 // SeasonLine is one season of a player's, with what it would have been
@@ -69,6 +91,11 @@ func (s *Service) Seasons(ctx context.Context, id pgtype.UUID) ([]SeasonLine, er
 	scoring, err := scoringRules(ctx, q, player.Competition)
 	if err != nil {
 		return nil, err
+	}
+	if scoring == nil {
+		if c, ok := s.registry.Get(player.Competition); ok {
+			scoring = c.Defaults.Scoring
+		}
 	}
 	lines := []SeasonLine{}
 	for _, row := range rows {

@@ -1,8 +1,8 @@
 -- name: UpsertPlayerSeason :exec
-insert into player_seasons (player_id, competition, year, label, team, league, games, stats)
-values (@player_id, @competition, @year, @label, @team, @league, @games, @stats)
+insert into player_seasons (player_id, competition, year, label, team, league, games, stats, conference)
+values (@player_id, @competition, @year, @label, @team, @league, @games, @stats, @conference)
 on conflict (player_id, competition, year, team, league) do update
-  set label = excluded.label, games = excluded.games, stats = excluded.stats, synced_at = now();
+  set label = excluded.label, games = excluded.games, stats = excluded.stats, conference = excluded.conference, synced_at = now();
 
 -- name: DeleteStalePlayerSeasons :exec
 -- Removes a season's own-league lines that the latest sync did not write
@@ -32,3 +32,11 @@ where ps.player_id = @duplicate_id
     select 1 from player_seasons k
     where k.player_id = @keep_id and k.competition = ps.competition and k.year = ps.year
       and k.team = ps.team and k.league = ps.league);
+
+-- name: ListSeasonsMissingConferences :many
+-- Metadata added after the original imports must be backfilled even when
+-- these seasons are older than the ordinary history window. Partially known
+-- seasons may contain non-Division-I teams, which intentionally stay unknown.
+select year from player_seasons
+where competition = @competition and competition = 'cbb' and league = ''
+group by year having bool_and(conference = '');

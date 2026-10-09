@@ -180,7 +180,7 @@
 								<td class="slot">
 									<select aria-label="Slot for {player.full_name}" bind:value={chosen[player.player_id]} disabled={frozen(player)}>
 										<option value="">Bench</option>
-										{#each lineup.slots.filter((s) => fits(player, s.positions)) as slot (slot.name)}
+										{#each lineup.slots.filter((s) => player.starter_eligible && fits(player, s.positions)) as slot (slot.name)}
 											<option value={slot.name}>{slot.name}</option>
 										{/each}
 									</select>
@@ -193,6 +193,7 @@
 											{#if player.locked}<span class="pill"><Icon name="lock" size={11} /> Locked</span>{/if}
 											<div class="muted small-text">
 												{player.positions.join('/')} · {player.team_abbrev}
+												{#if player.eligibility_note}<div>{player.eligibility_note}</div>{/if}
 												<span class="narrow">{player.games.map(describe).join(', ')}</span>
 											</div>
 										</div>

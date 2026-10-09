@@ -118,7 +118,7 @@ select exists (
 -- span of days and the fantasy points he scored in each. A player with no
 -- game in the span appears once, with no game.
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
-       coalesce(t.abbrev, '')::text as team_abbrev,
+       coalesce(t.abbrev, '')::text as team_abbrev, coalesce(t.conference, '')::text as conference,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
@@ -170,7 +170,17 @@ with days as (
   join leagues l on l.id = @league_id
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
-  where e.counts_from is null or g.day >= e.counts_from
+  where (e.counts_from is null or g.day >= e.counts_from)
+    and (l.competition <> 'cbb'
+      or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
+      or coalesce(
+        (select ps.conference from player_seasons ps
+         join pro_teams team on team.competition = ps.competition and team.abbrev = ps.team
+         where ps.player_id = sl.player_id and ps.competition = 'cbb' and ps.league = ''
+           and ps.year = extract(year from g.day)::int + case when extract(month from g.day) >= 7 then 1 else 0 end
+           and team.id in (g.home_team_id, g.away_team_id) and ps.conference <> '' limit 1),
+        (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
+         in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url,
        count(distinct st.game_id) as games,

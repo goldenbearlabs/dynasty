@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -382,5 +383,51 @@ func TestSourcePool(t *testing.T) {
 	groupTeams = `{"items":[]}`
 	if _, err := src.Teams(context.Background()); err == nil {
 		t.Error("an empty group was accepted; it must stop the sync")
+	}
+}
+
+// Conference metadata never narrows ingestion; season totals keep the
+// membership from their own season rather than the current team conference.
+func TestConferenceMetadataKeepsFullPoolAndHistory(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/basketball/mens-college-basketball/teams":
+			w.Write([]byte(teamsJSON))
+		case r.URL.Path == "/basketball/mens-college-basketball/statistics/byathlete":
+			w.Write([]byte(`{"pagination":{"pages":1},"requestedSeason":{"displayName":"2024-25"},"categories":[{"name":"general","names":["gamesPlayed","points"]}],"athletes":[{"athlete":{"id":"1","teamId":"150","teamShortName":"DUKE"},"categories":[{"name":"general","totals":["10","100"]}]}]}`))
+		case strings.Contains(r.URL.Path, "/groups/"):
+			id := "150"
+			if strings.Contains(r.URL.Path, "/groups/12/") {
+				id = "2"
+			}
+			// The older season has opposite membership to exercise a conference move.
+			if strings.Contains(r.URL.Path, "/seasons/2025/") {
+				if id == "150" {
+					id = "2"
+				} else {
+					id = "150"
+				}
+			}
+			fmt.Fprintf(w, `{"items":[{"$ref":"http://espn.test/teams/%s"}]}`, id)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	src := New(ingest.NewClient(0), League{Path: "basketball/mens-college-basketball", Provider: "espn_basketball", ConferenceGroups: []string{"2", "12"}, Stats: map[string]string{"points": "pts"}, SeasonGroups: []string{"general"}})
+	src.Base, src.CoreBase, src.WebBase = server.URL, server.URL, server.URL
+	teams, err := src.Teams(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(teams) != 2 || teams[0].Conference != "2" || teams[1].Conference != "12" || src.Pool().ListedTeamsOnly {
+		t.Fatalf("conference metadata narrowed the pool: %+v", teams)
+	}
+	lines, err := src.SeasonStats(context.Background(), 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || lines[0].Conference != "12" {
+		t.Fatalf("historical membership: %+v", lines)
 	}
 }

@@ -46,12 +46,41 @@ To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.
 
-The Research tab compares players across leagues with season totals for the stats
-that count toward fantasy scoring, total fantasy points and points per game.
-Filter by league, imported season, status or availability, sort by production
-or a scoring stat, and click a player for season history and recent games.
-Fantasy points use each league’s current rules. Missing imported stats appear
-as a dash.
+The Research tab is a research lab with a saved pool of league–season datasets.
+Add combinations such as NHL 2025-26, WNBA 2025 and NHL 2024-25; the same player
+gets a distinct row for each season, and each league-season keeps independent
+benchmarks. Without a custom pool, the page uses the latest imported seasons.
+Historical pools include stored seasons even after a player changes competitions.
+Teams and stats are historical; positions, player status and fantasy ownership
+reflect current records. Season history can be incomplete for older years.
+
+The Players workspace starts with an overview, with separate advanced and raw
+stat views. Raw stats include unscored stats and can be shown as season totals
+or per-game rates. Hover or focus a column name for an explanation; click it to
+sort and click again to reverse. Filters include multiple positions, team,
+owner, status, game and production ranges, League+, replacement value,
+qualification, missing scoring stats and raw-stat ranges.
+
+Custom Charts supports scatter plots, grouped bars and histograms with chosen
+axes, grouping, aggregation and titles, plus SVG and CSV downloads. Charts
+use filtered observations across all table pages, with a stated 20,000-row
+limit and even dot sampling for large scatter plots. League-wide Analysis
+uses full selected datasets independently of player filters, with presets for
+position strengths, scoring drivers, production concentration and season
+scoring trends. It also shows imported coverage and replacement depth.
+
+League+ and Position+ normalize FP/game to a mean of 100 and a standard
+deviation of 15 among qualified peers in the same league-season. FPAR measures
+production above positional replacement; auto depth estimates starting demand
+from manager count and lineup slots, splitting flexible-slot demand equally
+across positions, with an optional manual rank. Multi-position players use
+their best advantage among eligible positions allowed by the position filters. WSA is a
+custom illustrative matchup estimate, with its assumptions and formula in the
+metric guide; it is not measured wins. Benchmark minimum games defaults to
+five and is adjustable. Missing metrics and insufficient samples show a dash.
+Research and player history use current fantasy rules when a league exists,
+otherwise explicitly labelled sport defaults; missing scoring configuration
+must not turn available raw stats into zero fantasy production.
 
 Stat history is stored. A nightly job keeps every player's season totals in
 `player_seasons`, fetched a whole league at a time. The first run for a sport
@@ -150,3 +179,12 @@ docker compose exec -T db pg_dump -U crossover crossover | gzip > crossover-$(da
 | `SCORES_SYNC_CRON` | `*/15 * * * *`               | the slower sync: schedule, finals, stat corrections |
 | `FETCH_GAP`    | `1s`                             | minimum time between requests per host |
 | `FETCH_VIA`    | none                             | relays for feeds that refuse the server's address: `host=https://relay`, comma separated |
+
+CBB imports all Division I rosters. Starting lineups and research default to
+Big 12, SEC, Big Ten, ACC, Big East, Mountain West, Atlantic 10 and Pac-12.
+Commissioners can change **Starting conferences** in league settings; selecting
+none allows all conferences. Research applies each season's membership before
+calculating benchmarks or charts. Smaller-conference players remain draftable
+and may be held on reserve under the default **Prospects or outside starting
+conferences** reserve rule. Conference eligibility is also enforced by lineup
+validation and scoring, including lineups saved before a rule change.

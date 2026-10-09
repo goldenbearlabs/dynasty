@@ -41,6 +41,7 @@
 			<select bind:value={settings.roster.reserve_eligibility}>
 				<option value="prospects_only">Prospects only</option>
 				<option value="anyone">Anyone</option>
+				{#if competition.conferences?.length}<option value="prospects_or_ineligible">Prospects or outside starting conferences</option>{/if}
 			</select>
 		</label>
 		{#if settings.roster.reserve_eligibility === 'anyone'}
@@ -81,7 +82,22 @@
 		</label>
 	</div>
 
-	<h3>Starting slots <span class="muted">({starters} starters)</span></h3>
+	{#if competition.conferences?.length}
+        <h3>Starting conferences</h3>
+        <p class="muted small-text">These conferences can start and appear in research. Other players remain available for drafts and reserves. Select none to allow all conferences.</p>
+        <div class="positions" role="group" aria-label="Starting conferences">
+          {#each competition.conferences as conference (conference.id)}
+            <label class="check small-text">
+              <input type="checkbox" checked={(settings.lineup.conferences ?? competition.defaults.lineup.conferences ?? []).includes(conference.id)} onchange={() => {
+                settings.lineup.conferences ??= [...(competition.defaults.lineup.conferences ?? [])];
+                togglePosition(settings.lineup.conferences, conference.id);
+              }} /> {conference.name}
+            </label>
+          {/each}
+        </div>
+    {/if}
+
+    <h3>Starting slots <span class="muted">({starters} starters)</span></h3>
 	{#each settings.lineup.slots as slot, i (i)}
 		<div class="row end slot">
 			<label class="field">Slot <input class="slot-name" bind:value={slot.name} /></label>

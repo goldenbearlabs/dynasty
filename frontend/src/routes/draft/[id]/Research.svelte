@@ -132,7 +132,7 @@
 			<div class="actions">{@render action(player)}</div>
 			<div class="spread history-title">
 				<h3>Seasons</h3>
-				{#if seasons?.length}<span>current scoring rules</span>{/if}
+				{#if seasons?.length}<span>{result.scoring_source === 'defaults' ? 'sport default scoring' : 'current league scoring'}</span>{/if}
 			</div>
 			{#if seasonsError}
 				<p class="muted small-text">{seasonsError}</p>
@@ -184,7 +184,7 @@
 			</div>
 			{#if result.games.length}
 				<p class="muted small-text">
-					Last {result.games.length} recorded finals · current scoring rules
+					Last {result.games.length} recorded finals · {result.scoring_source === 'defaults' ? 'sport default scoring' : 'current league scoring'}
 				</p>
 				<div class="scroll">
 					<table>

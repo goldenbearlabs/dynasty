@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const listResearchCatalog = `-- name: ListResearchCatalog :many
+select competition, label, year, count(distinct player_id)::integer as players,
+       max(synced_at) as synced_at
+from player_seasons where league = ''
+ and (competition <> 'cbb' or cardinality($1::text[]) = 0 or conference = any($1::text[]))
+group by competition, label, year
+order by competition, year desc
+`
+
+type ListResearchCatalogRow struct {
+	Competition string      `json:"competition"`
+	Label       string      `json:"label"`
+	Year        int32       `json:"year"`
+	Players     int32       `json:"players"`
+	SyncedAt    interface{} `json:"synced_at"`
+}
+
+func (q *Queries) ListResearchCatalog(ctx context.Context, conferences []string) ([]ListResearchCatalogRow, error) {
+	rows, err := q.db.Query(ctx, listResearchCatalog, conferences)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListResearchCatalogRow{}
+	for rows.Next() {
+		var i ListResearchCatalogRow
+		if err := rows.Scan(
+			&i.Competition,
+			&i.Label,
+			&i.Year,
+			&i.Players,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResearchPlayers = `-- name: ListResearchPlayers :many
 with latest as (
   select competition, max(year) as year from player_seasons
@@ -23,7 +66,8 @@ with latest as (
   from player_seasons ps
   join latest on latest.competition = ps.competition
   where ps.league = ''
-    and (($4::text = '' and ps.year = latest.year) or ps.label = $4)
+    and (ps.competition <> 'cbb' or cardinality($4::text[]) = 0 or ps.conference = any($4::text[]))
+    and (($5::text = '' and ps.year = latest.year) or ps.label = $5)
   group by ps.player_id, ps.competition
 ), stats as (
   select ps.player_id, ps.competition, stat.key, sum(stat.value::numeric)::float8 as value
@@ -31,7 +75,8 @@ with latest as (
   join latest on latest.competition = ps.competition
   cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
   where ps.league = ''
-    and (($4::text = '' and ps.year = latest.year) or ps.label = $4)
+    and (ps.competition <> 'cbb' or cardinality($4::text[]) = 0 or ps.conference = any($4::text[]))
+    and (($5::text = '' and ps.year = latest.year) or ps.label = $5)
   group by ps.player_id, ps.competition, stat.key
 ), valued as (
   select stats.player_id, stats.competition, jsonb_object_agg(stats.key, stats.value) as stats,
@@ -53,11 +98,12 @@ with latest as (
   left join franchises f on f.id = r.franchise_id
   left join totals on totals.player_id = p.id and totals.competition = p.competition
   left join valued on valued.player_id = p.id and valued.competition = p.competition
-  where ($5::text = '' or p.competition = $5)
-    and ($6::text = '' or p.status = $6)
-    and ($7::text = '' or p.full_name ilike '%' || $7 || '%')
-    and ($8::uuid is null or (
-      r.player_id is null and p.competition = (select competition from leagues where id = $8)))
+  where (p.competition <> 'cbb' or (totals.player_id is not null))
+    and ($6::text = '' or p.competition = $6)
+    and ($7::text = '' or p.status = $7)
+    and ($8::text = '' or p.full_name ilike '%' || $8 || '%')
+    and ($9::uuid is null or (
+      r.player_id is null and p.competition = (select competition from leagues where id = $9)))
 )
 select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, pool.headshot_url, pool.team, pool.owner_name, pool.owner_slug, pool.season, pool.games, pool.stats, pool.points, pool.points_per_game from pool
 order by
@@ -74,6 +120,7 @@ type ListResearchPlayersParams struct {
 	Sort        string      `json:"sort"`
 	PageOffset  int32       `json:"page_offset"`
 	PageSize    int32       `json:"page_size"`
+	Conferences []string    `json:"conferences"`
 	Season      string      `json:"season"`
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
@@ -105,6 +152,7 @@ func (q *Queries) ListResearchPlayers(ctx context.Context, arg ListResearchPlaye
 		arg.Sort,
 		arg.PageOffset,
 		arg.PageSize,
+		arg.Conferences,
 		arg.Season,
 		arg.Competition,
 		arg.Status,
@@ -118,6 +166,96 @@ func (q *Queries) ListResearchPlayers(ctx context.Context, arg ListResearchPlaye
 	items := []ListResearchPlayersRow{}
 	for rows.Next() {
 		var i ListResearchPlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Competition,
+			&i.FullName,
+			&i.Positions,
+			&i.Status,
+			&i.HeadshotUrl,
+			&i.Team,
+			&i.OwnerName,
+			&i.OwnerSlug,
+			&i.Season,
+			&i.Games,
+			&i.Stats,
+			&i.Points,
+			&i.PointsPerGame,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listResearchSeasonPool = `-- name: ListResearchSeasonPool :many
+with selected as (
+ select ps.player_id, ps.competition, ps.year, ps.label, ps.team, ps.league, ps.games, ps.stats, ps.synced_at, ps.conference from player_seasons ps
+ where ps.league = '' and ps.competition = $1
+ and (ps.competition <> 'cbb' or cardinality($2::text[]) = 0 or ps.conference = any($2::text[]))
+ and (ps.label = $3::text or ($3 = '' and ps.year = (
+   select max(year) from player_seasons where competition = $1 and league = '')))
+), totals as (
+ select player_id, competition, max(label)::text as season,
+        sum(games)::integer as games, string_agg(distinct nullif(team,''), ' / ')::text as team
+ from selected group by player_id,competition
+), stat_values as (
+ select player_id, stat.key, sum(stat.value::numeric)::float8 as value
+ from selected cross join lateral jsonb_each_text(stats) as stat(key,value)
+ group by player_id,stat.key
+), stats as (
+ select player_id,jsonb_object_agg(key,value) as stats from stat_values group by player_id
+)
+select p.id, totals.competition, p.full_name, p.positions, p.status, p.headshot_url,
+       coalesce(totals.team,'')::text as team,
+       coalesce(f.name,'')::text as owner_name, coalesce(f.slug,'')::text as owner_slug,
+       totals.season, totals.games, coalesce(stats.stats,'{}'::jsonb) as stats,
+       0::float8 as points, 0::float8 as points_per_game
+from totals join players p on p.id = totals.player_id
+left join stats on stats.player_id = p.id
+left join roster_entries r on r.player_id = p.id and r.league_id in (select id from leagues where competition = totals.competition)
+left join franchises f on f.id = r.franchise_id
+order by p.full_name,p.id
+`
+
+type ListResearchSeasonPoolParams struct {
+	Competition string   `json:"competition"`
+	Conferences []string `json:"conferences"`
+	Season      string   `json:"season"`
+}
+
+type ListResearchSeasonPoolRow struct {
+	ID            pgtype.UUID     `json:"id"`
+	Competition   string          `json:"competition"`
+	FullName      string          `json:"full_name"`
+	Positions     []string        `json:"positions"`
+	Status        string          `json:"status"`
+	HeadshotUrl   string          `json:"headshot_url"`
+	Team          string          `json:"team"`
+	OwnerName     string          `json:"owner_name"`
+	OwnerSlug     string          `json:"owner_slug"`
+	Season        string          `json:"season"`
+	Games         int32           `json:"games"`
+	Stats         json.RawMessage `json:"stats"`
+	Points        float64         `json:"points"`
+	PointsPerGame float64         `json:"points_per_game"`
+}
+
+// Historical pools follow the competition where the stats were recorded,
+// even if a player has since changed competitions. Team splits are combined.
+func (q *Queries) ListResearchSeasonPool(ctx context.Context, arg ListResearchSeasonPoolParams) ([]ListResearchSeasonPoolRow, error) {
+	rows, err := q.db.Query(ctx, listResearchSeasonPool, arg.Competition, arg.Conferences, arg.Season)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListResearchSeasonPoolRow{}
+	for rows.Next() {
+		var i ListResearchSeasonPoolRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Competition,

@@ -115,7 +115,11 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 		if err != nil {
 			return nil, err
 		}
-		return append(roster, Entry{PlayerID: c.PlayerID, List: c.List, Prospect: player.Status == "prospect"}), nil
+		conference, err := q.GetPlayerConference(ctx, c.PlayerID)
+		if err != nil {
+			return nil, err
+		}
+		return append(roster, Entry{PlayerID: c.PlayerID, List: c.List, Prospect: player.Status == "prospect", StarterIneligible: !rules.CanStart(c.League.Competition, conference)}), nil
 	})
 }
 
@@ -240,7 +244,7 @@ func apply(ctx context.Context, q *db.Queries, c Change, kind string, checked bo
 	}
 	before := make([]Entry, len(rows))
 	for i, r := range rows {
-		before[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect"}
+		before[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", StarterIneligible: !rules.CanStart(c.League.Competition, r.Conference)}
 	}
 
 	after, err := edit(rules, slices.Clone(before))

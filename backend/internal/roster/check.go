@@ -13,9 +13,15 @@ import (
 
 // Entry is what the limits need to know about one rostered player.
 type Entry struct {
-	PlayerID pgtype.UUID
-	List     string
-	Prospect bool
+	PlayerID          pgtype.UUID
+	List              string
+	Prospect          bool
+	StarterIneligible bool
+}
+
+func reserveEligible(limits settings.Roster, e Entry) bool {
+	return limits.ReserveEligibility == settings.ReserveAnyone || e.Prospect ||
+		(limits.ReserveEligibility == settings.ReserveProspectsOrIneligible && e.StarterIneligible)
 }
 
 // Overage measures how far a roster is outside its limits: players beyond
@@ -27,7 +33,7 @@ func Overage(limits settings.Roster, entries []Entry) int {
 		switch {
 		case e.List == settings.ListMain:
 			main++
-		case limits.ReserveEligibility == settings.ReserveProspects && !e.Prospect:
+		case !reserveEligible(limits, e):
 			reserve++
 			ineligible++
 		default:
@@ -61,7 +67,10 @@ func explain(limits settings.Roster, entries []Entry) error {
 			continue
 		}
 		reserve++
-		if limits.ReserveEligibility == settings.ReserveProspects && !e.Prospect {
+		if !reserveEligible(limits, e) {
+			if limits.ReserveEligibility == settings.ReserveProspectsOrIneligible {
+				return problem.New("Only prospects or players outside the starting conferences can be on reserve in this league.")
+			}
 			return problem.New("Only prospects can be on the reserve list in this league.")
 		}
 	}

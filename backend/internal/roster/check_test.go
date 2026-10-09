@@ -85,3 +85,19 @@ func TestAcquirable(t *testing.T) {
 		}
 	}
 }
+
+func TestReserveOutsideStartingConferences(t *testing.T) {
+	limits := settings.Roster{Main: 2, Reserve: 2, ReserveEligibility: settings.ReserveProspectsOrIneligible}
+	for _, entry := range []Entry{{List: settings.ListReserve, Prospect: true}, {List: settings.ListReserve, StarterIneligible: true}} {
+		if err := Check(limits, nil, []Entry{entry}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Check(limits, nil, []Entry{{List: settings.ListReserve}}); err == nil {
+		t.Fatal("active starter-eligible player should require an anyone reserve rule")
+	}
+	limits.ReserveEligibility = settings.ReserveProspects
+	if err := Check(limits, nil, []Entry{{List: settings.ListReserve, StarterIneligible: true}}); err == nil {
+		t.Fatal("commissioner prospects-only rule ignored")
+	}
+}

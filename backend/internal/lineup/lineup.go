@@ -48,14 +48,16 @@ type View struct {
 }
 
 type Player struct {
-	PlayerID    pgtype.UUID `json:"player_id"`
-	FullName    string      `json:"full_name"`
-	Positions   []string    `json:"positions"`
-	HeadshotURL string      `json:"headshot_url"`
-	TeamAbbrev  string      `json:"team_abbrev"`
-	Slot        string      `json:"slot"`        // empty on the bench
-	CountsFrom  string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
-	Locked      bool        `json:"locked"`
+	StarterEligible bool        `json:"starter_eligible"`
+	EligibilityNote string      `json:"eligibility_note"`
+	PlayerID        pgtype.UUID `json:"player_id"`
+	FullName        string      `json:"full_name"`
+	Positions       []string    `json:"positions"`
+	HeadshotURL     string      `json:"headshot_url"`
+	TeamAbbrev      string      `json:"team_abbrev"`
+	Slot            string      `json:"slot"`        // empty on the bench
+	CountsFrom      string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
+	Locked          bool        `json:"locked"`
 	// Points over the day or week, whether he started or not. For a starter
 	// in a slot that counts only some games, only the games that count.
 	Points float64 `json:"points"`
@@ -134,7 +136,8 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		if n := len(view.Players); n == 0 || view.Players[n-1].PlayerID != r.PlayerID {
 			view.Players = append(view.Players, Player{
 				PlayerID: r.PlayerID, FullName: r.FullName, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
-				TeamAbbrev: r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], Games: []Game{},
+				StarterEligible: rules.CanStart(league.Competition, r.Conference),
+				TeamAbbrev:      r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], Games: []Game{},
 			})
 		}
 		if !r.GameID.Valid {
@@ -147,7 +150,12 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		})
 	}
 	for i := range view.Players {
-		settle(&view.Players[i], rules.Lineup, now)
+		p := &view.Players[i]
+		if !p.StarterEligible {
+			p.EligibilityNote = "Outside this league’s starting conferences"
+			p.Slot = ""
+		}
+		settle(p, rules.Lineup, now)
 	}
 	return view, nil
 }
@@ -269,6 +277,8 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 			switch {
 			case wanted[e.PlayerID] != "":
 				return problem.New("%s is in the lineup twice.", player.FullName)
+			case !player.StarterEligible:
+				return problem.New("%s is outside this league’s starting conferences.", player.FullName)
 			case !fits(player.Positions, slot):
 				return problem.New("%s cannot play %s.", player.FullName, slot.Name)
 			case filled[slot.Name] == slot.Count:

@@ -166,6 +166,7 @@ type PlayerSeason struct {
 	Games       int32              `json:"games"`
 	Stats       json.RawMessage    `json:"stats"`
 	SyncedAt    pgtype.Timestamptz `json:"synced_at"`
+	Conference  string             `json:"conference"`
 }
 
 type ProTeam struct {
@@ -175,6 +176,7 @@ type ProTeam struct {
 	Abbrev      string      `json:"abbrev"`
 	Name        string      `json:"name"`
 	LogoUrl     string      `json:"logo_url"`
+	Conference  string      `json:"conference"`
 }
 
 type Ranking struct {

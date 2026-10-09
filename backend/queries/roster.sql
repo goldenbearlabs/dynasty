@@ -5,9 +5,10 @@ select pg_advisory_xact_lock(hashtextextended(@league_id::text || @franchise_id:
 
 -- name: ListRosterEntries :many
 -- The facts roster limits depend on.
-select r.player_id, r.list, p.status
+select r.player_id, r.list, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
+left join pro_teams t on t.id = p.pro_team_id
 where r.league_id = @league_id and r.franchise_id = @franchise_id;
 
 -- name: ListFranchiseRoster :many

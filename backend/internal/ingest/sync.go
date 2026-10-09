@@ -219,10 +219,23 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 		if err != nil {
 			return 0, err
 		}
+		missing, err := s.q.ListSeasonsMissingConferences(ctx, competition)
+		if err != nil {
+			return 0, err
+		}
 		latest := src.LatestSeason(time.Now())
-		lines := 0
+		years := []int{}
 		for year := latest; year > latest-backfill; year-- {
-			if year < latest-1 && slices.Contains(stored, int32(year)) {
+			years = append(years, year)
+		}
+		for _, year := range missing {
+			if !slices.Contains(years, int(year)) {
+				years = append(years, int(year))
+			}
+		}
+		lines := 0
+		for _, year := range years {
+			if year < latest-1 && slices.Contains(stored, int32(year)) && !slices.Contains(missing, int32(year)) {
 				continue // history that is already here does not change
 			}
 			n, err := s.syncSeason(ctx, competition, src, year, startedAt)
@@ -266,7 +279,8 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 func (s *Syncer) StoreSeason(ctx context.Context, playerID pgtype.UUID, competition string, season Season) error {
 	stats, _ := json.Marshal(season.Stats)
 	return s.q.UpsertPlayerSeason(ctx, db.UpsertPlayerSeasonParams{
-		PlayerID: playerID, Competition: competition, Year: int32(season.Year), Label: season.Label,
+		Conference: season.Conference,
+		PlayerID:   playerID, Competition: competition, Year: int32(season.Year), Label: season.Label,
 		Team: season.Team, League: season.League, Games: int32(season.Games), Stats: stats,
 	})
 }
@@ -362,6 +376,7 @@ func (s *Syncer) syncTeam(ctx context.Context, competition string, src Source, t
 		Abbrev:      team.Abbrev,
 		Name:        team.Name,
 		LogoUrl:     team.LogoURL,
+		Conference:  team.Conference,
 	})
 	if err != nil {
 		return 0, err

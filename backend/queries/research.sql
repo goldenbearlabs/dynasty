@@ -17,6 +17,7 @@ with latest as (
   from player_seasons ps
   join latest on latest.competition = ps.competition
   where ps.league = ''
+    and (ps.competition <> 'cbb' or cardinality(@conferences::text[]) = 0 or ps.conference = any(@conferences::text[]))
     and ((@season::text = '' and ps.year = latest.year) or ps.label = @season)
   group by ps.player_id, ps.competition
 ), stats as (
@@ -25,6 +26,7 @@ with latest as (
   join latest on latest.competition = ps.competition
   cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
   where ps.league = ''
+    and (ps.competition <> 'cbb' or cardinality(@conferences::text[]) = 0 or ps.conference = any(@conferences::text[]))
     and ((@season::text = '' and ps.year = latest.year) or ps.label = @season)
   group by ps.player_id, ps.competition, stat.key
 ), valued as (
@@ -47,7 +49,8 @@ with latest as (
   left join franchises f on f.id = r.franchise_id
   left join totals on totals.player_id = p.id and totals.competition = p.competition
   left join valued on valued.player_id = p.id and valued.competition = p.competition
-  where (@competition::text = '' or p.competition = @competition)
+  where (p.competition <> 'cbb' or (totals.player_id is not null))
+    and (@competition::text = '' or p.competition = @competition)
     and (@status::text = '' or p.status = @status)
     and (@search::text = '' or p.full_name ilike '%' || @search || '%')
     and (sqlc.narg('available_in')::uuid is null or (
@@ -62,3 +65,42 @@ order by
        else (stats ->> sqlc.arg(sort)::text)::float8 end desc nulls last,
   full_name, id
 limit @page_size offset @page_offset;
+
+-- name: ListResearchCatalog :many
+select competition, label, year, count(distinct player_id)::integer as players,
+       max(synced_at) as synced_at
+from player_seasons where league = ''
+ and (competition <> 'cbb' or cardinality(@conferences::text[]) = 0 or conference = any(@conferences::text[]))
+group by competition, label, year
+order by competition, year desc;
+
+-- name: ListResearchSeasonPool :many
+-- Historical pools follow the competition where the stats were recorded,
+-- even if a player has since changed competitions. Team splits are combined.
+with selected as (
+ select ps.* from player_seasons ps
+ where ps.league = '' and ps.competition = @competition
+ and (ps.competition <> 'cbb' or cardinality(@conferences::text[]) = 0 or ps.conference = any(@conferences::text[]))
+ and (ps.label = @season::text or (@season = '' and ps.year = (
+   select max(year) from player_seasons where competition = @competition and league = '')))
+), totals as (
+ select player_id, competition, max(label)::text as season,
+        sum(games)::integer as games, string_agg(distinct nullif(team,''), ' / ')::text as team
+ from selected group by player_id,competition
+), stat_values as (
+ select player_id, stat.key, sum(stat.value::numeric)::float8 as value
+ from selected cross join lateral jsonb_each_text(stats) as stat(key,value)
+ group by player_id,stat.key
+), stats as (
+ select player_id,jsonb_object_agg(key,value) as stats from stat_values group by player_id
+)
+select p.id, totals.competition, p.full_name, p.positions, p.status, p.headshot_url,
+       coalesce(totals.team,'')::text as team,
+       coalesce(f.name,'')::text as owner_name, coalesce(f.slug,'')::text as owner_slug,
+       totals.season, totals.games, coalesce(stats.stats,'{}'::jsonb) as stats,
+       0::float8 as points, 0::float8 as points_per_game
+from totals join players p on p.id = totals.player_id
+left join stats on stats.player_id = p.id
+left join roster_entries r on r.player_id = p.id and r.league_id in (select id from leagues where competition = totals.competition)
+left join franchises f on f.id = r.franchise_id
+order by p.full_name,p.id;

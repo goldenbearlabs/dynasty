@@ -249,6 +249,19 @@ func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error)
 	return i, err
 }
 
+const getPlayerConference = `-- name: GetPlayerConference :one
+select coalesce(t.conference, '')::text as conference
+from players p left join pro_teams t on t.id = p.pro_team_id
+where p.id = $1
+`
+
+func (q *Queries) GetPlayerConference(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlayerConference, id)
+	var conference string
+	err := row.Scan(&conference)
+	return conference, err
+}
+
 const getPlayerExternalID = `-- name: GetPlayerExternalID :one
 select provider_id from player_external_ids
 where player_id = $1 and provider = $2
@@ -606,7 +619,10 @@ with seasons as (
   where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $9::int
 ), scored as materialized (
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(stat.value::numeric * rule.value::numeric) as points
+         sum(stat.value::numeric * rule.value::numeric) as points,
+         sum(stat.value::numeric * rule.value::numeric) filter (where (ps.competition <> 'cbb'
+           or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
+           or ps.conference in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))) as eligible_points
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
   join leagues l on l.competition = ps.competition
@@ -617,9 +633,9 @@ with seasons as (
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
   select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
-  from (select sc.competition, sc.points,
-               row_number() over (partition by sc.competition order by sc.points desc) as place
-        from scored sc) placed
+  from (select sc.competition, sc.eligible_points as points,
+               row_number() over (partition by sc.competition order by sc.eligible_points desc) as place
+        from scored sc where sc.eligible_points is not null) placed
   join leagues l on l.competition = placed.competition
   where placed.place <= greatest(1, (l.settings->'roster'->>'main')::int
                                     * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id))
@@ -634,7 +650,7 @@ select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
-       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
@@ -655,7 +671,7 @@ where ($1::text = '' or p.competition = $1)
                               where dl.draft_id = $5)))
 order by case $6::text
            when 'points' then sc.points
-           when 'index' then case when rostered.spread > 0 then (sc.points - rostered.mean) / rostered.spread end
+           when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
          p.full_name, p.id
 limit $8 offset $7
@@ -1001,10 +1017,10 @@ func (q *Queries) UpdateProspect(ctx context.Context, arg UpdateProspectParams) 
 }
 
 const upsertProTeam = `-- name: UpsertProTeam :one
-insert into pro_teams (competition, provider_id, abbrev, name, logo_url)
-values ($1, $2, $3, $4, $5)
+insert into pro_teams (competition, provider_id, abbrev, name, logo_url, conference)
+values ($1, $2, $3, $4, $5, $6)
 on conflict (competition, provider_id) do update
-  set abbrev = excluded.abbrev, name = excluded.name, logo_url = excluded.logo_url
+  set abbrev = excluded.abbrev, name = excluded.name, logo_url = excluded.logo_url, conference = excluded.conference
 returning id
 `
 
@@ -1014,6 +1030,7 @@ type UpsertProTeamParams struct {
 	Abbrev      string `json:"abbrev"`
 	Name        string `json:"name"`
 	LogoUrl     string `json:"logo_url"`
+	Conference  string `json:"conference"`
 }
 
 func (q *Queries) UpsertProTeam(ctx context.Context, arg UpsertProTeamParams) (pgtype.UUID, error) {
@@ -1023,6 +1040,7 @@ func (q *Queries) UpsertProTeam(ctx context.Context, arg UpsertProTeamParams) (p
 		arg.Abbrev,
 		arg.Name,
 		arg.LogoUrl,
+		arg.Conference,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)

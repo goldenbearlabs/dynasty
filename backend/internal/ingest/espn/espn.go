@@ -48,6 +48,8 @@ type League struct {
 	// Groups, when set, limits the league to the teams in these ESPN
 	// groups: for college sports, conference ids.
 	Groups []string
+	// ConferenceGroups records membership without narrowing the player pool.
+	ConferenceGroups []string
 }
 
 type Source struct {
@@ -99,18 +101,52 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 	if err != nil {
 		return nil, err
 	}
+	season := time.Now().Year()
+	if time.Now().Month() >= time.July {
+		season++
+	}
+	conferences, err := s.conferenceMembership(ctx, season)
+	if err != nil {
+		return nil, err
+	}
+	if len(s.ConferenceGroups) > 0 && len(conferences) == 0 {
+		return nil, fmt.Errorf("espn %s: no conference membership for season %d", s.Path, season)
+	}
 	var teams []ingest.Team
 	for _, t := range res.Sports[0].Leagues[0].Teams {
 		if members != nil && !members[t.Team.ID] {
 			continue
 		}
-		team := ingest.Team{ProviderID: t.Team.ID, Abbrev: t.Team.Abbreviation, Name: t.Team.DisplayName}
+		team := ingest.Team{Conference: conferences[t.Team.ID], ProviderID: t.Team.ID, Abbrev: t.Team.Abbreviation, Name: t.Team.DisplayName}
 		if len(t.Team.Logos) > 0 {
 			team.LogoURL = t.Team.Logos[0].Href
 		}
 		teams = append(teams, team)
 	}
 	return teams, nil
+}
+
+// conferenceMembership reads the exact season: never use today's conference
+// for historical research. Empty conferences (e.g. a dormant Pac-12) are valid.
+func (s *Source) conferenceMembership(ctx context.Context, year int) (map[string]string, error) {
+	members := map[string]string{}
+	sport, league, _ := strings.Cut(s.Path, "/")
+	for _, group := range s.ConferenceGroups {
+		var res struct {
+			Items []ref `json:"items"`
+		}
+		url := fmt.Sprintf("%s/%s/leagues/%s/seasons/%d/types/2/groups/%s/teams?limit=200", s.CoreBase, sport, league, year, group)
+		if err := s.client.GetJSON(ctx, url, &res); err != nil {
+			if ingest.NotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, team := range res.Items {
+			members[team.id()] = group
+		}
+	}
+	return members, nil
 }
 
 // groupMembers returns the ids of the teams in the league's Groups, or nil
@@ -363,6 +399,10 @@ func (s *Source) LatestSeason(now time.Time) int {
 // SeasonStats reads every player's regular-season totals for one season,
 // a page of the league at a time.
 func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine, error) {
+	conferences, err := s.conferenceMembership(ctx, year)
+	if err != nil {
+		return nil, err
+	}
 	var lines []ingest.SeasonLine
 	for page, pages := 1, 1; page <= pages; page++ {
 		var res struct {
@@ -381,6 +421,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 				Athlete struct {
 					ID            string `json:"id"`
 					TeamShortName string `json:"teamShortName"`
+					TeamID        string `json:"teamId"`
 				} `json:"athlete"`
 				Categories []struct {
 					Name   string   `json:"name"`
@@ -402,7 +443,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 		}
 		for _, a := range res.Athletes {
 			line := ingest.SeasonLine{Provider: s.Provider, ProviderID: a.Athlete.ID, Season: ingest.Season{
-				Year: year, Label: res.RequestedSeason.DisplayName, Team: a.Athlete.TeamShortName, Stats: map[string]float64{},
+				Year: year, Label: res.RequestedSeason.DisplayName, Team: a.Athlete.TeamShortName, Conference: conferences[a.Athlete.TeamID], Stats: map[string]float64{},
 			}}
 			averages := map[string]float64{} // per game, by canonical stat
 			for _, group := range a.Categories {

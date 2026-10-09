@@ -244,9 +244,10 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 }
 
 const listRosterEntries = `-- name: ListRosterEntries :many
-select r.player_id, r.list, p.status
+select r.player_id, r.list, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
+left join pro_teams t on t.id = p.pro_team_id
 where r.league_id = $1 and r.franchise_id = $2
 `
 
@@ -256,9 +257,10 @@ type ListRosterEntriesParams struct {
 }
 
 type ListRosterEntriesRow struct {
-	PlayerID pgtype.UUID `json:"player_id"`
-	List     string      `json:"list"`
-	Status   string      `json:"status"`
+	PlayerID   pgtype.UUID `json:"player_id"`
+	List       string      `json:"list"`
+	Status     string      `json:"status"`
+	Conference string      `json:"conference"`
 }
 
 // The facts roster limits depend on.
@@ -271,7 +273,12 @@ func (q *Queries) ListRosterEntries(ctx context.Context, arg ListRosterEntriesPa
 	items := []ListRosterEntriesRow{}
 	for rows.Next() {
 		var i ListRosterEntriesRow
-		if err := rows.Scan(&i.PlayerID, &i.List, &i.Status); err != nil {
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.List,
+			&i.Status,
+			&i.Conference,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

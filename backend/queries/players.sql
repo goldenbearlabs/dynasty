@@ -1,8 +1,8 @@
 -- name: UpsertProTeam :one
-insert into pro_teams (competition, provider_id, abbrev, name, logo_url)
-values (@competition, @provider_id, @abbrev, @name, @logo_url)
+insert into pro_teams (competition, provider_id, abbrev, name, logo_url, conference)
+values (@competition, @provider_id, @abbrev, @name, @logo_url, @conference)
 on conflict (competition, provider_id) do update
-  set abbrev = excluded.abbrev, name = excluded.name, logo_url = excluded.logo_url
+  set abbrev = excluded.abbrev, name = excluded.name, logo_url = excluded.logo_url, conference = excluded.conference
 returning id;
 
 -- name: FindPlayerByExternalID :one
@@ -91,7 +91,10 @@ with seasons as (
   where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = @season_back::int
 ), scored as materialized (
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(stat.value::numeric * rule.value::numeric) as points
+         sum(stat.value::numeric * rule.value::numeric) as points,
+         sum(stat.value::numeric * rule.value::numeric) filter (where (ps.competition <> 'cbb'
+           or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
+           or ps.conference in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))) as eligible_points
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
   join leagues l on l.competition = ps.competition
@@ -102,9 +105,9 @@ with seasons as (
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
   select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
-  from (select sc.competition, sc.points,
-               row_number() over (partition by sc.competition order by sc.points desc) as place
-        from scored sc) placed
+  from (select sc.competition, sc.eligible_points as points,
+               row_number() over (partition by sc.competition order by sc.eligible_points desc) as place
+        from scored sc where sc.eligible_points is not null) placed
   join leagues l on l.competition = placed.competition
   where placed.place <= greatest(1, (l.settings->'roster'->>'main')::int
                                     * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id))
@@ -119,7 +122,7 @@ select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
-       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
@@ -140,7 +143,7 @@ where (@competition::text = '' or p.competition = @competition)
                               where dl.draft_id = sqlc.narg('draft_id'))))
 order by case @sort_by::text
            when 'points' then sc.points
-           when 'index' then case when rostered.spread > 0 then (sc.points - rostered.mean) / rostered.spread end
+           when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
          p.full_name, p.id
 limit @page_size offset @page_offset;
@@ -306,3 +309,8 @@ where player_id = @player_id and provider = @provider;
 insert into player_external_ids (provider, provider_id, player_id)
 values (@provider, @provider_id, @player_id)
 on conflict (provider, provider_id) do nothing;
+
+-- name: GetPlayerConference :one
+select coalesce(t.conference, '')::text as conference
+from players p left join pro_teams t on t.id = p.pro_team_id
+where p.id = @id;

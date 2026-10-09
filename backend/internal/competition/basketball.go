@@ -77,6 +77,8 @@ func cbb(client *ingest.Client) Competition {
 	rules := defaults()
 	rules.Roster.Main, rules.Roster.Reserve = 12, 5 // 7 starters and 5 on the bench
 	rules.Lineup = basketballLineup(3, 3, 0)
+	rules.Lineup.Conferences = settings.DefaultCollegeConferences()
+	rules.Roster.ReserveEligibility = settings.ReserveProspectsOrIneligible
 	rules.Scoring = basketballScoring
 	// College players carry into the NBA league when the dynasty has one;
 	// the setup wizard drops this if it does not.
@@ -84,12 +86,12 @@ func cbb(client *ingest.Client) Competition {
 
 	source := espn.New(client, espn.League{
 		Path: "basketball/mens-college-basketball", Provider: basketballProvider, Stats: basketballFeed, Derive: basketballGame,
-		Scoreboard:   "groups=50&limit=500", // every Division I game, not only the featured ones
-		Groups:       collegeConferences,
-		SeasonGroups: basketballSeasonGroups, SeasonStarts: time.November, SeasonSpansYears: true,
+		Scoreboard:       "groups=50&limit=500", // every Division I game, not only the featured ones
+		ConferenceGroups: collegeConferenceIDs(),
+		SeasonGroups:     basketballSeasonGroups, SeasonStarts: time.November, SeasonSpansYears: true,
 	})
 	return Competition{
-		Key: "cbb", Name: "College Basketball",
+		Key: "cbb", Name: "College Basketball", Conferences: collegeConferenceCatalog,
 		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
 		Season: [2]string{"11-03", "04-06"},
 		Source: source, Games: source, Seasons: source,
@@ -97,17 +99,24 @@ func cbb(client *ingest.Client) Competition {
 	}
 }
 
-// collegeConferences are the conferences the college league draws from, by
-// ESPN group id. Players elsewhere in Division I are left out.
-var collegeConferences = []string{
-	"2",  // ACC
-	"3",  // Atlantic 10
-	"4",  // Big East
-	"7",  // Big Ten
-	"8",  // Big 12
-	"21", // Pac-12
-	"23", // SEC
-	"44", // Mountain West
+// All Division I conferences stay in the draft and reserve pool.
+var collegeConferenceCatalog = []Conference{
+	{"1", "America East"}, {"62", "American"}, {"3", "A-10"}, {"2", "ACC"},
+	{"46", "ASUN"}, {"8", "Big 12"}, {"4", "Big East"}, {"5", "Big Sky"},
+	{"6", "Big South"}, {"7", "Big Ten"}, {"9", "Big West"}, {"10", "CAA"},
+	{"11", "Conference USA"}, {"45", "Horizon"}, {"12", "Ivy League"},
+	{"13", "MAAC"}, {"14", "MAC"}, {"16", "MEAC"}, {"18", "Missouri Valley"},
+	{"44", "MWC"}, {"19", "NEC"}, {"20", "Ohio Valley"}, {"21", "Pac-12"},
+	{"22", "Patriot"}, {"23", "SEC"}, {"24", "Southern"}, {"25", "Southland"},
+	{"26", "SWAC"}, {"49", "Summit"}, {"27", "Sun Belt"}, {"30", "WAC"}, {"29", "WCC"},
+}
+
+func collegeConferenceIDs() []string {
+	ids := make([]string, len(collegeConferenceCatalog))
+	for i, c := range collegeConferenceCatalog {
+		ids[i] = c.ID
+	}
+	return ids
 }
 
 func nba(client *ingest.Client) Competition {

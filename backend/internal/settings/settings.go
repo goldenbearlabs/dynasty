@@ -47,10 +47,12 @@ type Roster struct {
 }
 
 type Lineup struct {
-	Period    string `json:"period"`     // PeriodDay | PeriodWeek
-	WeekStart string `json:"week_start"` // weekday a weekly lineup begins on, e.g. "monday"
-	Lock      string `json:"lock"`       // LockGameStart | LockPeriodStart
-	Slots     []Slot `json:"slots"`
+	// Conferences limits starters, not the draft or reserve pool. Empty allows all.
+	Conferences []string `json:"conferences"`
+	Period      string   `json:"period"`     // PeriodDay | PeriodWeek
+	WeekStart   string   `json:"week_start"` // weekday a weekly lineup begins on, e.g. "monday"
+	Lock        string   `json:"lock"`       // LockGameStart | LockPeriodStart
+	Slots       []Slot   `json:"slots"`
 }
 
 // Slot is a starting position. A player fits when one of his positions is
@@ -111,8 +113,9 @@ type Continuity struct {
 }
 
 const (
-	ReserveProspects = "prospects_only"
-	ReserveAnyone    = "anyone"
+	ReserveProspects             = "prospects_only"
+	ReserveAnyone                = "anyone"
+	ReserveProspectsOrIneligible = "prospects_or_ineligible"
 
 	PeriodDay  = "day"
 	PeriodWeek = "week"
@@ -149,6 +152,7 @@ const (
 type Catalog struct {
 	Positions    []string // valid positions for the competition
 	Stats        []string // valid scoring stat keys
+	Conferences  []string // valid conference IDs; empty for professional sports
 	OtherLeagues []string // competitions of the dynasty's other leagues
 }
 
@@ -173,12 +177,13 @@ func (l League) Validate(c Catalog) error {
 	checks := []error{
 		between("roster.main", l.Roster.Main, 1, 100),
 		between("roster.reserve", l.Roster.Reserve, 0, 100),
-		oneOf("roster.reserve_eligibility", l.Roster.ReserveEligibility, ReserveProspects, ReserveAnyone),
+		oneOf("roster.reserve_eligibility", l.Roster.ReserveEligibility, ReserveProspects, ReserveAnyone, ReserveProspectsOrIneligible),
 		between("roster.reserve_lock_days", l.Roster.ReserveLockDays, 0, 365),
 		oneOf("lineup.period", l.Lineup.Period, PeriodDay, PeriodWeek),
 		oneOf("lineup.week_start", l.Lineup.WeekStart, sportsday.Weekdays...),
 		oneOf("lineup.lock", l.Lineup.Lock, LockGameStart, LockPeriodStart),
 		l.validateSlots(c),
+		l.validateConferences(c),
 		l.validateScoring(c),
 		oneOf("format.type", l.Format.Type, FormatTotalPoints, FormatHeadToHead),
 		oneOf("free_agency.mode", l.FreeAgency.Mode, FreeAgencyOpen, FreeAgencyClosed),
@@ -210,6 +215,35 @@ func (l League) Validate(c Catalog) error {
 		}
 	}
 	return nil
+}
+
+func (l League) validateConferences(c Catalog) error {
+	seen := map[string]bool{}
+	for _, id := range l.Lineup.Conferences {
+		if seen[id] || !slices.Contains(c.Conferences, id) {
+			return fmt.Errorf("lineup.conferences lists duplicate or unknown conference %q", id)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+// StarterConferences supplies defaults for legacy CBB settings.
+func (l League) StarterConferences(competition string) []string {
+	if competition == "cbb" && l.Lineup.Conferences == nil {
+		return DefaultCollegeConferences()
+	}
+	return l.Lineup.Conferences
+}
+
+// CanStart also rejects unknown membership when conferences are restricted.
+func (l League) CanStart(competition, conference string) bool {
+	ids := l.StarterConferences(competition)
+	return len(ids) == 0 || slices.Contains(ids, conference)
+}
+
+func DefaultCollegeConferences() []string {
+	return []string{"8", "23", "7", "2", "4", "44", "3", "21"}
 }
 
 func (l League) validateSlots(c Catalog) error {

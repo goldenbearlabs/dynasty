@@ -89,12 +89,13 @@ type CareerSource interface {
 // Season is one player's totals for one season with one team, in the
 // competition's canonical stat keys.
 type Season struct {
-	Year   int    // the feed's number for the season, used for ordering
-	Label  string // "2025-26", "2025"
-	Team   string
-	League string // empty for the competition's own league
-	Games  int
-	Stats  map[string]float64
+	Conference string
+	Year       int    // the feed's number for the season, used for ordering
+	Label      string // "2025-26", "2025"
+	Team       string
+	League     string // empty for the competition's own league
+	Games      int
+	Stats      map[string]float64
 }
 
 // SeasonLine is a Season and whose it is.
@@ -105,6 +106,7 @@ type SeasonLine struct {
 }
 
 type Team struct {
+	Conference string
 	ProviderID string
 	Abbrev     string
 	Name       string

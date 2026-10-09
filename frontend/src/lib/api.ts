@@ -9,11 +9,11 @@ export type LeagueSettings = {
 	roster: {
 		main: number;
 		reserve: number;
-		reserve_eligibility: 'prospects_only' | 'anyone';
+		reserve_eligibility: 'prospects_only' | 'anyone' | 'prospects_or_ineligible';
 		/** Days a non-prospect sent to reserve must stay there; 0 for none. */
 		reserve_lock_days: number;
 	};
-	lineup: { period: 'day' | 'week'; week_start: string; lock: 'game_start' | 'period_start'; slots: Slot[] };
+	lineup: { conferences?: string[] | null; period: 'day' | 'week'; week_start: string; lock: 'game_start' | 'period_start'; slots: Slot[] };
 	scoring: Record<string, number>;
 	format: { type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number };
 	/** weekly_limit: acquisitions a franchise may make in a week; 0 for no limit. */
@@ -34,6 +34,7 @@ export type DynastySettings = {
 export type List = 'main' | 'reserve';
 
 export type Competition = {
+	conferences: { id: string; name: string }[] | null;
 	key: string;
 	name: string;
 	positions: string[];
@@ -119,16 +120,61 @@ export type ResearchPlayer = Pick<Player, 'id' | 'competition' | 'full_name' | '
 	stats: Record<string, number>;
 	points: number;
 	points_per_game: number;
+	row_key: string;
+	scoring_source: 'league' | 'defaults';
+	has_scoring_stats: boolean;
+	qualified: boolean;
+	metric_position: string;
+	league_index: number | null;
+	position_index: number | null;
+	percentile: number | null;
+	replacement_rate: number | null;
+	replacement_rank: number | null;
+	points_above_replacement: number | null;
+	par_per_game: number | null;
+	win_share_added: number | null;
+	availability: number | null;
+	production_share: number | null;
+};
+export type ResearchBenchmark = {
+	competition: string; season: string; position: string; players: number; mean: number; sd: number;
+	starter_slots: number; replacement_rank: number | null; replacement_rate: number | null;
+};
+export type ResearchPool = { competition: string; season: string };
+export type ResearchChartPoint = { key: string; label: string; group: string; x: number | null; y: number | null };
+export type ResearchAnalysis = {
+	competition: string; season: string; scoring_source: 'league' | 'defaults'; players: number; qualified: number;
+	scored: number; games: number; points: number; median: number; p90: number; top_ten_share: number;
+	contributions: Record<string, number>;
+};
+export type ResearchFilter = Omit<PlayerFilter, 'available_in' | 'draft_id'> & {
+raw_per_game?: string; pools?: string; max_games?: number; max_rate?: number; max_index?: number; min_par?: number;
+	qualified_only?: string; missing_only?: string; stat_key?: string; min_stat?: number; max_stat?: number;
+	include_chart?: string; chart_x?: string; chart_y?: string; chart_group?: string;
+	season?: string; sort?: string; position?: string; team?: string; owner?: string;
+	min_games?: number; min_rate?: number; min_index?: number; benchmark_games?: number;
+	replacement_rank?: number; above_replacement?: string; ascending?: string;
 };
 export type ResearchPage = {
+	starting_conferences: Record<string, string[]>;
 	players: ResearchPlayer[];
 	total: number;
 	page: number;
 	per_page: number;
 	seasons: { label: string; year: number }[];
+	teams: string[];
+	benchmarks: ResearchBenchmark[];
+	benchmark_games: number;
+	raw_stat_keys: string[];
+	catalog: { competition: string; label: string; year: number; players: number; synced_at: string }[];
+	analysis: ResearchAnalysis[];
+	chart: ResearchChartPoint[];
+	chart_total: number;
+	warnings: string[];
 };
 
 export type PlayerResearch = {
+	scoring_source: 'league' | 'defaults';
 	player: Player;
 	games: { id: string; day: string; away_abbrev: string; home_abbrev: string; stats: Record<string, number>; points: number }[];
 };
@@ -371,6 +417,8 @@ export type LineupGame = {
 };
 
 export type LineupPlayer = {
+	starter_eligible: boolean;
+	eligibility_note: string;
 	player_id: string;
 	full_name: string;
 	positions: string[];
@@ -625,7 +673,7 @@ const orNull = <T>(promise: Promise<T>) =>
 
 export const getCompetitions = () => request<Competition[]>('GET', '/competitions');
 export const getPlayers = (filter: PlayerFilter) => request<PlayerPage>('GET', `/players${query(filter)}`);
-export const getResearch = (filter: PlayerFilter & { season?: string; sort?: string }) =>
+export const getResearch = (filter: ResearchFilter) =>
 	request<ResearchPage>('GET', `/research${query(filter)}`);
 export const getStatSeasons = () => request<StatSeason[]>('GET', '/stat-seasons');
 export const getPlayerResearch = (id: string) => request<PlayerResearch>('GET', `/players/${id}`);

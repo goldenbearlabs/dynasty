@@ -78,7 +78,7 @@
 						<li><strong>{plural(count, 'starter')}</strong> and {plural(Math.max(g.rules.roster.main - count, 0), 'bench spot')} ({g.rules.roster.main} on the main roster)</li>
 						<li>
 							{plural(g.rules.roster.reserve, 'reserve spot')}, for
-							{g.rules.roster.reserve_eligibility === 'anyone' ? 'anyone' : 'prospects only'}
+							{g.rules.roster.reserve_eligibility === 'anyone' ? 'anyone' : g.rules.roster.reserve_eligibility === 'prospects_or_ineligible' ? 'prospects or players outside the starting conferences' : 'prospects only'}
 						</li>
 						{#if g.rules.roster.reserve_lock_days > 0}
 							<li>A player sent to reserve stays there {plural(g.rules.roster.reserve_lock_days, 'day')}</li>
@@ -86,6 +86,10 @@
 					</ul>
 
 					<h3 class="eyebrow">Lineup</h3>
+                    {#if g.sport.conferences?.length}
+                      {@const ids = g.rules.lineup.conferences ?? g.sport.defaults.lineup.conferences ?? []}
+                      <p class="small-text">Starting conferences: {ids.length ? ids.map((id) => g.sport.conferences?.find((c) => c.id === id)?.name ?? id).join(', ') : 'All conferences'}. Other conferences remain available for drafts and reserves.</p>
+                    {/if}
 					<ul>
 						{#each g.rules.lineup.slots as slot (slot.name)}
 							<li><strong>{slot.count} × {slot.name}</strong> <span class="muted">({positions(slot.positions)})</span></li>

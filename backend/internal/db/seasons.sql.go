@@ -31,7 +31,7 @@ func (q *Queries) DeleteStalePlayerSeasons(ctx context.Context, arg DeleteStaleP
 }
 
 const listPlayerSeasons = `-- name: ListPlayerSeasons :many
-select player_id, competition, year, label, team, league, games, stats, synced_at from player_seasons
+select player_id, competition, year, label, team, league, games, stats, synced_at, conference from player_seasons
 where player_id = $1
 order by year desc, league <> '', competition, team
 `
@@ -57,6 +57,7 @@ func (q *Queries) ListPlayerSeasons(ctx context.Context, playerID pgtype.UUID) (
 			&i.Games,
 			&i.Stats,
 			&i.SyncedAt,
+			&i.Conference,
 		); err != nil {
 			return nil, err
 		}
@@ -75,6 +76,35 @@ select distinct year from player_seasons where competition = $1 and league = ''
 // The seasons already stored for a competition's own league.
 func (q *Queries) ListSeasonYears(ctx context.Context, competition string) ([]int32, error) {
 	rows, err := q.db.Query(ctx, listSeasonYears, competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var year int32
+		if err := rows.Scan(&year); err != nil {
+			return nil, err
+		}
+		items = append(items, year)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSeasonsMissingConferences = `-- name: ListSeasonsMissingConferences :many
+select year from player_seasons
+where competition = $1 and competition = 'cbb' and league = ''
+group by year having bool_and(conference = '')
+`
+
+// Metadata added after the original imports must be backfilled even when
+// these seasons are older than the ordinary history window. Partially known
+// seasons may contain non-Division-I teams, which intentionally stay unknown.
+func (q *Queries) ListSeasonsMissingConferences(ctx context.Context, competition string) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listSeasonsMissingConferences, competition)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +153,10 @@ func (q *Queries) MovePlayerSeasons(ctx context.Context, arg MovePlayerSeasonsPa
 }
 
 const upsertPlayerSeason = `-- name: UpsertPlayerSeason :exec
-insert into player_seasons (player_id, competition, year, label, team, league, games, stats)
-values ($1, $2, $3, $4, $5, $6, $7, $8)
+insert into player_seasons (player_id, competition, year, label, team, league, games, stats, conference)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 on conflict (player_id, competition, year, team, league) do update
-  set label = excluded.label, games = excluded.games, stats = excluded.stats, synced_at = now()
+  set label = excluded.label, games = excluded.games, stats = excluded.stats, conference = excluded.conference, synced_at = now()
 `
 
 type UpsertPlayerSeasonParams struct {
@@ -138,6 +168,7 @@ type UpsertPlayerSeasonParams struct {
 	League      string          `json:"league"`
 	Games       int32           `json:"games"`
 	Stats       json.RawMessage `json:"stats"`
+	Conference  string          `json:"conference"`
 }
 
 func (q *Queries) UpsertPlayerSeason(ctx context.Context, arg UpsertPlayerSeasonParams) error {
@@ -150,6 +181,7 @@ func (q *Queries) UpsertPlayerSeason(ctx context.Context, arg UpsertPlayerSeason
 		arg.League,
 		arg.Games,
 		arg.Stats,
+		arg.Conference,
 	)
 	return err
 }
