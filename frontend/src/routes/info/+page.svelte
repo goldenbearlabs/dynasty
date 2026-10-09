@@ -24,6 +24,14 @@
 	const positions = (list: string[]) => (list.includes('*') ? 'anyone' : list.join(', '));
 	const scoring = (g: Guide) =>
 		g.sport.stats.filter((s) => g.rules.scoring[s.key]).map((s) => ({ label: s.label, points: g.rules.scoring[s.key] }));
+	// Scoring written out the same way whatever order its stats were saved in.
+	const signature = (points: Record<string, number>) =>
+		JSON.stringify(Object.entries(points).filter(([, v]) => v !== 0).sort(([a], [b]) => a.localeCompare(b)));
+	// The other leagues scored exactly like this one.
+	const sameScoring = (g: Guide) => guides.filter((o) => o.key !== g.key && signature(o.rules.scoring) === signature(g.rules.scoring));
+	const names = (list: Guide[]) => list.map((o) => o.name).join(list.length === 2 ? ' and ' : ', ').replace(/, ([^,]*)$/, ' and $1');
+	// Whether a league is still scored the way its sport was balanced.
+	const recommended = (g: Guide) => signature(g.rules.scoring) === signature(g.sport.defaults.scoring);
 	const limited = (rules: LeagueSettings) => rules.lineup.slots.filter((s) => s.games_per_week > 0);
 
 	// A first-round player's effect on a weekly matchup under the recommended
@@ -133,6 +141,15 @@
 
 				<div>
 					<h3 class="eyebrow">Scoring</h3>
+					{#if sameScoring(g).length > 0}
+						<p class="small-text same">Scored the same as {names(sameScoring(g))}.</p>
+					{/if}
+					{#if g.custom && !recommended(g)}
+						<p class="small-text muted same">
+							This league's scoring differs from the <a href="#balance">recommended scoring</a> for its sport.
+							{#if data.me?.is_commissioner}<a href="/commissioner?section=rules">Change it in Rules</a>.{/if}
+						</p>
+					{/if}
 					<table>
 						<tbody>
 							{#each scoring(g) as row (row.label)}
@@ -226,6 +243,9 @@
 	}
 	li {
 		margin: 0.15rem 0;
+	}
+	.same {
+		margin-bottom: 0.4rem;
 	}
 	.grid td {
 		padding: 0.3rem 0;
