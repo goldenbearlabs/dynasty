@@ -1,15 +1,14 @@
 -- name: ListResearchSeasons :many
-select distinct ps.label, ps.year
-from player_seasons ps
-where ps.league = '' and (@competition::text = '' or ps.competition = @competition)
-order by ps.year desc, ps.label desc;
+select distinct s.label, s.year
+from stat_seasons s
+where @competition::text = '' or s.competition = @competition
+order by s.year desc, s.label desc;
 
 -- name: ListResearchPlayers :many
 -- Latest means the newest imported season in each competition, shared by
 -- all players. Aggregate team splits before applying current scoring rules.
 with latest as (
-  select competition, max(year) as year from player_seasons
-  where league = '' group by competition
+  select competition, max(year) as year from stat_seasons group by competition
 ), totals as (
   select ps.player_id, ps.competition, max(ps.label)::text as season,
          sum(ps.games)::integer as games,
@@ -82,7 +81,7 @@ with selected as (
  where ps.league = '' and ps.competition = @competition
  and (ps.competition <> 'cbb' or cardinality(@conferences::text[]) = 0 or ps.conference = any(@conferences::text[]))
  and (ps.label = @season::text or (@season = '' and ps.year = (
-   select max(year) from player_seasons where competition = @competition and league = '')))
+   select max(year) from stat_seasons where competition = @competition)))
 ), totals as (
  select player_id, competition, max(label)::text as season,
         sum(games)::integer as games, string_agg(distinct nullif(team,''), ' / ')::text as team

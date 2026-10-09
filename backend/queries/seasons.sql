@@ -12,7 +12,7 @@ where competition = @competition and year = @year and league = '' and synced_at 
 
 -- name: ListSeasonYears :many
 -- The seasons already stored for a competition's own league.
-select distinct year from player_seasons where competition = @competition and league = '';
+select distinct year from stat_seasons where competition = @competition;
 
 -- name: ListPlayerSeasons :many
 -- A player's seasons, newest first. Within a year his own league comes

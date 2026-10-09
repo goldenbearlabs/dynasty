@@ -3,6 +3,7 @@ package players
 import (
 	"cmp"
 	"context"
+	"crossover/internal/cache"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"crossover/internal/db"
 	"crossover/internal/problem"
@@ -132,91 +135,11 @@ type analyticRules struct {
 // position benchmarks, then filters, sorts and pages the result. No feeds are
 // called. Loading only the visible page would make comparative metrics wrong.
 func (s *Service) Analytics(ctx context.Context, f ResearchFilter) (AnalyticsPage, error) {
-	q := db.New(s.pool)
-
-	rules := map[string]analyticRules{}
-	dynasty, err := q.GetDynasty(ctx)
-	managers := 0
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	dataset, err := s.researchData(ctx, f)
+	if err != nil {
 		return AnalyticsPage{}, err
 	}
-	if err == nil {
-		leagues, err := q.ListLeagues(ctx, dynasty.ID)
-		if err != nil {
-			return AnalyticsPage{}, err
-		}
-		franchises, err := q.ListFranchises(ctx, dynasty.ID)
-		if err != nil {
-			return AnalyticsPage{}, err
-		}
-		managers = len(franchises)
-		for _, l := range leagues {
-			parsed, err := settings.Parse[settings.League](l.Settings)
-			if err != nil {
-				return AnalyticsPage{}, err
-			}
-			c, _ := s.registry.Get(l.Competition)
-			rules[l.Competition] = analyticRules{Rules: parsed, Managers: managers, Positions: c.Positions, Source: "league"}
-		}
-	}
-
-	for _, c := range s.registry {
-		if _, exists := rules[c.Key]; !exists {
-			rules[c.Key] = analyticRules{Rules: c.Defaults, Managers: managers, Positions: c.Positions, Source: "defaults"}
-		}
-	}
-	var rows []db.ListResearchPlayersRow
-	if len(f.Pools) == 0 {
-		rows, err = q.ListResearchPlayers(ctx, db.ListResearchPlayersParams{Competition: "", Conferences: rules["cbb"].Rules.StarterConferences("cbb"), Season: f.Season, Sort: "name", PageSize: math.MaxInt32})
-		if err != nil {
-			return AnalyticsPage{}, err
-		}
-	} else {
-		if len(f.Pools) > 24 {
-			return AnalyticsPage{}, problem.New("Choose up to 24 league-season pools.")
-		}
-		seen := map[string]bool{}
-		for _, pool := range f.Pools {
-			if _, ok := s.registry.Get(pool.Competition); !ok {
-				return AnalyticsPage{}, problem.New("Unknown research league: %s.", pool.Competition)
-			}
-			key := pool.Competition + "|" + pool.Season
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			records, err := q.ListResearchSeasonPool(ctx, db.ListResearchSeasonPoolParams{Competition: pool.Competition, Conferences: rules[pool.Competition].Rules.StarterConferences(pool.Competition), Season: pool.Season})
-			if err != nil {
-				return AnalyticsPage{}, err
-			}
-			for _, r := range records {
-				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, HeadshotUrl: r.HeadshotUrl, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
-			}
-		}
-	}
-	// Research also covers sports outside the dynasty. Their configured sport
-	// defaults are a labelled scoring basis, rather than fictitious zero scores.
-	unique := map[string]bool{}
-	valued := []db.ListResearchPlayersRow{}
-	for _, row := range rows {
-		key := row.ID.String() + "|" + row.Competition + "|" + row.Season
-		if unique[key] {
-			continue
-		}
-		unique[key] = true
-		var stats map[string]float64
-		if err := json.Unmarshal(row.Stats, &stats); err != nil {
-			return AnalyticsPage{}, err
-		}
-		row.Points, row.PointsPerGame = 0, 0
-		for stat, value := range stats {
-			row.Points += value * rules[row.Competition].Rules.Scoring[stat]
-		}
-		if row.Games > 0 {
-			row.PointsPerGame = row.Points / float64(row.Games)
-		}
-		valued = append(valued, row)
-	}
+	valued, rules := dataset.Rows, dataset.Rules
 	result := analyze(valued, rules, f)
 	result.StartingConferences = map[string][]string{}
 	for key, r := range rules {
@@ -233,9 +156,7 @@ func (s *Service) Analytics(ctx context.Context, f ResearchFilter) (AnalyticsPag
 		if f.Competition != "" && row.Competition != f.Competition {
 			continue
 		}
-		var stats map[string]float64
-		json.Unmarshal(row.Stats, &stats)
-		for key := range stats {
+		for key := range statValues(row.Stats) {
 			keys[key] = true
 		}
 	}
@@ -244,14 +165,11 @@ func (s *Service) Analytics(ctx context.Context, f ResearchFilter) (AnalyticsPag
 		result.RawStatKeys = append(result.RawStatKeys, key)
 	}
 	slices.Sort(result.RawStatKeys)
-	result.Seasons, err = q.ListResearchSeasons(ctx, f.Competition)
+	result.Seasons, err = db.New(s.pool).ListResearchSeasons(ctx, f.Competition)
 	if err != nil {
 		return AnalyticsPage{}, err
 	}
-	result.Catalog, err = q.ListResearchCatalog(ctx, rules["cbb"].Rules.StarterConferences("cbb"))
-	if err != nil {
-		return AnalyticsPage{}, err
-	}
+	result.Catalog = dataset.Catalog
 	f.BenchmarkGames = result.BenchmarkGames
 	result.Analysis = leagueAnalysis(valued, rules, f)
 	result.Warnings = []string{}
@@ -275,6 +193,223 @@ func (s *Service) Analytics(ctx context.Context, f ResearchFilter) (AnalyticsPag
 		}
 	}
 	return result, nil
+}
+
+// Reuse the full eligible season pool across filters, pages and charts. Only
+// selection changes require another database aggregation; display filters
+// are applied after benchmarks and cannot alter their population.
+type researchDataset struct {
+	Rows    []db.ListResearchPlayersRow
+	Rules   map[string]analyticRules
+	Catalog []db.ListResearchCatalogRow
+}
+
+func (s *Service) researchData(ctx context.Context, f ResearchFilter) (researchDataset, error) {
+	if len(f.Pools) > 24 {
+		return researchDataset{}, problem.New("Choose up to 24 league-season pools.")
+	}
+	for _, pool := range f.Pools {
+		if _, ok := s.registry.Get(pool.Competition); !ok {
+			return researchDataset{}, problem.New("Unknown research league: %s.", pool.Competition)
+		}
+	}
+
+	if s.Cache == nil {
+		return s.loadResearchData(ctx, f)
+	}
+	pools := slices.Clone(f.Pools)
+	slices.SortFunc(pools, func(a, b ResearchPool) int {
+		return cmp.Or(cmp.Compare(a.Competition, b.Competition), cmp.Compare(a.Season, b.Season))
+	})
+	pools = slices.Compact(pools)
+	selection, err := json.Marshal(struct {
+		Season string
+		Pools  []ResearchPool
+	}{f.Season, pools})
+	if err != nil {
+		return researchDataset{}, err
+	}
+	revision, err := s.Cache.Revision(ctx, cache.Research)
+	if err != nil {
+		return s.loadResearchData(ctx, f) // no generation to hold it under: never stale
+	}
+	key := revision + "|" + string(selection)
+	if dataset, ok := s.datasets.get(key); ok {
+		return dataset, nil
+	}
+	// Simultaneous cold reads share one load, which outlives any one of them.
+	result := s.loads.DoChan(key, func() (any, error) {
+		if dataset, ok := s.datasets.get(key); ok {
+			return dataset, nil
+		}
+		shared, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		defer cancel()
+		dataset, err := s.loadResearchData(shared, f)
+		if err == nil {
+			s.datasets.put(revision, key, dataset)
+		}
+		return dataset, err
+	})
+	select {
+	case <-ctx.Done():
+		return researchDataset{}, ctx.Err()
+	case loaded := <-result:
+		if loaded.Err != nil {
+			return researchDataset{}, loaded.Err
+		}
+		return loaded.Val.(researchDataset), nil
+	}
+}
+
+// researchMemo holds the last few datasets in this process, as loaded, for
+// one generation of the data. They are shared between requests and must
+// only be read. A dataset is a few megabytes, so only a few are kept.
+type researchMemo struct {
+	mu       sync.Mutex
+	revision string
+	sets     map[string]researchDataset
+}
+
+const researchMemoSize = 3
+
+func (m *researchMemo) get(key string) (researchDataset, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	dataset, ok := m.sets[key]
+	return dataset, ok
+}
+
+func (m *researchMemo) put(revision, key string, dataset researchDataset) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.revision != revision || len(m.sets) >= researchMemoSize {
+		m.revision, m.sets = revision, map[string]researchDataset{}
+	}
+	m.sets[key] = dataset
+}
+
+// statValues reads a stats object, remembering the result: the same season
+// line is read several times in one analysis and again by every request
+// after it. The map is shared and must only be read.
+func statValues(raw json.RawMessage) map[string]float64 {
+	parsedStats.RLock()
+	stats, ok := parsedStats.byText[string(raw)]
+	parsedStats.RUnlock()
+	if ok {
+		return stats
+	}
+	if json.Unmarshal(raw, &stats) != nil {
+		stats = nil
+	}
+	parsedStats.Lock()
+	if len(parsedStats.byText) >= parsedStatsLimit {
+		clear(parsedStats.byText) // bounded: start again and refill from use
+	}
+	parsedStats.byText[string(raw)] = stats
+	parsedStats.Unlock()
+	return stats
+}
+
+const parsedStatsLimit = 12000
+
+var parsedStats = struct {
+	sync.RWMutex
+	byText map[string]map[string]float64
+}{byText: map[string]map[string]float64{}}
+
+func (s *Service) loadResearchData(ctx context.Context, f ResearchFilter) (researchDataset, error) {
+	select {
+	case s.analyticsSlots <- struct{}{}:
+	case <-ctx.Done():
+		return researchDataset{}, ctx.Err()
+	}
+	defer func() { <-s.analyticsSlots }()
+	q := db.New(s.pool)
+
+	rules := map[string]analyticRules{}
+	dynasty, err := q.GetDynasty(ctx)
+	managers := 0
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return researchDataset{}, err
+	}
+	if err == nil {
+		leagues, err := q.ListLeagues(ctx, dynasty.ID)
+		if err != nil {
+			return researchDataset{}, err
+		}
+		franchises, err := q.ListFranchises(ctx, dynasty.ID)
+		if err != nil {
+			return researchDataset{}, err
+		}
+		managers = len(franchises)
+		for _, l := range leagues {
+			parsed, err := settings.Parse[settings.League](l.Settings)
+			if err != nil {
+				return researchDataset{}, err
+			}
+			c, _ := s.registry.Get(l.Competition)
+			rules[l.Competition] = analyticRules{Rules: parsed, Managers: managers, Positions: c.Positions, Source: "league"}
+		}
+	}
+
+	for _, c := range s.registry {
+		if _, exists := rules[c.Key]; !exists {
+			rules[c.Key] = analyticRules{Rules: c.Defaults, Managers: managers, Positions: c.Positions, Source: "defaults"}
+		}
+	}
+	var rows []db.ListResearchPlayersRow
+	if len(f.Pools) == 0 {
+		rows, err = q.ListResearchPlayers(ctx, db.ListResearchPlayersParams{Competition: "", Conferences: rules["cbb"].Rules.StarterConferences("cbb"), Season: f.Season, Sort: "name", PageSize: math.MaxInt32})
+		if err != nil {
+			return researchDataset{}, err
+		}
+	} else {
+		if len(f.Pools) > 24 {
+			return researchDataset{}, problem.New("Choose up to 24 league-season pools.")
+		}
+		seen := map[string]bool{}
+		for _, pool := range f.Pools {
+			if _, ok := s.registry.Get(pool.Competition); !ok {
+				return researchDataset{}, problem.New("Unknown research league: %s.", pool.Competition)
+			}
+			key := pool.Competition + "|" + pool.Season
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			records, err := q.ListResearchSeasonPool(ctx, db.ListResearchSeasonPoolParams{Competition: pool.Competition, Conferences: rules[pool.Competition].Rules.StarterConferences(pool.Competition), Season: pool.Season})
+			if err != nil {
+				return researchDataset{}, err
+			}
+			for _, r := range records {
+				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, HeadshotUrl: r.HeadshotUrl, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
+			}
+		}
+	}
+	// Research also covers sports outside the dynasty. Their configured sport
+	// defaults are a labelled scoring basis, rather than fictitious zero scores.
+	unique := map[string]bool{}
+	valued := []db.ListResearchPlayersRow{}
+	for _, row := range rows {
+		key := row.ID.String() + "|" + row.Competition + "|" + row.Season
+		if unique[key] {
+			continue
+		}
+		unique[key] = true
+		row.Points, row.PointsPerGame = 0, 0
+		for stat, value := range statValues(row.Stats) {
+			row.Points += value * rules[row.Competition].Rules.Scoring[stat]
+		}
+		if row.Games > 0 {
+			row.PointsPerGame = row.Points / float64(row.Games)
+		}
+		valued = append(valued, row)
+	}
+	catalog, err := q.ListResearchCatalog(ctx, rules["cbb"].Rules.StarterConferences("cbb"))
+	if err != nil {
+		return researchDataset{}, err
+	}
+	return researchDataset{Rows: valued, Rules: rules, Catalog: catalog}, nil
 }
 
 type distribution struct {
@@ -301,6 +436,16 @@ func summarize(rows []db.ListResearchPlayersRow) distribution {
 	}
 	slices.Sort(d.rates)
 	return d
+}
+
+// Season production shares one league-wide scale, including hitters and pitchers.
+// Rate distributions remain separate for Position+, replacement and win share.
+func summarizeTotals(rows []db.ListResearchPlayersRow) distribution {
+	totals := slices.Clone(rows)
+	for i := range totals {
+		totals[i].PointsPerGame = totals[i].Points
+	}
+	return summarize(totals)
 }
 
 func index(rate float64, d distribution) *float64 {
@@ -340,8 +485,7 @@ func normalizationGroup(p db.ListResearchPlayersRow) string {
 	if !pitcher {
 		return "Hitters"
 	}
-	var stats map[string]float64
-	json.Unmarshal(p.Stats, &stats)
+	stats := statValues(p.Stats)
 	games, knownGames := stats["pit_games"]
 	starts, knownStarts := stats["pit_gs"]
 	if knownGames && knownStarts && games > 0 {
@@ -417,8 +561,7 @@ func pitcherWorkload(p db.ListResearchPlayersRow) (games, innings float64, pitch
 	if !pitcher {
 		return
 	}
-	var stats map[string]float64
-	json.Unmarshal(p.Stats, &stats)
+	stats := statValues(p.Stats)
 	games, known := stats["pit_games"]
 	if !known {
 		games = float64(p.Games)
@@ -511,6 +654,7 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 	positional := map[string]map[string]distribution{}
 	baselines := map[string]map[string]Benchmark{}
 	leagueDistributions := map[string]distribution{}
+	seasonDistributions := map[string]distribution{}
 	roleDistributions := map[string]distribution{}
 	roleRows := map[string][]db.ListResearchPlayersRow{}
 	for key, cohort := range cohorts {
@@ -525,6 +669,7 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 	for comp, cohort := range cohorts {
 		d := summarize(cohort)
 		leagueDistributions[comp] = d
+		seasonDistributions[comp] = summarizeTotals(cohort)
 		actualComp := cohort[0].Competition
 		season := cohort[0].Season
 		r := rules[actualComp]
@@ -552,7 +697,7 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 			b := Benchmark{Competition: actualComp, Season: season, Position: pos, Players: len(members), Mean: pd.mean, SD: pd.sd, StarterSlots: slots}
 			meanIndex, count := 0.0, 0
 			for _, member := range members {
-				if v := index(member.PointsPerGame, roleDistributions[comp+"|"+normalizationGroup(member)]); v != nil {
+				if v := index(member.Points, seasonDistributions[comp]); v != nil {
 					meanIndex += *v
 					count++
 				}
@@ -580,22 +725,21 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 	var filtered []AnalyticsPlayer
 	result.Chart = []ChartPoint{}
 	for _, row := range rows {
-		p := AnalyticsPlayer{ListResearchPlayersRow: row, RowKey: row.ID.String() + "|" + row.Competition + "|" + row.Season, NormalizationGroup: normalizationGroup(row), ScoringSource: rules[row.Competition].Source, HasScoringStats: hasScoringStats(row.Stats, rules[row.Competition].Rules.Scoring)}
+		p := AnalyticsPlayer{ListResearchPlayersRow: row, RowKey: row.ID.String() + "|" + row.Competition + "|" + row.Season, NormalizationGroup: "League", ScoringSource: rules[row.Competition].Source, HasScoringStats: hasScoringStats(row.Stats, rules[row.Competition].Rules.Scoring)}
 		key := cohortKey(p.Competition, p.Season)
-		if err := json.Unmarshal(row.Stats, &p.values); err != nil {
-			p.values = map[string]float64{}
-		}
-		d := roleDistributions[key+"|"+p.NormalizationGroup]
+		p.values = statValues(row.Stats)
+		d := roleDistributions[key+"|"+normalizationGroup(row)]
+		seasonD := seasonDistributions[key]
 		leagueD := leagueDistributions[key]
 		qualified, threshold, note := qualification(row, f.BenchmarkGames, limits)
 		p.BenchmarkMinimumGames, p.BenchmarkMinimumInnings, p.QualificationNote = threshold.games, threshold.innings, note
-		p.Qualified = p.Season != "" && qualified && p.HasScoringStats && len(d.rates) > 0
+		p.Qualified = p.Season != "" && qualified && p.HasScoringStats && len(seasonD.rates) > 0
 		if p.Qualified {
-			p.LeagueIndex = index(p.PointsPerGame, d)
-			if len(d.rates) >= 2 {
-				lo, _ := slices.BinarySearch(d.rates, p.PointsPerGame)
-				hi := sort.Search(len(d.rates), func(i int) bool { return d.rates[i] > p.PointsPerGame })
-				p.Percentile = ptr(100 * float64(lo+hi-1) / 2 / float64(len(d.rates)-1))
+			p.LeagueIndex = index(p.Points, seasonD)
+			if len(seasonD.rates) >= 2 {
+				lo, _ := slices.BinarySearch(seasonD.rates, p.Points)
+				hi := sort.Search(len(seasonD.rates), func(i int) bool { return seasonD.rates[i] > p.Points })
+				p.Percentile = ptr(100 * float64(lo+hi-1) / 2 / float64(len(seasonD.rates)-1))
 			}
 			if leagueD.maxGames > 0 {
 				p.Availability = ptr(100 * float64(p.Games) / float64(leagueD.maxGames))
@@ -815,10 +959,7 @@ func metricValue(p AnalyticsPlayer, key string) *float64 {
 
 func cohortKey(competition, season string) string { return competition + "|" + season }
 func hasScoringStats(raw json.RawMessage, scoring map[string]float64) bool {
-	var stats map[string]float64
-	if json.Unmarshal(raw, &stats) != nil {
-		return false
-	}
+	stats := statValues(raw)
 	for key, weight := range scoring {
 		if _, ok := stats[key]; ok && weight != 0 {
 			return true
@@ -857,9 +998,7 @@ func leagueAnalysis(rows []db.ListResearchPlayersRow, rules map[string]analyticR
 			}
 			a.Scored++
 			a.Points += p.Points
-			var stats map[string]float64
-			json.Unmarshal(p.Stats, &stats)
-			for stat, value := range stats {
+			for stat, value := range statValues(p.Stats) {
 				if weight := r.Rules.Scoring[stat]; weight != 0 {
 					a.Contributions[stat] += value * weight
 				}

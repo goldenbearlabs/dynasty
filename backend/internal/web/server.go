@@ -8,11 +8,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"crossover/internal/auth"
+	"crossover/internal/cache"
 	"crossover/internal/competition"
 	"crossover/internal/db"
 	"crossover/internal/draft"
@@ -29,6 +31,7 @@ import (
 )
 
 type Server struct {
+	Cache    *cache.Store
 	Queries  *db.Queries
 	Auth     *auth.Service
 	Registry competition.Registry
@@ -58,32 +61,32 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 
-	mux.HandleFunc("GET /api/competitions", s.listCompetitions)
-	mux.HandleFunc("GET /api/players", s.listPlayers)
-	mux.HandleFunc("GET /api/stat-seasons", s.listStatSeasons)
-	mux.HandleFunc("GET /api/research", s.listResearch)
-	mux.HandleFunc("GET /api/players/{id}", s.researchPlayer)
-	mux.HandleFunc("GET /api/players/{id}/seasons", s.playerSeasons)
-	mux.HandleFunc("GET /api/players/{id}/profile", s.playerProfile)
-	mux.HandleFunc("GET /api/players/{id}/transactions", s.playerTimeline)
-	mux.HandleFunc("GET /api/players/{id}/games", s.playerGameLog)
-	mux.HandleFunc("GET /api/dynasty", s.getDynasty)
+	mux.HandleFunc("GET /api/competitions", s.cached(cache.Research, 10*time.Minute, s.listCompetitions))
+	mux.HandleFunc("GET /api/players", s.cached(cache.Public, 30*time.Second, s.listPlayers))
+	mux.HandleFunc("GET /api/stat-seasons", s.cached(cache.Research, 10*time.Minute, s.listStatSeasons))
+	mux.HandleFunc("GET /api/research", s.cached(cache.Research, 10*time.Minute, s.listResearch))
+	mux.HandleFunc("GET /api/players/{id}", s.cached(cache.Public, 30*time.Second, s.researchPlayer))
+	mux.HandleFunc("GET /api/players/{id}/seasons", s.cached(cache.Public, 30*time.Second, s.playerSeasons))
+	mux.HandleFunc("GET /api/players/{id}/profile", s.cached(cache.Public, 30*time.Second, s.playerProfile))
+	mux.HandleFunc("GET /api/players/{id}/transactions", s.cached(cache.Public, 30*time.Second, s.playerTimeline))
+	mux.HandleFunc("GET /api/players/{id}/games", s.cached(cache.Public, 30*time.Second, s.playerGameLog))
+	mux.HandleFunc("GET /api/dynasty", s.cached(cache.Public, 30*time.Second, s.getDynasty))
 	mux.HandleFunc("POST /api/dynasty", s.createDynasty) // first run only
-	mux.HandleFunc("GET /api/franchises/{slug}", s.getFranchise)
+	mux.HandleFunc("GET /api/franchises/{slug}", s.cached(cache.Public, 30*time.Second, s.getFranchise))
 	mux.HandleFunc("PUT /api/franchises/{id}/identity", s.member(s.setOrganizationIdentity))
 	mux.HandleFunc("PUT /api/franchises/{id}/leagues/{league_id}/identity", s.member(s.setTeamIdentity))
 	mux.HandleFunc("GET /api/franchises/{id}/players/{player_id}/nickname", s.getPlayerNickname)
 	mux.HandleFunc("PUT /api/franchises/{id}/players/{player_id}/nickname", s.member(s.setPlayerNickname))
-	mux.HandleFunc("GET /api/activity", s.listActivity)
-	mux.HandleFunc("GET /api/standings", s.listStandings)
-	mux.HandleFunc("GET /api/overall", s.getOverall)
-	mux.HandleFunc("GET /api/seasons", s.listSeasons)
+	mux.HandleFunc("GET /api/activity", s.cached(cache.Public, 30*time.Second, s.listActivity))
+	mux.HandleFunc("GET /api/standings", s.cached(cache.Public, 30*time.Second, s.listStandings))
+	mux.HandleFunc("GET /api/overall", s.cached(cache.Public, 30*time.Second, s.getOverall))
+	mux.HandleFunc("GET /api/seasons", s.cached(cache.Public, 30*time.Second, s.listSeasons))
 	mux.HandleFunc("GET /api/leagues/{id}/lineup", s.getLineup)
-	mux.HandleFunc("GET /api/leagues/{id}/matchups", s.listMatchups)
-	mux.HandleFunc("GET /api/matchups/{id}", s.getMatchup)
-	mux.HandleFunc("GET /api/scores/{competition}", s.getScores)
+	mux.HandleFunc("GET /api/leagues/{id}/matchups", s.cached(cache.Public, 30*time.Second, s.listMatchups))
+	mux.HandleFunc("GET /api/matchups/{id}", s.cached(cache.Public, 30*time.Second, s.getMatchup))
+	mux.HandleFunc("GET /api/scores/{competition}", s.cached(cache.Public, 30*time.Second, s.getScores))
 	mux.HandleFunc("GET /api/scores/{competition}/ws", s.watchScores)
-	mux.HandleFunc("GET /api/games/{id}", s.getGame)
+	mux.HandleFunc("GET /api/games/{id}", s.cached(cache.Public, 30*time.Second, s.getGame))
 	mux.HandleFunc("GET /api/games/{id}/ws", s.watchGame)
 	mux.HandleFunc("GET /api/trades", s.listTrades)
 	mux.HandleFunc("GET /api/leagues/{id}/waivers", s.getWaivers)
@@ -147,7 +150,16 @@ func (s *Server) Handler() http.Handler {
 		writeError(w, http.StatusNotFound, "not found")
 	})
 	mux.Handle("/", frontend())
-	return mux
+	if s.Cache == nil {
+		return mux
+	}
+	// Whoever changes something sees it at once: see cache.Store.RevisionAge.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(w, r)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			s.Cache.Forget()
+		}
+	})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

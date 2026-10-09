@@ -123,24 +123,6 @@ func (q *Queries) DeletePeriodsFrom(ctx context.Context, arg DeletePeriodsFromPa
 	return err
 }
 
-const findProTeam = `-- name: FindProTeam :one
-
-select id from pro_teams where competition = $1 and provider_id = $2
-`
-
-type FindProTeamParams struct {
-	Competition string `json:"competition"`
-	ProviderID  string `json:"provider_id"`
-}
-
-// ---- games and stat lines ----
-func (q *Queries) FindProTeam(ctx context.Context, arg FindProTeamParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, findProTeam, arg.Competition, arg.ProviderID)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getGame = `-- name: GetGame :one
 select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games where id = $1
 `
@@ -365,6 +347,22 @@ func (q *Queries) InsertPeriod(ctx context.Context, arg InsertPeriodParams) (Per
 	return i, err
 }
 
+const insertPeriodScore = `-- name: InsertPeriodScore :exec
+insert into period_scores (period_id, franchise_id, points) values ($1, $2, $3)
+on conflict do nothing
+`
+
+type InsertPeriodScoreParams struct {
+	PeriodID    pgtype.UUID `json:"period_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Points      float64     `json:"points"`
+}
+
+func (q *Queries) InsertPeriodScore(ctx context.Context, arg InsertPeriodScoreParams) error {
+	_, err := q.db.Exec(ctx, insertPeriodScore, arg.PeriodID, arg.FranchiseID, arg.Points)
+	return err
+}
+
 const latestSeason = `-- name: LatestSeason :one
 select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 order by year desc limit 1
 `
@@ -441,9 +439,7 @@ const listGameLines = `-- name: ListGameLines :many
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(p.pro_team_id = g.home_team_id, false)::boolean as at_home,
        sl.stats,
-       coalesce((select sum(s.value::numeric * r.value::numeric)
-                 from jsonb_each_text(sl.stats) s
-                 join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key), 0)::float8 as points,
+       coalesce(sl.points, 0)::float8 as points,
        coalesce(f.name, '')::text as owner_name,
        coalesce(f.slug, '')::text as owner_slug
 from stat_lines sl
@@ -827,6 +823,35 @@ func (q *Queries) ListLineupPoints(ctx context.Context, arg ListLineupPointsPara
 	return items, nil
 }
 
+const listPeriodScores = `-- name: ListPeriodScores :many
+
+select ps.period_id, ps.franchise_id, ps.points from period_scores ps
+join periods p on p.id = ps.period_id
+where p.season_id = $1
+`
+
+// ---- settled periods ----
+// What each franchise scored in the season's settled periods.
+func (q *Queries) ListPeriodScores(ctx context.Context, seasonID pgtype.UUID) ([]PeriodScore, error) {
+	rows, err := q.db.Query(ctx, listPeriodScores, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PeriodScore{}
+	for rows.Next() {
+		var i PeriodScore
+		if err := rows.Scan(&i.PeriodID, &i.FranchiseID, &i.Points); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPeriods = `-- name: ListPeriods :many
 
 select id, season_id, seq, starts_on, ends_on, is_playoff from periods where season_id = $1 order by seq
@@ -860,6 +885,37 @@ func (q *Queries) ListPeriods(ctx context.Context, seasonID pgtype.UUID) ([]Peri
 	return items, nil
 }
 
+const listProTeamIDs = `-- name: ListProTeamIDs :many
+
+select provider_id, id from pro_teams where competition = $1
+`
+
+type ListProTeamIDsRow struct {
+	ProviderID string      `json:"provider_id"`
+	ID         pgtype.UUID `json:"id"`
+}
+
+// ---- games and stat lines ----
+func (q *Queries) ListProTeamIDs(ctx context.Context, competition string) ([]ListProTeamIDsRow, error) {
+	rows, err := q.db.Query(ctx, listProTeamIDs, competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProTeamIDsRow{}
+	for rows.Next() {
+		var i ListProTeamIDsRow
+		if err := rows.Scan(&i.ProviderID, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRosterGames = `-- name: ListRosterGames :many
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(n.nickname, '')::text as nickname,
@@ -867,10 +923,7 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
-       coalesce((select sum(s.value::numeric * r.value::numeric)
-                 from stat_lines sl
-                 cross join lateral jsonb_each_text(sl.stats) s
-                 join lateral jsonb_each_text(l.settings->'scoring') r on r.key = s.key
+       coalesce((select sl.points from stat_lines sl
                  where sl.game_id = g.id and sl.player_id = p.id), 0)::float8 as points
 from roster_entries re
 join players p on p.id = re.player_id
@@ -1097,6 +1150,16 @@ func (q *Queries) ListWeekStarts(ctx context.Context, arg ListWeekStartsParams) 
 	return items, nil
 }
 
+const lockPeriod = `-- name: LockPeriod :exec
+select pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
+`
+
+// Held while a period is settled, and taken by whatever would unsettle it.
+func (q *Queries) LockPeriod(ctx context.Context, periodID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockPeriod, periodID)
+	return err
+}
+
 const markGameStatsSynced = `-- name: MarkGameStatsSynced :exec
 update games set stats_synced_at = now() where id = $1
 `
@@ -1214,6 +1277,10 @@ on conflict (competition, provider_id) do update
   set day = excluded.day, starts_at = excluded.starts_at, status = excluded.status,
       home_team_id = excluded.home_team_id, away_team_id = excluded.away_team_id,
       home_score = excluded.home_score, away_score = excluded.away_score, detail = excluded.detail
+  where (games.day, games.starts_at, games.status, games.detail, games.home_score, games.away_score)
+        <> (excluded.day, excluded.starts_at, excluded.status, excluded.detail, excluded.home_score, excluded.away_score)
+     or games.home_team_id is distinct from excluded.home_team_id
+     or games.away_team_id is distinct from excluded.away_team_id
 `
 
 type UpsertGameParams struct {
@@ -1229,6 +1296,8 @@ type UpsertGameParams struct {
 	Detail      string             `json:"detail"`
 }
 
+// An unchanged game is not written again: every write here starts a new
+// cache generation.
 func (q *Queries) UpsertGame(ctx context.Context, arg UpsertGameParams) error {
 	_, err := q.db.Exec(ctx, upsertGame,
 		arg.Competition,
@@ -1248,6 +1317,7 @@ func (q *Queries) UpsertGame(ctx context.Context, arg UpsertGameParams) error {
 const upsertStatLine = `-- name: UpsertStatLine :exec
 insert into stat_lines (game_id, player_id, stats) values ($1, $2, $3)
 on conflict (game_id, player_id) do update set stats = excluded.stats
+  where stat_lines.stats is distinct from excluded.stats
 `
 
 type UpsertStatLineParams struct {

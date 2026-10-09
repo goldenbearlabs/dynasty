@@ -12,19 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/singleflight"
 
+	"crossover/internal/cache"
 	"crossover/internal/competition"
 	"crossover/internal/db"
 	"crossover/internal/problem"
 )
 
 type Service struct {
-	pool     *pgxpool.Pool
-	registry competition.Registry
+	pool           *pgxpool.Pool
+	registry       competition.Registry
+	Cache          *cache.Store
+	analyticsSlots chan struct{}
+	datasets       researchMemo
+	loads          singleflight.Group
 }
 
 func NewService(pool *pgxpool.Pool, registry competition.Registry) *Service {
-	return &Service{pool: pool, registry: registry}
+	return &Service{pool: pool, registry: registry, analyticsSlots: make(chan struct{}, 1)}
 }
 
 // NewPlayer is a hand-entered player: a recruit the feed missed, a

@@ -31,7 +31,7 @@ func (q *Queries) DeleteStalePlayerSeasons(ctx context.Context, arg DeleteStaleP
 }
 
 const listPlayerSeasons = `-- name: ListPlayerSeasons :many
-select player_id, competition, year, label, team, league, games, stats, synced_at, conference from player_seasons
+select player_id, competition, year, label, team, league, games, stats, synced_at, conference, points, eligible_points from player_seasons
 where player_id = $1
 order by year desc, league <> '', competition, team
 `
@@ -58,6 +58,8 @@ func (q *Queries) ListPlayerSeasons(ctx context.Context, playerID pgtype.UUID) (
 			&i.Stats,
 			&i.SyncedAt,
 			&i.Conference,
+			&i.Points,
+			&i.EligiblePoints,
 		); err != nil {
 			return nil, err
 		}
@@ -70,7 +72,7 @@ func (q *Queries) ListPlayerSeasons(ctx context.Context, playerID pgtype.UUID) (
 }
 
 const listSeasonYears = `-- name: ListSeasonYears :many
-select distinct year from player_seasons where competition = $1 and league = ''
+select distinct year from stat_seasons where competition = $1
 `
 
 // The seasons already stored for a competition's own league.
