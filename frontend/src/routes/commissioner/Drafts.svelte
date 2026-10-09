@@ -2,7 +2,7 @@
 	// Create a draft. Its pick order is then arranged in the draft room.
 	import { untrack } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { createDraft, createFutureDrafts, type DraftSummary, type Dynasty, type NewDraft } from '#lib/api.ts';
+	import { createDraft, createFutureDrafts, nextDrafts, type DraftSummary, type Dynasty, type NewDraft } from '#lib/api.ts';
 	import DraftCard from '#lib/DraftCard.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -22,6 +22,8 @@
 		pick_clock_seconds: 0
 	});
 
+	// Only what is coming next: the drafts for later years exist so their picks can be traded.
+	const upcoming = $derived(nextDrafts(drafts));
 	const franchise = (id: string) => dynasty.franchises.find((f) => f.id === id)!;
 	const chosen = $derived(dynasty.leagues.filter((l) => draft.league_ids.includes(l.id)));
 	// How many players each franchise could hold across the chosen leagues.
@@ -87,10 +89,15 @@
 		<button onclick={createFuture}>Create future drafts</button>
 	</div>
 
-	{#if drafts.length > 0}
+	{#if upcoming.length > 0}
 		<div class="list">
-			{#each drafts as d (d.id)}<DraftCard draft={d} />{/each}
+			{#each upcoming as d (d.id)}<DraftCard draft={d} />{/each}
 		</div>
+		{#if drafts.length > upcoming.length}
+			<p class="muted small-text">
+				Showing the next draft for each league. <a href="/drafts">See all {drafts.length} drafts</a>, including later years and finished ones.
+			</p>
+		{/if}
 	{/if}
 
 	<form class="card stack" onsubmit={create}>

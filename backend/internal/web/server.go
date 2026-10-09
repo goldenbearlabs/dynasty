@@ -98,6 +98,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/drafts/{id}/pick", s.member(s.makePick))
 	mux.HandleFunc("GET /api/drafts/{id}/queue", s.member(s.getQueue))
 	mux.HandleFunc("PUT /api/drafts/{id}/queue", s.member(s.setQueue))
+	mux.HandleFunc("POST /api/drafts/{id}/queue/import", s.member(s.importRanking))
+	mux.HandleFunc("GET /api/rankings", s.member(s.listRankings))
+	mux.HandleFunc("POST /api/rankings", s.member(s.saveRanking))
+	mux.HandleFunc("GET /api/rankings/{id}", s.member(s.getRanking))
+	mux.HandleFunc("PUT /api/rankings/{id}", s.member(s.saveRanking))
+	mux.HandleFunc("DELETE /api/rankings/{id}", s.member(s.deleteRanking))
 
 	mux.HandleFunc("PUT /api/dynasty", s.commissioner(s.updateDynasty))
 	mux.HandleFunc("PUT /api/leagues/{id}/settings", s.commissioner(s.updateLeagueSettings))

@@ -480,6 +480,38 @@ export type QueuedPlayer = {
 	team_abbrev: string;
 };
 
+/** One of the signed-in manager's pre-draft lists, as the list of them shows it. */
+export type RankingSummary = {
+	id: string;
+	league_id: string;
+	draft_id: string | null;
+	name: string;
+	competition: string;
+	draft_name: string; // empty when it is not attached to a draft
+	players: number;
+};
+
+export type RankedPlayer = QueuedPlayer & { note: string; owner_name: string };
+
+/** A pre-draft list with its players in order. */
+export type Ranking = { id: string; league_id: string; draft_id: string | null; name: string; players: RankedPlayer[] };
+
+/** player_ids, when given, replaces the list. */
+export type RankingChange = { name: string; league_id?: string; draft_id?: string | null; player_ids?: string[] };
+
+/**
+ * The next draft each league will hold: the earliest that is not finished.
+ * A draft covering several leagues appears once.
+ */
+export function nextDrafts(drafts: DraftSummary[]): DraftSummary[] {
+	const open = drafts.filter((d) => d.status !== 'complete').toSorted((a, b) => a.year - b.year);
+	const next = new Map<string, DraftSummary>();
+	for (const draft of open) {
+		for (const competition of draft.competitions) if (!next.has(competition)) next.set(competition, draft);
+	}
+	return open.filter((d) => [...next.values()].includes(d));
+}
+
 export type NewDraft = {
 	name: string;
 	kind: Draft['kind'];
@@ -635,6 +667,14 @@ export const makePick = (id: string, pick: { player_id: string; list: List; pick
 	request<void>('POST', `/drafts/${id}/pick`, pick);
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
+
+export const getRankings = () => request<RankingSummary[]>('GET', '/rankings');
+export const getRanking = (id: string) => request<Ranking>('GET', `/rankings/${id}`);
+export const createRanking = (ranking: RankingChange) => request<Ranking>('POST', '/rankings', ranking);
+export const updateRanking = (id: string, ranking: RankingChange) => request<Ranking>('PUT', `/rankings/${id}`, ranking);
+export const deleteRanking = (id: string) => request<void>('DELETE', `/rankings/${id}`);
+export const importRanking = (draftId: string, ranking_id: string) =>
+	request<{ added: number }>('POST', `/drafts/${draftId}/queue/import`, { ranking_id });
 
 export const createDraft = (draft: NewDraft) => request<Draft>('POST', '/admin/drafts', draft);
 export const setDraftPicks = (id: string, slots: PickSlot[]) => request<void>('PUT', `/admin/drafts/${id}/picks`, slots);

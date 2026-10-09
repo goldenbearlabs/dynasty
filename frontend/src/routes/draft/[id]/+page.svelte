@@ -8,13 +8,16 @@
 		controlDraft,
 		deleteDraft,
 		getQueue,
+		getRankings,
+		importRanking,
 		makePick,
 		setDraftClock,
 		setQueue,
 		type DraftAction,
 		type List,
 		type Player,
-		type QueuedPlayer
+		type QueuedPlayer,
+		type RankingSummary
 	} from '#lib/api.ts';
 	import { DraftRoom } from '#lib/draftRoom.svelte.ts';
 	import PlayerList from '#lib/PlayerList.svelte';
@@ -149,6 +152,34 @@
 			toast.error(e);
 		} finally {
 			picking = false;
+		}
+	}
+
+	// My pre-draft rankings for the leagues this draft covers, the ones made for it first.
+	let rankings = $state<RankingSummary[]>([]);
+	$effect(() => {
+		if (me) getRankings().then((r) => (rankings = r), () => (rankings = []));
+	});
+	const importable = $derived(
+		rankings
+			.filter((r) => r.players > 0 && room?.state?.league_ids.includes(r.league_id))
+			.toSorted((a, b) => Number(b.draft_id === id) - Number(a.draft_id === id))
+	);
+	async function loadRanking(rankingId: string) {
+		if (!rankingId || savingQueue) return;
+		savingQueue = true;
+		try {
+			const { added } = await importRanking(id, rankingId);
+			queue = await getQueue(id);
+			toast.good(
+				added > 0
+					? `Added ${added} ${added === 1 ? 'player' : 'players'} to the end of your queue.`
+					: 'Nothing to add: everyone on that ranking is taken or already queued.'
+			);
+		} catch (e) {
+			toast.error(e);
+		} finally {
+			savingQueue = false;
 		}
 	}
 
@@ -343,7 +374,22 @@
 				{#if me}<section class="queue-pane" aria-label="My draft queue">
 						<div class="section-heading">
 							<h2>My queue <span class="muted">{queue.length}</span></h2>
-							<span class="hint">Auto-pick order</span>
+							{#if importable.length > 0 && draft.status !== 'complete'}
+								<select
+									class="import"
+									aria-label="Add one of my rankings to the queue"
+									disabled={savingQueue}
+									onchange={(e) => {
+										loadRanking(e.currentTarget.value);
+										e.currentTarget.value = '';
+									}}
+								>
+									<option value="">Add a ranking…</option>
+									{#each importable as r (r.id)}<option value={r.id}>{r.name} ({r.players})</option>{/each}
+								</select>
+							{:else}
+								<span class="hint">Auto-pick order</span>
+							{/if}
 						</div>
 						<div class="queue-body">
 							<Queue
@@ -537,6 +583,11 @@
 	h2 {
 		font-size: 0.9rem;
 		white-space: nowrap;
+	}
+	.import {
+		max-width: 11rem;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.75rem;
 	}
 	.hint {
 		font-size: 0.65rem;

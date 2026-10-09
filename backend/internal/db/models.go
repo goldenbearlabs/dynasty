@@ -177,6 +177,21 @@ type ProTeam struct {
 	LogoUrl     string      `json:"logo_url"`
 }
 
+type Ranking struct {
+	ID          pgtype.UUID        `json:"id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	DraftID     pgtype.UUID        `json:"draft_id"`
+	Name        string             `json:"name"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RankingPlayer struct {
+	RankingID pgtype.UUID `json:"ranking_id"`
+	PlayerID  pgtype.UUID `json:"player_id"`
+	Rank      int32       `json:"rank"`
+}
+
 type RawPayload struct {
 	Url       string             `json:"url"`
 	Body      string             `json:"body"`
