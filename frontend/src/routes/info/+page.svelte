@@ -142,8 +142,11 @@
 							{#if g.rules.waivers.mode === 'none'}
 								A dropped player is a free agent straight away
 							{:else}
-								A dropped player is on waivers for {plural(g.rules.waivers.days, 'day')}, then goes to
-								{g.rules.waivers.mode === 'faab' ? `the highest blind bid (budget ${g.rules.waivers.budget} a season)` : 'the claim highest in the waiver order'}
+								Anyone released, from the main roster, the reserve list or an unsigned pick, is on waivers for
+								{plural(g.rules.waivers.hours, 'hour')}, then goes to
+								{g.rules.waivers.mode === 'faab' ? `the highest blind bid (budget ${g.rules.waivers.budget} a season)` : 'the claim highest in the waiver order'}.
+								Unclaimed, he is a free agent anyone can add to either list.
+								The waiver order starts each season as last season's standings reversed, and a franchise that wins a claim goes to the back
 							{/if}
 						</li>
 					</ul>
@@ -157,7 +160,7 @@
 						<li>
 							Picks are held, not rostered. After the draft there {g.rules.draft.signing_days === 1 ? 'is 1 day' : `are ${g.rules.draft.signing_days} days`}
 							to sign each one, to the reserve list or the main roster, making room if need be. A pick released or left unsigned
-							goes on waivers for a day, then becomes a free agent.
+							goes on waivers like anyone else who is released.
 						</li>
 						<li>The next {plural(g.rules.draft.future_years, 'year')} of picks exist already and can be traded, for any league's players or picks</li>
 					</ul>

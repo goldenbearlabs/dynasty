@@ -327,8 +327,8 @@
 					</h2>
 					<p class="pad small-text muted">
 						{#if due}
-							Sign each pick to the reserve list or the main roster by {clockTime(due)}. Any left unsigned go on waivers for a
-							day, then become free agents.
+							Sign each pick to the reserve list or the main roster by {clockTime(due)}. Any left unsigned go on waivers, then
+							become free agents.
 						{:else}
 							These picks can be signed now; the deadline is set when the draft ends.
 						{/if}

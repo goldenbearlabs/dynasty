@@ -3,7 +3,8 @@
 	// claims, and the order claims are settled in.
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { cancelWaiverClaim, claimWaiver, getWaivers, type Waivers } from '#lib/api.ts';
+	import { cancelWaiverClaim, claimWaiver, getWaivers, setWaiverOrder, type Waivers } from '#lib/api.ts';
+	import Icon from '#lib/ui/Icon.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
@@ -42,6 +43,26 @@
 	// What the manager has entered for each player, before claiming.
 	let bids = $state<Record<string, number>>({});
 	let drops = $state<Record<string, string>>({});
+	let lists = $state<Record<string, 'main' | 'reserve'>>({});
+
+	// Time left on waivers, ticking: "23 h 12 min", "8 min".
+	let clock = $state(Date.now());
+	$effect(() => {
+		const timer = setInterval(() => (clock = Date.now()), 30_000);
+		return () => clearInterval(timer);
+	});
+	function left(until: string): string {
+		const minutes = Math.max(0, Math.ceil((new Date(until).getTime() - clock) / 60_000));
+		if (minutes === 0) return 'clearing now';
+		return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min left` : `${minutes} min left`;
+	}
+
+	// The commissioner can rearrange the waiver order.
+	function reorder(i: number, by: number) {
+		const ids = waivers!.standings.map((s) => s.franchise_id);
+		[ids[i], ids[i + by]] = [ids[i + by], ids[i]];
+		act(setWaiverOrder(league!.id, ids), 'Waiver order changed.');
+	}
 
 	async function act(change: Promise<void>, done: string) {
 		try {
@@ -54,7 +75,12 @@
 	}
 	const claim = (playerId: string, name: string) =>
 		act(
-			claimWaiver(league!.id, { player_id: playerId, bid: bids[playerId] ?? 0, drop_player_id: drops[playerId] || undefined }),
+			claimWaiver(league!.id, {
+				player_id: playerId,
+				bid: bids[playerId] ?? 0,
+				drop_player_id: drops[playerId] || undefined,
+				list: lists[playerId] ?? 'main'
+			}),
 			`Claim in for ${name}.`
 		);
 </script>
@@ -75,12 +101,12 @@
 		<p class="row muted small-text">
 			<span>
 				{#if waivers.rules.mode === 'none'}
-					Only draft picks that were released or left unsigned go on waivers here, for a day; then the claim highest in
-					the waiver order gets the player.
+					This league has waivers switched off: a released player is a free agent straight away.
 				{:else}
-					A dropped player is on waivers for {waivers.rules.days}
-					{waivers.rules.days === 1 ? 'day' : 'days'} (a released draft pick, for one), then goes to
-					{faab ? 'the highest bid; the waiver order breaks ties' : 'the claim highest in the waiver order'}.
+					Anyone released is on waivers for {waivers.rules.hours} {waivers.rules.hours === 1 ? 'hour' : 'hours'}. Put in a
+					claim, and when his time is up he goes to
+					{faab ? 'the highest bid; the waiver order breaks ties' : 'the claim highest in the waiver order'}. Unclaimed, he
+					becomes a free agent anyone can add.
 				{/if}
 			</span>
 			{#if data.me && waivers.weekly_limit > 0}
@@ -108,9 +134,8 @@
 											<div>
 												<strong>{player.full_name}</strong>
 												<div class="muted small-text">
-													{[player.positions.join('/'), player.team_abbrev, `until ${clockTime(player.clears_at)}`]
-														.filter(Boolean)
-														.join(' · ')}
+													{[player.positions.join('/'), player.team_abbrev].filter(Boolean).join(' · ')}
+													· <strong>{left(player.clears_at)}</strong> <span title={clockTime(player.clears_at)}>(until {clockTime(player.clears_at)})</span>
 												</div>
 											</div>
 										</div>
@@ -118,7 +143,7 @@
 									{#if data.me}
 										<td class="actions">
 											{#if live}
-												<span class="pill brand">Claimed{faab ? ` for ${live.bid}` : ''}</span>
+												<span class="pill brand">Claimed{faab ? ` for ${live.bid}` : ''}{live.list === 'reserve' ? ' · to reserve' : ''}</span>
 												<button class="small quiet danger" onclick={() => act(cancelWaiverClaim(live.id), 'Claim withdrawn.')}>
 													Withdraw
 												</button>
@@ -126,6 +151,10 @@
 												{#if faab}
 													<input type="number" min="0" max={mine?.budget_left} placeholder="Bid" aria-label="Bid" bind:value={bids[player.player_id]} />
 												{/if}
+												<select aria-label="List for {player.full_name}" bind:value={() => lists[player.player_id] ?? 'main', (v) => (lists[player.player_id] = v)}>
+													<option value="main">To main roster</option>
+													<option value="reserve">To reserve list</option>
+												</select>
 												<select aria-label="Player to drop" bind:value={drops[player.player_id]}>
 													<option value="">Drop nobody</option>
 													{#each roster as held (held.player_id)}
@@ -148,13 +177,25 @@
 			<section class="panel">
 				<h2 class="eyebrow">Waiver order</h2>
 				<ol>
-					{#each waivers.standings as s (s.franchise_id)}
+					{#each waivers.standings as s, i (s.franchise_id)}
 						<li class="spread">
 							<span><span class="muted">{s.priority}.</span> <a href="/franchise/{s.slug}">{s.name}</a></span>
-							{#if faab}<span class="muted small-text">{s.budget_left} left</span>{/if}
+							<span class="row tight-row">
+								{#if faab}<span class="muted small-text">{s.budget_left} left</span>{/if}
+								{#if data.me?.is_commissioner}
+									<button class="quiet small" aria-label="Move {s.name} up" disabled={i === 0} onclick={() => reorder(i, -1)}><Icon name="up" size={14} /></button>
+									<button class="quiet small" aria-label="Move {s.name} down" disabled={i === waivers!.standings.length - 1} onclick={() => reorder(i, 1)}>
+										<Icon name="down" size={14} />
+									</button>
+								{/if}
+							</span>
 						</li>
 					{/each}
 				</ol>
+				<p class="muted small-text none">
+					First in the order has first claim. Winning a claim sends a franchise to the back. Each new season the order is
+					set to last season's standings, worst first{data.me?.is_commissioner ? '; as commissioner you can rearrange it with the arrows' : ''}.
+				</p>
 			</section>
 
 			{#if data.me}
@@ -222,6 +263,12 @@
 		tr td:first-child {
 			border-bottom: none;
 		}
+	}
+	.tight-row {
+		gap: 0.2rem;
+	}
+	.tight-row button {
+		padding: 0.15rem 0.3rem;
 	}
 	.columns {
 		display: grid;
