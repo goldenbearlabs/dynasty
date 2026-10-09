@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"crossover/internal/problem"
+	"crossover/internal/scoring"
 	"crossover/internal/sportsday"
 )
 
@@ -104,6 +105,21 @@ func (s *Server) listMatchups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, matchups)
 }
 
+// getSchedule returns every period of a league's season with its matchups.
+func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
+	league, err := s.leagueFromPath(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	schedule, err := s.Scoring.Schedule(r.Context(), league)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, schedule)
+}
+
 func (s *Server) getMatchup(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -116,6 +132,32 @@ func (s *Server) getMatchup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, matchup)
+}
+
+// setMatchups replaces a period's matchups with the commissioner's own.
+func (s *Server) setMatchups(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Matchups []scoring.Pairing `json:"matchups"`
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	s.done(w, r, s.Scoring.SetMatchups(r.Context(), id, body.Matchups))
+}
+
+// resetMatchups hands a period's matchups back to the schedule.
+func (s *Server) resetMatchups(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.done(w, r, s.Scoring.ResetMatchups(r.Context(), id))
 }
 
 // generateSchedule rebuilds the part of a head-to-head season that has not

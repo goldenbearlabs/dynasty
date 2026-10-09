@@ -150,6 +150,7 @@ type Period struct {
 	StartsOn  pgtype.Date `json:"starts_on"`
 	EndsOn    pgtype.Date `json:"ends_on"`
 	IsPlayoff bool        `json:"is_playoff"`
+	ByHand    bool        `json:"by_hand"`
 }
 
 type PeriodScore struct {

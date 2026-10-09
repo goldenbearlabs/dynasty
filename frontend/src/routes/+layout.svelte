@@ -30,7 +30,7 @@
 	const links = $derived<Link[]>([
 		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
 		{ href: '/league', label: 'League', icon: 'home' },
-		{ href: '/scores', label: 'Scores', icon: 'scores' },
+		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
 		{ href: '/research', label: 'Research', icon: 'search' },
 		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),

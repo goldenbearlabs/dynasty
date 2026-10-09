@@ -288,6 +288,7 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	}
 	var res struct {
 		Games []struct {
+			GameType         int    `json:"gameType"`
 			ID               int    `json:"id"`
 			StartTimeUTC     string `json:"startTimeUTC"`
 			GameState        string `json:"gameState"`
@@ -313,6 +314,9 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	}
 	var games []ingest.Game
 	for _, g := range res.Games {
+		if g.GameType != 2 {
+			continue
+		}
 		starts, err := time.Parse(time.RFC3339, g.StartTimeUTC)
 		if err != nil {
 			continue

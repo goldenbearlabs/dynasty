@@ -313,6 +313,12 @@ delete from periods where season_id = @season_id and starts_on >= @from_day;
 insert into matchups (period_id, home_franchise_id, away_franchise_id)
 values (@period_id, @home_franchise_id, @away_franchise_id);
 
+-- name: DeleteMatchups :exec
+delete from matchups where period_id = @period_id;
+
+-- name: SetPeriodByHand :exec
+update periods set by_hand = @by_hand where id = @id;
+
 -- name: ListSeasonMatchups :many
 select m.*, p.seq, p.is_playoff from matchups m
 join periods p on p.id = m.period_id

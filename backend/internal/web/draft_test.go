@@ -117,7 +117,7 @@ func TestDraftFlow(t *testing.T) {
 	for _, name := range []string{"Zd Guard One", "Zd Guard Two", "Zd Guard Three", "Zd Guard Four", "Zd Guard Five"} {
 		pool5 = append(pool5, players.NewPlayer{Competition: "nba", FullName: name, Status: "active", Note: marker})
 	}
-	for _, name := range []string{"Zd Skater One", "Zd Skater Two"} {
+	for _, name := range []string{"Zd Skater One", "Zd Skater Two", "Zd Skater Three", "Zd Skater Four"} {
 		pool5 = append(pool5, players.NewPlayer{Competition: "nhl", FullName: name, Status: "active", Note: marker})
 	}
 	pool5 = append(pool5, players.NewPlayer{Competition: "nfl", FullName: "Zd Kicker", Status: "active", Note: marker})
@@ -194,8 +194,8 @@ func TestDraftFlow(t *testing.T) {
 		Total int
 	}
 	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+&draft_id="+created.ID, nil, &page)
-	if page.Total != 7 {
-		t.Fatalf("draft pool has %d of the test's players, want 7 (the kicker's sport is not in the draft)", page.Total)
+	if page.Total != 9 {
+		t.Fatalf("draft pool has %d of the test's players, want 9 (the kicker's sport is not in the draft)", page.Total)
 	}
 	id := map[string]string{}
 	for _, p := range page.Players {
@@ -207,26 +207,28 @@ func TestDraftFlow(t *testing.T) {
 	pick := func(player, list string) map[string]string {
 		return map[string]string{"player_id": id[player], "list": list}
 	}
+	drafted := func(player string) map[string]string { return map[string]string{"player_id": id[player]} }
 	pickURL := draftURL + "/pick"
 
 	// Free agency waits for the draft.
 	bob.want(http.StatusUnprocessableEntity, "POST", "/api/leagues/"+nbaLeague+"/roster/add", pick("Zd Guard One", "main"), nil)
 
 	// Pick 1 is Bob's now, not Cy's.
-	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, pick("Zd Guard One", "main"), nil)
+	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard One"), nil)
 	bob.want(http.StatusUnprocessableEntity, "POST", pickURL,
-		map[string]string{"player_id": kicker.Players[0].ID, "list": "main"}, nil) // not a sport in this draft
-	bob.want(http.StatusNoContent, "POST", pickURL, pick("Zd Guard One", "main"), nil)
+		map[string]string{"player_id": kicker.Players[0].ID}, nil) // not a sport in this draft
+	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Guard One"), nil)
 	if m := live.next(); m.Type != "update" || len(m.Picks) != 1 || m.Picks[0].PlayerName != "Zd Guard One" ||
 		m.Picks[0].Competition != "nba" || *m.OnClock != state.Picks[1].ID {
 		t.Fatalf("after pick 1 = %+v", m)
 	}
 
-	// Pick 2 is Bob's own. The roster rules apply: his one main NBA spot is
-	// taken, and a drafted player cannot be drafted again.
-	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, pick("Zd Guard One", "reserve"), nil)
-	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, pick("Zd Guard Two", "main"), nil)
-	bob.want(http.StatusNoContent, "POST", pickURL, pick("Zd Skater One", "main"), nil) // another sport, same draft
+	// Pick 2 is Bob's own. The roster rules apply: a startup pick lands on
+	// the main roster, his one main NBA spot is taken, and a drafted player
+	// cannot be drafted again.
+	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard One"), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard Two"), nil)
+	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater One"), nil) // another sport, same draft
 	if m := live.next(); m.Picks[0].Competition != "nhl" {
 		t.Fatalf("after pick 2 = %+v", m)
 	}
@@ -262,29 +264,29 @@ func TestDraftFlow(t *testing.T) {
 
 	// --- make-up picks and undo ------------------------------------------
 	// Cy makes up his skipped pick while Bob is on the clock.
-	cy.want(http.StatusNoContent, "POST", pickURL, pick("Zd Guard Three", "reserve"), nil)
+	cy.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Three"), nil)
 	if m := live.next(); m.Picks[0].Position != 4 || *m.OnClock != state.Picks[4].ID {
 		t.Fatalf("make-up pick = %+v", m)
 	}
-	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, pick("Zd Guard Four", "main"), nil) // nothing left to make up
+	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard Four"), nil) // nothing left to make up
 
 	bob.want(http.StatusForbidden, "POST", adminURL+"/undo", nil, nil)
 	ann.want(http.StatusNoContent, "POST", adminURL+"/undo", nil, nil)
 	if m := live.next(); m.Type != "state" || m.Picks[3].PlayerName != "" {
 		t.Fatalf("after undo = %+v, want pick 4 open again", m.Picks[3])
 	}
-	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Guard+Three&draft_id="+created.ID, nil, &page)
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Skater+Three&draft_id="+created.ID, nil, &page)
 	if page.Total != 1 {
 		t.Error("an undone pick's player did not return to the pool")
 	}
 
 	// --- finishing -------------------------------------------------------
 	// Undo put pick 4 back on the clock. The commissioner picks for Cy.
-	ann.want(http.StatusNoContent, "POST", pickURL, pick("Zd Guard Three", "reserve"), nil)
+	ann.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Three"), nil)
 	live.next()
-	bob.want(http.StatusNoContent, "POST", pickURL, pick("Zd Guard Four", "reserve"), nil)
+	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Four"), nil)
 	live.next()
-	ann.want(http.StatusNoContent, "POST", pickURL, pick("Zd Skater Two", "main"), nil)
+	ann.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Two"), nil)
 	if m := live.next(); m.Draft.Status != "complete" || m.OnClock != nil {
 		t.Fatalf("after the last pick = %+v, want the draft complete", m)
 	}

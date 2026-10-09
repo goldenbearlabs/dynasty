@@ -90,8 +90,8 @@ func TestCollegeConferenceEligibility(t *testing.T) {
 		t.Fatal("smaller conference missing from rookie pool")
 	}
 	ann.want(http.StatusNoContent, "POST", "/api/admin/drafts/"+drafted.ID+"/start", nil, nil)
-	ann.want(http.StatusNoContent, "POST", "/api/drafts/"+drafted.ID+"/pick", map[string]string{"player_id": ids["Ivy"], "list": "reserve"}, nil)
-	// Add to main through commissioner override to exercise server-side starter enforcement.
+	ann.want(http.StatusNoContent, "POST", "/api/drafts/"+drafted.ID+"/pick", map[string]string{"player_id": ids["Ivy"]}, nil)
+	// Sign him to main through commissioner override to exercise server-side starter enforcement.
 	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+league+"/roster/move", map[string]any{"player_id": ids["Ivy"], "list": "main", "force": true}, nil)
 	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+league+"/roster/add", map[string]any{"player_id": ids["ACC"], "list": "main", "force": true}, nil)
 	tomorrow := sportsday.Today().AddDate(0, 0, 7)

@@ -63,6 +63,10 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		return problem.New("A head-to-head league needs at least two franchises.")
 	}
 
+	byHand, err := pairingsByHand(ctx, q, season.ID)
+	if err != nil {
+		return err
+	}
 	// Keep what has started; replace everything after it.
 	tomorrow := sportsday.Today().AddDate(0, 0, 1)
 	if err := q.DeletePeriodsFrom(ctx, db.DeletePeriodsFromParams{SeasonID: season.ID, FromDay: sportsday.Date(tomorrow)}); err != nil {
@@ -104,17 +108,173 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		if err != nil {
 			return err
 		}
-		if period.IsPlayoff {
-			continue // playoff matchups are set as each round is reached
-		}
-		// Carry on the rotation from where the kept periods left off.
-		for _, pair := range rotation[(len(kept)+i)%len(rotation)] {
-			if err := q.InsertMatchup(ctx, db.InsertMatchupParams{PeriodID: period.ID, HomeFranchiseID: pair[0], AwayFranchiseID: pair[1]}); err != nil {
+		pairs, set := byHand[spanKey(period)]
+		switch {
+		case set:
+			if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: period.ID, ByHand: true}); err != nil {
 				return err
 			}
+		case period.IsPlayoff:
+			continue // playoff matchups are set as each round is reached
+		default:
+			pairs = rotation[int(period.Seq-1)%len(rotation)]
+		}
+		if err := pair(ctx, q, period.ID, pairs); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func pair(ctx context.Context, q *db.Queries, periodID pgtype.UUID, pairs [][2]pgtype.UUID) error {
+	for _, p := range pairs {
+		if err := q.InsertMatchup(ctx, db.InsertMatchupParams{PeriodID: periodID, HomeFranchiseID: p[0], AwayFranchiseID: p[1]}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ---- the commissioner's own matchups ----
+
+// spanKey names a period by its days, which is how one is recognised again
+// after the schedule is rebuilt.
+func spanKey(p db.Period) string {
+	return p.StartsOn.Time.Format(time.DateOnly) + "/" + p.EndsOn.Time.Format(time.DateOnly)
+}
+
+// pairingsByHand returns the matchups of every period the commissioner set
+// by hand, by the period's days.
+func pairingsByHand(ctx context.Context, q *db.Queries, seasonID pgtype.UUID) (map[string][][2]pgtype.UUID, error) {
+	periods, err := q.ListPeriods(ctx, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	matchups, err := q.ListSeasonMatchups(ctx, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	set := map[string][][2]pgtype.UUID{}
+	for _, p := range periods {
+		for _, m := range matchups {
+			if p.ByHand && m.PeriodID == p.ID {
+				set[spanKey(p)] = append(set[spanKey(p)], [2]pgtype.UUID{m.HomeFranchiseID, m.AwayFranchiseID})
+			}
+		}
+	}
+	return set, nil
+}
+
+// Pairing is one matchup as the commissioner sets it. Without an away side
+// it is a bye.
+type Pairing struct {
+	Home pgtype.UUID `json:"home_franchise_id"`
+	Away pgtype.UUID `json:"away_franchise_id"`
+}
+
+// SetMatchups replaces a period's matchups with the commissioner's own, in
+// the regular season or the playoffs. They stay as set: rebuilding the
+// schedule keeps them, and a playoff round set this way is not seeded over.
+// A franchise left out has no matchup that period. A period that is over
+// cannot change.
+func (s *Service) SetMatchups(ctx context.Context, periodID pgtype.UUID, pairings []Pairing) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		period, _, league, err := openPeriod(ctx, q, periodID)
+		if err != nil {
+			return err
+		}
+		franchises, err := q.ListFranchises(ctx, league.DynastyID)
+		if err != nil {
+			return err
+		}
+		if len(pairings) == 0 {
+			return problem.New("Set at least one matchup, or go back to the automatic ones.")
+		}
+		playing := map[pgtype.UUID]bool{}
+		pairs := make([][2]pgtype.UUID, len(pairings))
+		for i, p := range pairings {
+			if !p.Home.Valid {
+				return problem.New("Every matchup needs a home side.")
+			}
+			for _, id := range []pgtype.UUID{p.Home, p.Away} {
+				if !id.Valid {
+					continue // a bye
+				}
+				at := slices.IndexFunc(franchises, func(f db.Franchise) bool { return f.ID == id })
+				if at < 0 {
+					return problem.New("Every side must be a franchise in this league.")
+				}
+				if playing[id] {
+					return problem.New("%s is in more than one matchup.", franchises[at].Name)
+				}
+				playing[id] = true
+			}
+			pairs[i] = [2]pgtype.UUID{p.Home, p.Away}
+		}
+		if err := q.DeleteMatchups(ctx, period.ID); err != nil {
+			return err
+		}
+		if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: period.ID, ByHand: true}); err != nil {
+			return err
+		}
+		return pair(ctx, q, period.ID, pairs)
+	})
+}
+
+// ResetMatchups hands a period back to the schedule: its place in the
+// round robin, or in the playoffs the seeding, once the round is due.
+func (s *Service) ResetMatchups(ctx context.Context, periodID pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		period, season, league, err := openPeriod(ctx, q, periodID)
+		if err != nil {
+			return err
+		}
+		if err := q.DeleteMatchups(ctx, period.ID); err != nil {
+			return err
+		}
+		if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: period.ID, ByHand: false}); err != nil {
+			return err
+		}
+		if period.IsPlayoff {
+			return advance(ctx, q, league, season)
+		}
+		franchises, err := q.ListFranchises(ctx, league.DynastyID)
+		if err != nil || len(franchises) < 2 {
+			return err
+		}
+		ids := make([]pgtype.UUID, len(franchises))
+		for i, f := range franchises {
+			ids[i] = f.ID
+		}
+		rotation := roundRobin(ids)
+		return pair(ctx, q, period.ID, rotation[int(period.Seq-1)%len(rotation)])
+	})
+}
+
+// openPeriod loads a period whose matchups can still change, with its
+// season and league.
+func openPeriod(ctx context.Context, q *db.Queries, id pgtype.UUID) (db.Period, db.Season, db.League, error) {
+	period, season, league, err := periodLeague(ctx, q, id)
+	switch {
+	case err != nil:
+	case season.Status != "active":
+		err = problem.New("That season is closed.")
+	case finished(period):
+		err = problem.New("That matchup is over, so it can no longer change.")
+	}
+	return period, season, league, err
+}
+
+// periodLeague loads a period with the season and league it belongs to.
+func periodLeague(ctx context.Context, q *db.Queries, id pgtype.UUID) (period db.Period, season db.Season, league db.League, err error) {
+	if period, err = q.GetPeriod(ctx, id); err != nil {
+		return
+	}
+	if season, err = q.GetSeason(ctx, period.SeasonID); err != nil {
+		return
+	}
+	league, err = q.GetLeague(ctx, season.LeagueID)
+	return
 }
 
 // periodSpans cuts the days from start to end into matchup periods.
@@ -505,6 +665,73 @@ func (s *Service) Matchups(ctx context.Context, league db.League, seq int) (Matc
 	return view, nil
 }
 
+// SchedulePeriod is one period of a season's schedule with its matchups.
+// One that has not started has no points yet.
+type SchedulePeriod struct {
+	db.Period
+	Matchups []Matchup `json:"matchups"`
+}
+
+// Schedule returns every period of a league's latest season, in order,
+// with who plays whom and the scores so far. It is empty without one.
+func (s *Service) Schedule(ctx context.Context, league db.League) ([]SchedulePeriod, error) {
+	q := db.New(s.pool)
+	schedule := []SchedulePeriod{}
+	season, err := q.LatestSeason(ctx, league.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return schedule, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	periods, err := q.ListPeriods(ctx, season.ID)
+	if err != nil {
+		return nil, err
+	}
+	matchups, err := q.ListSeasonMatchups(ctx, season.ID)
+	if err != nil {
+		return nil, err
+	}
+	// Settles the finished regular season, so only the matchup being
+	// played and the playoffs are added up here.
+	if _, err := regularSeasonResults(ctx, q, league, season); err != nil {
+		return nil, err
+	}
+	settled, err := q.ListPeriodScores(ctx, season.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, period := range periods {
+		points := map[pgtype.UUID]float64{}
+		for _, score := range settled {
+			if score.PeriodID == period.ID {
+				points[score.FranchiseID] = score.Points
+			}
+		}
+		if len(points) == 0 && !period.StartsOn.Time.After(sportsday.Today()) {
+			scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time)
+			if err != nil {
+				return nil, err
+			}
+			for id, row := range scored {
+				points[id] = row.Points
+			}
+		}
+		entry := SchedulePeriod{Period: period, Matchups: []Matchup{}}
+		for _, m := range matchups {
+			if m.PeriodID == period.ID {
+				entry.Matchups = append(entry.Matchups, Matchup{
+					ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+					HomePoints: points[m.HomeFranchiseID], AwayPoints: points[m.AwayFranchiseID],
+					Final: finished(period),
+				})
+			}
+		}
+		schedule = append(schedule, entry)
+	}
+	return schedule, nil
+}
+
 // MatchupDetail is one matchup with the players behind each side's score.
 type MatchupDetail struct {
 	Matchup
@@ -520,15 +747,7 @@ func (s *Service) Matchup(ctx context.Context, id pgtype.UUID) (MatchupDetail, e
 	if err != nil {
 		return MatchupDetail{}, err
 	}
-	period, err := q.GetPeriod(ctx, m.PeriodID)
-	if err != nil {
-		return MatchupDetail{}, err
-	}
-	season, err := q.GetSeason(ctx, period.SeasonID)
-	if err != nil {
-		return MatchupDetail{}, err
-	}
-	league, err := q.GetLeague(ctx, season.LeagueID)
+	period, _, league, err := periodLeague(ctx, q, m.PeriodID)
 	if err != nil {
 		return MatchupDetail{}, err
 	}

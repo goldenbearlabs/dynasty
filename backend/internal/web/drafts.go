@@ -61,7 +61,6 @@ func (s *Server) watchDraft(w http.ResponseWriter, r *http.Request) {
 func (s *Server) makePick(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	var body struct {
 		PlayerID pgtype.UUID `json:"player_id"`
-		List     string      `json:"list"`
 		PickID   pgtype.UUID `json:"pick_id"`
 	}
 	if !readJSON(w, r, &body) {
@@ -73,7 +72,7 @@ func (s *Server) makePick(w http.ResponseWriter, r *http.Request, me db.Franchis
 		return
 	}
 	err = s.Drafts.Pick(r.Context(), draft.PickRequest{
-		DraftID: id, Actor: me, PlayerID: body.PlayerID, List: body.List, PickID: body.PickID,
+		DraftID: id, Actor: me, PlayerID: body.PlayerID, PickID: body.PickID,
 	})
 	s.done(w, r, err)
 }

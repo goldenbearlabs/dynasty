@@ -310,7 +310,7 @@
 					<div class="fact"><small>Season points</small><strong>{now.row ? points(now.row.points) : '—'}</strong></div>
 				{/if}
 				{#if now.matchup && !now.matchup.bye}
-					<a class="fact matchup" href="/matchup/{now.matchup.id}">
+					<a class="fact matchup" href="/matchups/{now.matchup.id}">
 						<small>{now.matchup.final ? 'Final' : 'This matchup'} vs {now.matchup.opponent}</small>
 						<strong class:ahead={now.matchup.ours > now.matchup.theirs}>{points(now.matchup.ours)} – {points(now.matchup.theirs)}</strong>
 					</a>
@@ -452,7 +452,10 @@
 				{#if now.headToHead && now.phase.key === 'in'}
 					<section class="panel">
 						<h2 class="bar">Matchups</h2>
-						<div class="pad"><Matchups {league} {franchises} identities={data.dynasty?.team_identities} /></div>
+						<div class="pad stack tight">
+							<Matchups {league} {franchises} identities={data.dynasty?.team_identities} />
+							<a class="small-text" href="/matchups?view=schedule&team={team.id}">{team.name}'s full schedule</a>
+						</div>
 					</section>
 				{/if}
 			</div>

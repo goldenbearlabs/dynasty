@@ -62,14 +62,23 @@ func (s *Service) SaveRanking(ctx context.Context, franchise db.Franchise, id pg
 			if ranking, err = q.GetRanking(ctx, db.GetRankingParams{ID: id, FranchiseID: franchise.ID}); err != nil {
 				return err
 			}
-		} else {
+		} else if in.LeagueID.Valid {
 			league, err := q.GetLeague(ctx, in.LeagueID)
 			if err != nil || league.DynastyID != franchise.DynastyID {
 				return problem.New("Choose a league for the ranking.")
 			}
 			ranking.LeagueID = league.ID
 		}
-		if in.DraftID.Valid {
+		if !ranking.LeagueID.Valid {
+			draft, err := q.GetDraft(ctx, in.DraftID)
+			if err != nil || draft.DynastyID != franchise.DynastyID || draft.Kind != "startup" {
+				return problem.New("Choose a startup draft for a combined ranking.")
+			}
+			if id.Valid && ranking.DraftID != in.DraftID {
+				return problem.New("A combined ranking belongs to its original startup draft.")
+			}
+		}
+		if in.DraftID.Valid && ranking.LeagueID.Valid {
 			covered, err := q.DraftCoversLeague(ctx, db.DraftCoversLeagueParams{DraftID: in.DraftID, LeagueID: ranking.LeagueID})
 			if err != nil {
 				return err
@@ -99,7 +108,7 @@ func (s *Service) SaveRanking(ctx context.Context, franchise db.Franchise, id pg
 			for rank, playerID := range *in.PlayerIDs {
 				n, err := q.InsertRankingPlayer(ctx, db.InsertRankingPlayerParams{RankingID: ranking.ID, PlayerID: playerID, Rank: int32(rank)})
 				if err != nil || n == 0 {
-					return problem.New("One of those players cannot be ranked here: the list is for one league, and a player appears once.")
+					return problem.New("One of those players cannot be ranked here: the player must belong to this board’s leagues and appear once.")
 				}
 			}
 		}
@@ -127,7 +136,13 @@ func (s *Service) ImportRanking(ctx context.Context, draftID pgtype.UUID, franch
 		if err != nil {
 			return err
 		}
-		covered, err := q.DraftCoversLeague(ctx, db.DraftCoversLeagueParams{DraftID: draftID, LeagueID: ranking.LeagueID})
+		if !ranking.LeagueID.Valid && ranking.DraftID != draftID {
+			return problem.New("That combined ranking is for another startup draft.")
+		}
+		covered := !ranking.LeagueID.Valid
+		if ranking.LeagueID.Valid {
+			covered, err = q.DraftCoversLeague(ctx, db.DraftCoversLeagueParams{DraftID: draftID, LeagueID: ranking.LeagueID})
+		}
 		if err != nil {
 			return err
 		}

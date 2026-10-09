@@ -38,16 +38,23 @@
 
 	// ---- a new ranking ----
 	let fresh = $state({ name: '', league_id: '', draft_id: '' });
+	let rankingType = $state<'league' | 'startup'>('league');
+	const startupDrafts = $derived(drafts.filter(d => d.kind === 'startup' && d.status !== 'complete'));
+	const freshLeagues = $derived(dynasty.leagues);
+	const linkedDraft = $derived(drafts.find(d => d.id === open?.draft_id));
+	function selectStartup(id: string) { fresh.draft_id = id; }
+
 	async function create(event: SubmitEvent) {
 		event.preventDefault();
 		try {
 			const draft = drafts.find((d) => d.id === fresh.draft_id);
 			open = await createRanking({
 				name: fresh.name.trim() || (draft ? `${draft.name} board` : `${league(fresh.league_id).name} board`),
-				league_id: fresh.league_id,
+				league_id: rankingType === 'startup' ? undefined : fresh.league_id,
 				draft_id: fresh.draft_id || null
 			});
 			fresh = { name: '', league_id: '', draft_id: '' };
+			rankingType = 'league';
 			refresh();
 		} catch (e) {
 			toast.error(e);
@@ -99,14 +106,14 @@
 	<div class="stack">
 		<p class="muted">
 			Rank players ahead of a draft. A ranking is yours alone: nobody else can see it. When the draft starts, load it
-			into your queue from the draft room.
+			into your queue from the draft room. Startup rankings combine every sport in the draft into one board.
 		</p>
 
 		{#if rankings.length > 0}
 			<div class="list">
 				{#each rankings as r (r.id)}
 					<button class="card ranking" data-sport={r.competition} onclick={() => edit(r.id)}>
-						<span class="row"><SportBadge sport={r.competition} solid /> {#if r.draft_name}<span class="pill gold">{r.draft_name}</span>{/if}</span>
+						<span class="row">{#if r.league_id}<SportBadge sport={r.competition} solid />{:else}<span class="pill brand">All leagues</span>{/if} {#if r.draft_name}<span class="pill gold">{r.draft_name}</span>{/if}</span>
 						<strong class="name">{r.name}</strong>
 						<span class="muted small-text">{r.players} {r.players === 1 ? 'player' : 'players'} ranked</span>
 					</button>
@@ -118,15 +125,35 @@
 
 		<form class="card stack tight" onsubmit={create}>
 			<h3>New ranking</h3>
+			<label class="field">Ranking for
+				<select bind:value={rankingType} onchange={() => { fresh.league_id = ''; fresh.draft_id = ''; if (rankingType === 'startup' && startupDrafts.length === 1) selectStartup(startupDrafts[0].id); }}>
+					<option value="league">League / rookie draft</option>
+					<option value="startup">Startup draft</option>
+				</select>
+			</label>
+			{#if rankingType === 'startup'}
+				{#if startupDrafts.length === 0}<p class="muted small-text">The commissioner needs to create a startup draft before you can link a startup ranking.</p>{/if}
+				<p class="muted small-text">Rank players from every league in one combined order, then use “Add a ranking…” in the startup draft’s queue to import your board.</p>
+			{/if}
 			<div class="row end">
+				{#if rankingType === 'startup'}
+					<label class="field">Startup draft
+						<select value={fresh.draft_id} required onchange={e => selectStartup(e.currentTarget.value)}>
+							<option value="">Choose a startup draft</option>
+							{#each startupDrafts as d (d.id)}<option value={d.id}>{d.name} · {d.year}</option>{/each}
+						</select>
+					</label>
+				{/if}
+				{#if rankingType === 'league'}
 				<label class="field">
 					League
-					<select bind:value={fresh.league_id} required onchange={() => (fresh.draft_id = '')}>
+					<select bind:value={fresh.league_id} required onchange={() => { if (rankingType === 'league') fresh.draft_id = ''; }}>
 						<option value="">Choose a league</option>
-						{#each dynasty.leagues as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+						{#each freshLeagues as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 					</select>
 				</label>
-				{#if fresh.league_id}
+				{/if}
+				{#if fresh.league_id && rankingType === 'league'}
 					<label class="field">
 						For which draft
 						<select bind:value={fresh.draft_id}>
@@ -136,12 +163,12 @@
 					</label>
 				{/if}
 				<label class="field grow">Name (optional) <input bind:value={fresh.name} placeholder="My board" maxlength="80" /></label>
-				<button class="primary" disabled={!fresh.league_id}>Create</button>
+				<button class="primary" disabled={rankingType === 'startup' ? !fresh.draft_id : !fresh.league_id}>Create</button>
 			</div>
 		</form>
 	</div>
 {:else}
-	{@const sport = league(open.league_id).competition}
+	{@const sport = open.league_id ? league(open.league_id).competition : ''}
 	<div class="stack" data-sport={sport}>
 		<div class="row end head">
 			<button class="quiet" onclick={() => (open = undefined)}><Icon name="left" size={16} /> All rankings</button>
@@ -149,6 +176,7 @@
 				Name
 				<input value={open.name} maxlength="80" onchange={(e) => save({ name: e.currentTarget.value })} />
 			</label>
+			{#if open.league_id}
 			<label class="field">
 				For which draft
 				<select value={open.draft_id ?? ''} onchange={(e) => save({ draft_id: e.currentTarget.value || null })}>
@@ -156,12 +184,16 @@
 					{#each draftsFor(open.league_id) as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
 				</select>
 			</label>
+			{:else}<span class="pill brand">All leagues · {linkedDraft?.name ?? 'Startup draft'}</span>{/if}
 			<button class="quiet danger" onclick={remove}>Delete</button>
 		</div>
 
+		{#if linkedDraft?.kind === 'startup'}
+			<p class="muted small-text">Startup draft board · <a href="/draft/{linkedDraft.id}">Open {linkedDraft.name}</a> and choose “Add a ranking…” in My queue to import this board.</p>
+		{/if}
 		<div class="editor">
 			<section class="panel" aria-label="My ranking">
-				<h3 class="eyebrow bar"><SportBadge {sport} /> Ranked <span class="muted">{open.players.length}</span></h3>
+				<h3 class="eyebrow bar">{#if sport}<SportBadge {sport} />{:else}<span>All leagues</span>{/if} Ranked <span class="muted">{open.players.length}</span></h3>
 				{#if open.players.length === 0}
 					<p class="muted small-text none">Add players from the pool. The order here is the order they go into your queue.</p>
 				{:else}
@@ -172,6 +204,7 @@
 								<Headshot name={player.full_name} src={player.headshot_url} size={28} />
 								<div class="who">
 									<strong>{player.full_name}</strong>
+									{#if !open.league_id}<SportBadge sport={player.competition} />{/if}
 									<span class="muted small-text">
 										{[player.positions.join('/'), player.team_abbrev].filter(Boolean).join(' · ')}
 										{#if player.owner_name}· taken by {player.owner_name}{/if}
@@ -206,7 +239,7 @@
 			</section>
 
 			<section aria-label="Player pool">
-				<PlayerList competition={sport} leagueId={open.league_id} compact byPoints statColumns action={add} />
+				<PlayerList competition={sport} leagueId={open.league_id ?? undefined} draftId={linkedDraft?.status !== 'complete' ? linkedDraft?.id : undefined} compact byPoints statColumns action={add} />
 			</section>
 		</div>
 	</div>

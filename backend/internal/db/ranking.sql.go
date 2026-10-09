@@ -113,8 +113,13 @@ insert into ranking_players (ranking_id, player_id, rank)
 select $1, p.id, $2
 from players p
 join rankings r on r.id = $1
-join leagues l on l.id = r.league_id
-where p.id = $3 and p.competition = l.competition
+left join leagues l on l.id = r.league_id
+where p.id = $3 and (
+ p.competition = l.competition or (r.league_id is null and exists (
+  select 1 from draft_leagues dl join leagues covered on covered.id = dl.league_id
+  where dl.draft_id = r.draft_id and covered.competition = p.competition
+ ))
+)
 `
 
 type InsertRankingPlayerParams struct {
@@ -123,7 +128,7 @@ type InsertRankingPlayerParams struct {
 	PlayerID  pgtype.UUID `json:"player_id"`
 }
 
-// Only a player from the ranking's own sport can be ranked.
+// League boards cover one sport; combined startup boards cover their draft’s sports.
 func (q *Queries) InsertRankingPlayer(ctx context.Context, arg InsertRankingPlayerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertRankingPlayer, arg.RankingID, arg.Rank, arg.PlayerID)
 	if err != nil {
@@ -140,7 +145,7 @@ from ranking_players rp
 join rankings r on r.id = rp.ranking_id
 join players p on p.id = rp.player_id
 left join pro_teams t on t.id = p.pro_team_id
-left join roster_entries re on re.player_id = p.id and re.league_id = r.league_id
+left join roster_entries re on re.player_id = p.id and (re.league_id = r.league_id or (r.league_id is null and re.league_id in (select league_id from draft_leagues where draft_id = r.draft_id)))
 left join franchises f on f.id = re.franchise_id
 where rp.ranking_id = $1
 order by rp.rank
@@ -193,11 +198,11 @@ func (q *Queries) ListRankingPlayers(ctx context.Context, rankingID pgtype.UUID)
 
 const listRankings = `-- name: ListRankings :many
 select r.id, r.league_id, r.draft_id, r.name, r.updated_at,
-       l.competition,
+       coalesce(l.competition, '')::text as competition,
        coalesce(d.name, '')::text as draft_name,
        (select count(*) from ranking_players rp where rp.ranking_id = r.id) as players
 from rankings r
-join leagues l on l.id = r.league_id
+left join leagues l on l.id = r.league_id
 left join drafts d on d.id = r.draft_id
 where r.franchise_id = $1
 order by l.competition, r.name, r.id

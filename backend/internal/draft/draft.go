@@ -121,7 +121,6 @@ type PickRequest struct {
 	DraftID  pgtype.UUID
 	Actor    db.Franchise // who is clicking; a commissioner may pick for anyone
 	PlayerID pgtype.UUID
-	List     string      // where the player lands: main or reserve
 	PickID   pgtype.UUID // optional: a specific pick, to make up one that was skipped
 }
 
@@ -166,7 +165,7 @@ func (s *Service) Pick(ctx context.Context, in PickRequest) error {
 			pick = &picks[i]
 		}
 
-		if err := makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, in.PlayerID, in.List, false); err != nil {
+		if err := makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, in.PlayerID, false); err != nil {
 			return err
 		}
 		// Making up a skipped pick leaves the clock of whoever is up alone.
@@ -236,7 +235,7 @@ func (s *Service) Undo(ctx context.Context, draftID pgtype.UUID) error {
 
 // makePick puts the player on the franchise's roster and records the pick,
 // in the caller's transaction. The roster rules decide whether it is legal.
-func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franchiseID, playerID pgtype.UUID, list string, auto bool) error {
+func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franchiseID, playerID pgtype.UUID, auto bool) error {
 	player, err := q.GetPlayer(ctx, playerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem.New("That player does not exist.")
@@ -256,9 +255,11 @@ func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franch
 	if err != nil {
 		return err
 	}
+	// A startup draft fills the main rosters. A rookie draft is open to
+	// anyone unrostered, new to the pool or a free agent, and holds its
+	// picks as rights until they are signed.
+	list := settings.ListMain
 	if draft.Kind != "startup" {
-		// A rookie draft is open to anyone unrostered, new to the pool or a
-		// free agent, and holds its picks as rights until they are signed.
 		list = settings.ListRights
 	}
 
@@ -459,26 +460,24 @@ func (s *Service) expire(ctx context.Context, draftID pgtype.UUID) error {
 	})
 }
 
-// pickFromQueue tries the franchise's queued players in order, main roster
-// first and then reserve, and reports whether one of them was drafted.
+// pickFromQueue tries the franchise's queued players in order and reports
+// whether one of them was drafted.
 func (s *Service) pickFromQueue(ctx context.Context, q *db.Queries, draft db.Draft, pick *db.ListDraftPicksRow) (bool, error) {
 	queue, err := q.ListDraftQueue(ctx, db.ListDraftQueueParams{DraftID: draft.ID, FranchiseID: pick.CurrentFranchiseID})
 	if err != nil {
 		return false, err
 	}
 	for _, queued := range queue {
-		for _, list := range []string{settings.ListMain, settings.ListReserve} {
-			// Each attempt runs in a savepoint so a refused one leaves no trace.
-			err := q.Savepoint(ctx, func(q *db.Queries) error {
-				return makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, queued.PlayerID, list, true)
-			})
-			var refused problem.Error
-			switch {
-			case err == nil:
-				return true, nil
-			case !errors.As(err, &refused):
-				return false, err
-			}
+		// Each attempt runs in a savepoint so a refused one leaves no trace.
+		err := q.Savepoint(ctx, func(q *db.Queries) error {
+			return makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, queued.PlayerID, true)
+		})
+		var refused problem.Error
+		switch {
+		case err == nil:
+			return true, nil
+		case !errors.As(err, &refused):
+			return false, err
 		}
 	}
 	return false, nil

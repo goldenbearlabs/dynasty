@@ -11,23 +11,30 @@
 
 	let { dynasty, drafts }: { dynasty: Dynasty; drafts: DraftSummary[] } = $props();
 
+	// A startup draft is slow, so everyone can make every pick: hours a pick, not seconds.
+	const startupClock = 8 * 3600;
+
 	let draft = $state<NewDraft>({
 		name: '',
 		kind: 'startup',
 		year: new Date().getFullYear(),
 		league_ids: [],
-		rounds: 10,
+		rounds: 0,
 		order: 'snake',
 		franchise_order: untrack(() => dynasty.franchises.map((f) => f.id)),
-		pick_clock_seconds: 0
+		pick_clock_seconds: startupClock
 	});
 
 	// Only what is coming next: the drafts for later years exist so their picks can be traded.
 	const upcoming = $derived(nextDrafts(drafts));
 	const franchise = (id: string) => dynasty.franchises.find((f) => f.id === id)!;
 	const chosen = $derived(dynasty.leagues.filter((l) => draft.league_ids.includes(l.id)));
-	// How many players each franchise could hold across the chosen leagues.
-	const capacity = $derived(chosen.reduce((sum, l) => sum + l.settings.roster.main + l.settings.roster.reserve, 0));
+	// How many players each franchise can draft across the chosen leagues. A
+	// startup draft fills the main rosters, starters and bench, and leaves
+	// the reserve lists for afterwards.
+	const capacity = $derived(
+		chosen.reduce((sum, l) => sum + l.settings.roster.main + (draft.kind === 'startup' ? 0 : l.settings.roster.reserve), 0)
+	);
 
 	function toggleLeague(id: string) {
 		if (draft.kind === 'seasonal') {
@@ -42,11 +49,14 @@
 		} else {
 			draft.league_ids.push(id);
 		}
+		if (draft.kind === 'startup') draft.rounds = capacity; // a full roster in every league
 	}
 
 	function setKind(kind: NewDraft['kind']) {
 		draft.kind = kind;
-		if (kind === 'seasonal') draft.league_ids = draft.league_ids.slice(0, 1);
+		draft.league_ids = [];
+		draft.rounds = 0;
+		draft.pick_clock_seconds = kind === 'startup' ? startupClock : 0;
 	}
 
 	function move(i: number, by: number) {
@@ -145,9 +155,22 @@
 					<option value="linear">Same order every round</option>
 				</select>
 			</label>
-			<label class="field">Seconds per pick (0 = no clock) <input type="number" min="0" bind:value={draft.pick_clock_seconds} /></label>
+			{#if draft.kind === 'startup'}
+				<label class="field">
+					Hours per pick (0 = no clock)
+					<input type="number" min="0" step="any" bind:value={() => draft.pick_clock_seconds / 3600, (hours) => (draft.pick_clock_seconds = Math.round((hours ?? 0) * 3600))} />
+				</label>
+			{:else}
+				<label class="field">Seconds per pick (0 = no clock) <input type="number" min="0" bind:value={draft.pick_clock_seconds} /></label>
+			{/if}
 			{#if capacity > 0}
-				<span class="muted small-text hint">Each franchise has {capacity} roster spots in {chosen.length === 1 ? 'this league' : 'these leagues'}.</span>
+				<span class="muted small-text hint">
+					{#if draft.kind === 'startup'}
+						{capacity} rounds fill every main roster, starters and bench, in {chosen.length === 1 ? 'this league' : 'these leagues'}. Reserve lists are not drafted.
+					{:else}
+						Each franchise has {capacity} roster spots in this league.
+					{/if}
+				</span>
 			{/if}
 		</div>
 
@@ -179,7 +202,7 @@
 			<p class="muted small-text">You can reassign, reorder, add and remove individual picks in the draft room before starting.</p>
 		</div>
 
-		<div><button class="primary" disabled={draft.league_ids.length === 0}>Create draft</button></div>
+		<div><button class="primary" disabled={draft.league_ids.length === 0 || draft.rounds < 1}>Create draft</button></div>
 	</form>
 </section>
 

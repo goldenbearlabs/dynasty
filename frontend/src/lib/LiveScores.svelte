@@ -65,7 +65,7 @@
 					<button aria-pressed={mineOnly} onclick={() => (mineOnly = true)}>My players</button>
 				</div>
 			{/if}
-			<a href="/scores" class="all-scores">Scores <Icon name="right" size={14} /></a>
+			<a href="/matchups" class="all-scores">Matchups <Icon name="right" size={14} /></a>
 			{#if showing.length > 0}
 				<div class="arrows">
 					<button aria-label="Scroll scores left" onclick={() => strip?.scrollBy({ left: -320, behavior: 'smooth' })}><Icon name="left" size={14} /></button>

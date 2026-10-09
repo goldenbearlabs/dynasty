@@ -357,6 +357,7 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	var res struct {
 		Dates []struct {
 			Games []struct {
+				GameType string `json:"gameType"`
 				GamePk   int    `json:"gamePk"`
 				GameDate string `json:"gameDate"`
 				Status   struct {
@@ -373,7 +374,7 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 			} `json:"games"`
 		} `json:"dates"`
 	}
-	url := fmt.Sprintf("%s/schedule?sportId=1&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
+	url := fmt.Sprintf("%s/schedule?sportId=1&gameType=R&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
 	if err := s.client.GetTransient(ctx, url, &res); err != nil {
 		return nil, err
 	}
@@ -382,6 +383,9 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	var games []ingest.Game
 	for _, date := range res.Dates {
 		for _, g := range date.Games {
+			if g.GameType != "R" {
+				continue
+			}
 			starts, err := time.Parse(time.RFC3339, g.GameDate)
 			if err != nil {
 				continue

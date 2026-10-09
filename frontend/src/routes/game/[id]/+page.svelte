@@ -50,7 +50,7 @@
 	<div class="stack" data-sport={game.competition}>
 		<p class="row small-text">
 			<SportBadge sport={game.competition} solid />
-			<a href="/scores?sport={game.competition}&day={game.day}">{dayLabel(game.day)} scores</a>
+			<span class="muted">{dayLabel(game.day)}</span>
 		</p>
 		<header class="card"><ScoreCard {game} big /></header>
 

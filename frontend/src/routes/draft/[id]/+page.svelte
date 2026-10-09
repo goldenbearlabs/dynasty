@@ -15,7 +15,6 @@
 		setDraftClock,
 		setQueue,
 		type DraftAction,
-		type List,
 		type Player,
 		type QueuedPlayer,
 		type RankingSummary
@@ -151,14 +150,14 @@
 		}
 	}
 
-	async function pick(player: Player, list: List) {
+	async function pick(player: Player) {
 		if (!target || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
 			return;
 		const pickId = target.id;
 		const ownerName = pickingFor?.name ?? 'You';
 		picking = true;
 		try {
-			await makePick(id, { player_id: player.id, list, pick_id: pickId });
+			await makePick(id, { player_id: player.id, pick_id: pickId });
 			toast.good(`${ownerName} drafted ${player.full_name}.`);
 			await invalidateAll();
 		} catch (e) {
@@ -204,7 +203,7 @@
 	});
 	const importable = $derived(
 		rankings
-			.filter((r) => r.players > 0 && room?.state?.league_ids.includes(r.league_id))
+			.filter((r) => r.players > 0 && (r.league_id ? room?.state?.league_ids.includes(r.league_id) : r.draft_id === id))
 			.toSorted((a, b) => Number(b.draft_id === id) - Number(a.draft_id === id))
 	);
 	async function loadRanking(rankingId: string) {
@@ -512,13 +511,8 @@
 		<button
 			class="small primary"
 			disabled={!target || picking || !room?.connected}
-			onclick={() => pick(player, rookie ? 'rights' : 'main')}>{picking ? 'Drafting…' : rookie ? 'Draft' : 'Draft to main'}</button
+			onclick={() => pick(player)}>{picking ? 'Drafting…' : 'Draft'}</button
 		>
-		{#if !rookie}<button
-				class="small"
-				disabled={!target || picking || !room?.connected}
-				onclick={() => pick(player, 'reserve')}>To reserve</button
-			>{/if}
 		{@render queueAction(player)}
 		{#if !target}<p class="target-note muted">
 				{draft?.status === 'paused'

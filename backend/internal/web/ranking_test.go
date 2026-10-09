@@ -221,6 +221,30 @@ func TestRankings(t *testing.T) {
 		t.Errorf("a second import added %d players, want none", result.Added)
 	}
 
+	// Combined startup boards preserve one ranking across both sports.
+	if _, err := pool.Exec(ctx, `insert into draft_leagues(draft_id, league_id) values($1,$2)`, startup, league["nhl"]); err != nil {
+		t.Fatal(err)
+	}
+	var combined ranking
+	combinedInput := map[string]any{"name": "Combined startup", "draft_id": startup, "player_ids": []string{id["Zr Skater"], id["Zr Two"], id["Zr One"]}}
+	ann.want(http.StatusCreated, "POST", "/api/rankings", combinedInput, &combined)
+	if names(combined) != "Zr Skater, Zr Two, Zr One, " {
+		t.Fatalf("combined board = %+v", combined)
+	}
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/rankings", map[string]any{"name": "Invalid combined", "draft_id": hockey}, nil)
+	ann.want(http.StatusUnprocessableEntity, "PUT", "/api/rankings/"+combined.ID, map[string]any{"name": "Combined startup", "draft_id": nil}, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/drafts/"+hockey+"/queue/import", map[string]string{"ranking_id": combined.ID}, nil)
+	ann.want(http.StatusNoContent, "PUT", "/api/drafts/"+startup+"/queue", map[string]any{"player_ids": []string{}}, nil)
+	ann.want(http.StatusOK, "POST", "/api/drafts/"+startup+"/queue/import", map[string]string{"ranking_id": combined.ID}, &result)
+	ann.want(http.StatusOK, "GET", "/api/drafts/"+startup+"/queue", nil, &queue)
+	if result.Added != 2 || len(queue) != 2 || queue[0].FullName != "Zr Skater" || queue[1].FullName != "Zr One" {
+		t.Fatalf("combined import = %+v; added %d", queue, result.Added)
+	}
+	ann.want(http.StatusOK, "GET", "/api/rankings", nil, &listed)
+	if len(listed) != 2 {
+		t.Fatalf("combined board missing from list: %+v", listed)
+	}
+
 	ann.want(http.StatusNoContent, "DELETE", url, nil, nil)
 	ann.want(http.StatusNotFound, "GET", url, nil, nil)
 }

@@ -382,7 +382,8 @@ export type Standings = {
 
 // ---- head-to-head ----
 
-export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean };
+/** by_hand: the commissioner set its matchups, so the schedule leaves them alone. */
+export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean; by_hand: boolean };
 
 export type Matchup = {
 	id: string;
@@ -392,6 +393,9 @@ export type Matchup = {
 	away_points: number;
 	final: boolean;
 };
+
+/** A period of a season's schedule; its matchups have no points until it starts. */
+export type SchedulePeriod = Period & { matchups: Matchup[] };
 
 /** One period of a head-to-head season. */
 export type Matchups = { periods: Period[]; period: Period | null; matchups: Matchup[] };
@@ -607,7 +611,7 @@ export type QueuedPlayer = {
 /** One of the signed-in manager's pre-draft lists, as the list of them shows it. */
 export type RankingSummary = {
 	id: string;
-	league_id: string;
+	league_id: string | null;
 	draft_id: string | null;
 	name: string;
 	competition: string;
@@ -618,7 +622,7 @@ export type RankingSummary = {
 export type RankedPlayer = QueuedPlayer & { note: string; owner_name: string };
 
 /** A pre-draft list with its players in order. */
-export type Ranking = { id: string; league_id: string; draft_id: string | null; name: string; players: RankedPlayer[] };
+export type Ranking = { id: string; league_id: string | null; draft_id: string | null; name: string; players: RankedPlayer[] };
 
 /** player_ids, when given, replaces the list. */
 export type RankingChange = { name: string; league_id?: string; draft_id?: string | null; player_ids?: string[] };
@@ -798,7 +802,7 @@ export const getIngestRuns = () => request<IngestRun[]>('GET', '/admin/ingest-ru
 
 export const getDrafts = () => orNull(request<DraftSummary[]>('GET', '/drafts')).then((d) => d ?? []);
 export const getDraft = (id: string) => request<DraftState>('GET', `/drafts/${id}`);
-export const makePick = (id: string, pick: { player_id: string; list: List; pick_id?: string }) =>
+export const makePick = (id: string, pick: { player_id: string; pick_id?: string }) =>
 	request<void>('POST', `/drafts/${id}/pick`, pick);
 export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
@@ -846,7 +850,11 @@ export const getGame = (id: string) => request<GameDetail>('GET', `/games/${id}`
 
 export const getMatchups = (leagueId: string, period?: number) =>
 	request<Matchups>('GET', `/leagues/${leagueId}/matchups${query({ period })}`);
+export const getSchedule = (leagueId: string) => request<SchedulePeriod[]>('GET', `/leagues/${leagueId}/schedule`);
 export const getMatchup = (id: string) => request<MatchupDetail>('GET', `/matchups/${id}`);
+export const setMatchups = (periodId: string, matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[]) =>
+	request<void>('PUT', `/admin/periods/${periodId}/matchups`, { matchups });
+export const resetMatchups = (periodId: string) => request<void>('DELETE', `/admin/periods/${periodId}/matchups`);
 export const generateSchedule = (seasonId: string) => request<void>('POST', `/admin/seasons/${seasonId}/schedule`);
 export const advancePlayoffs = () => request<void>('POST', '/admin/playoffs/advance');
 

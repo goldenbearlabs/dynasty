@@ -127,6 +127,7 @@
 				['Weeks line up.', 'In a weekly league a matchup covers the same days as the lineup. A stretch of fewer than four days at the start or end of a season joins the week next to it.'],
 				['Standings.', 'Head-to-head leagues rank by the share of matchups won, a tie counting half, then by points. Using the share keeps a team that has had a bye comparable.'],
 				['Playoffs.', 'The top teams qualify. They are re-seeded every round, the best playing the worst left. If the number is not a power of two, the top seeds sit out the first round. A tied playoff matchup goes to the better seed.'],
+				['The commissioner can step in.', 'On the Matchups page the commissioner can set any matchup that is not over by hand, in the regular season or the playoffs, and choose who has a bye. Matchups set this way are marked, survive a rebuilt schedule, and can be handed back to the automatic ones.'],
 				['Champions.', 'The winner of the playoff final, or first place in a total-points league, is champion when the commissioner closes the season. A tie for first has to be settled by the commissioner naming one.']
 			]
 		},
@@ -161,7 +162,7 @@
 			title: 'Drafts',
 			about: 'The startup draft, rookie drafts, and signing your picks.',
 			rules: [
-				['One startup draft per league.', 'It stocks the rosters, can cover several leagues at once, and its picks go straight onto your roster. A league never has a second.'],
+				['One startup draft per league.', 'It fills every main roster, starters and bench, and can cover several leagues at once. Reserve lists are not drafted: they fill afterwards from free agency and the rookie drafts. Picks are slow, eight hours each unless the commissioner sets another clock. A league never has a second.'],
 				['Then a rookie draft every year.', 'Open to anyone not on a roster: players new to the pool and free agents alike. The number of rounds is half the league’s reserve list, rounded up, unless the commissioner sets it.'],
 				['Picks exist years ahead.', 'Each league’s next few rookie drafts are on the books from the day the league is created, so their picks can be traded.'],
 				['The clock.', 'If a league uses a pick clock and yours runs out, the first available player in your queue is drafted for you. With an empty queue the pick is skipped, and you can make it up later while the draft is still running.'],

@@ -162,11 +162,11 @@ func TestDraft(t *testing.T) {
 
 func TestGamesAndBoxScore(t *testing.T) {
 	const scoreboard = `{"events":[
-	  {"id":"401","date":"2026-10-04T17:00Z","status":{"type":{"state":"post","shortDetail":"Final/OT"}},
+	  {"id":"401","season":{"type":2},"date":"2026-10-04T17:00Z","status":{"type":{"state":"post","shortDetail":"Final/OT"}},
 	   "competitions":[{"competitors":[{"homeAway":"home","score":"13","team":{"id":"28"}},{"homeAway":"away","score":"30","team":{"id":"11"}}]}]},
-	  {"id":"402","date":"2026-10-05T00:20Z","status":{"type":{"state":"in","shortDetail":"7:32 - 3rd"}},
+	  {"id":"402","season":{"type":2},"date":"2026-10-05T00:20Z","status":{"type":{"state":"in","shortDetail":"7:32 - 3rd"}},
 	   "competitions":[{"competitors":[{"homeAway":"away","score":"7","team":{"id":"1"}},{"homeAway":"home","score":"10","team":{"id":"2"}}]}]},
-	  {"id":"403","date":"2026-10-06T00:15Z","status":{"type":{"state":"pre"}},"competitions":[{"competitors":[]}]}
+	  {"id":"403","season":{"type":2},"date":"2026-10-06T00:15Z","status":{"type":{"state":"pre"}},"competitions":[{"competitors":[]}]}
 	]}`
 	// One quarterback appears in three groups; "interceptions" is both a
 	// passing stat and a defensive one.
@@ -429,5 +429,24 @@ func TestConferenceMetadataKeepsFullPoolAndHistory(t *testing.T) {
 	}
 	if len(lines) != 1 || lines[0].Conference != "12" {
 		t.Fatalf("historical membership: %+v", lines)
+	}
+}
+
+func TestGamesRegularSeasonOnly(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/football/nfl/scoreboard", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"events":[{"id":"regular","season":{"type":2},"date":"2026-10-04T17:00Z","competitions":[{}]},{"id":"preseason","season":{"type":1},"date":"2026-10-04T17:00Z","competitions":[{}]},{"id":"playoff","season":{"type":3},"date":"2026-10-04T17:00Z","competitions":[{}]},{"id":"unknown","date":"2026-10-04T17:00Z","competitions":[{}]}]}`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	src := New(ingest.NewClient(0), League{Path: "football/nfl"})
+	src.Base = server.URL
+	day, _ := time.Parse(time.DateOnly, "2026-10-04")
+	games, err := src.Games(context.Background(), day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(games) != 1 || games[0].ProviderID != "regular" {
+		t.Fatalf("regular-season games = %+v", games)
 	}
 }

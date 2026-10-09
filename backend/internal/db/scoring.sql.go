@@ -108,6 +108,15 @@ func (q *Queries) DeleteLineups(ctx context.Context, arg DeleteLineupsParams) er
 	return err
 }
 
+const deleteMatchups = `-- name: DeleteMatchups :exec
+delete from matchups where period_id = $1
+`
+
+func (q *Queries) DeleteMatchups(ctx context.Context, periodID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMatchups, periodID)
+	return err
+}
+
 const deletePeriodsFrom = `-- name: DeletePeriodsFrom :exec
 delete from periods where season_id = $1 and starts_on >= $2
 `
@@ -217,7 +226,7 @@ func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, erro
 }
 
 const getPeriod = `-- name: GetPeriod :one
-select id, season_id, seq, starts_on, ends_on, is_playoff from periods where id = $1
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where id = $1
 `
 
 func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error) {
@@ -230,6 +239,7 @@ func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error)
 		&i.StartsOn,
 		&i.EndsOn,
 		&i.IsPlayoff,
+		&i.ByHand,
 	)
 	return i, err
 }
@@ -316,7 +326,7 @@ func (q *Queries) InsertMatchup(ctx context.Context, arg InsertMatchupParams) er
 const insertPeriod = `-- name: InsertPeriod :one
 insert into periods (season_id, seq, starts_on, ends_on, is_playoff)
 values ($1, $2, $3, $4, $5)
-returning id, season_id, seq, starts_on, ends_on, is_playoff
+returning id, season_id, seq, starts_on, ends_on, is_playoff, by_hand
 `
 
 type InsertPeriodParams struct {
@@ -343,6 +353,7 @@ func (q *Queries) InsertPeriod(ctx context.Context, arg InsertPeriodParams) (Per
 		&i.StartsOn,
 		&i.EndsOn,
 		&i.IsPlayoff,
+		&i.ByHand,
 	)
 	return i, err
 }
@@ -854,7 +865,7 @@ func (q *Queries) ListPeriodScores(ctx context.Context, seasonID pgtype.UUID) ([
 
 const listPeriods = `-- name: ListPeriods :many
 
-select id, season_id, seq, starts_on, ends_on, is_playoff from periods where season_id = $1 order by seq
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where season_id = $1 order by seq
 `
 
 // ---- head-to-head ----
@@ -874,6 +885,7 @@ func (q *Queries) ListPeriods(ctx context.Context, seasonID pgtype.UUID) ([]Peri
 			&i.StartsOn,
 			&i.EndsOn,
 			&i.IsPlayoff,
+			&i.ByHand,
 		); err != nil {
 			return nil, err
 		}
@@ -1252,6 +1264,20 @@ update seasons set status = 'active', champion_franchise_id = null where id = $1
 
 func (q *Queries) ReopenSeason(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, reopenSeason, id)
+	return err
+}
+
+const setPeriodByHand = `-- name: SetPeriodByHand :exec
+update periods set by_hand = $1 where id = $2
+`
+
+type SetPeriodByHandParams struct {
+	ByHand bool        `json:"by_hand"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetPeriodByHand(ctx context.Context, arg SetPeriodByHandParams) error {
+	_, err := q.db.Exec(ctx, setPeriodByHand, arg.ByHand, arg.ID)
 	return err
 }
 

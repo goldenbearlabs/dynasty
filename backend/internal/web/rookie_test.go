@@ -134,7 +134,7 @@ func TestRookieDraft(t *testing.T) {
 	ann.want(http.StatusNoContent, "POST", "/api/admin/drafts/"+next.ID+"/start", nil, nil)
 	pick := func(b *browser, want int, player string) {
 		t.Helper()
-		b.want(want, "POST", draftURL+"/pick", map[string]string{"player_id": id[player], "list": "main"}, nil)
+		b.want(want, "POST", draftURL+"/pick", map[string]string{"player_id": id[player]}, nil)
 	}
 	bob.want(http.StatusUnprocessableEntity, "POST", draftURL+"/pass", nil, nil) // not Bob's pick
 	pick(ann, http.StatusUnprocessableEntity, "Zk Veteran")                      // on a roster already

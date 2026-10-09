@@ -242,6 +242,9 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	var res struct {
 		Events []struct {
 			ID     string `json:"id"`
+			Season struct {
+				Type int `json:"type"`
+			} `json:"season"`
 			Date   string `json:"date"`
 			Status struct {
 				Type struct {
@@ -271,6 +274,9 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	status := map[string]string{"pre": ingest.GameScheduled, "in": ingest.GameLive, "post": ingest.GameFinal}
 	var games []ingest.Game
 	for _, e := range res.Events {
+		if e.Season.Type != 2 {
+			continue // Exclude preseason, postseason, and unclassified games.
+		}
 		starts, err := time.Parse("2006-01-02T15:04Z07:00", e.Date)
 		if err != nil || len(e.Competitions) == 0 {
 			continue

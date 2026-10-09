@@ -162,11 +162,11 @@ func TestGamesAndBoxScore(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/score/2026-10-06", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"games":[
-		  {"id":2026020044,"startTimeUTC":"2026-10-06T23:00:00Z","gameState":"OFF","homeTeam":{"abbrev":"TOR","score":5},"awayTeam":{"abbrev":"NSH","score":4},
+		  {"gameType":2,"id":2026020044,"startTimeUTC":"2026-10-06T23:00:00Z","gameState":"OFF","homeTeam":{"abbrev":"TOR","score":5},"awayTeam":{"abbrev":"NSH","score":4},
 		   "period":4,"periodDescriptor":{"periodType":"OT"},"clock":{"timeRemaining":"00:00"}},
-		  {"id":2026020045,"startTimeUTC":"2026-10-07T02:00:00Z","gameState":"CRIT","homeTeam":{"abbrev":"VAN","score":2},"awayTeam":{"abbrev":"CGY","score":0},
+		  {"gameType":2,"id":2026020045,"startTimeUTC":"2026-10-07T02:00:00Z","gameState":"CRIT","homeTeam":{"abbrev":"VAN","score":2},"awayTeam":{"abbrev":"CGY","score":0},
 		   "period":3,"periodDescriptor":{"periodType":"REG"},"clock":{"timeRemaining":"02:46"}},
-		  {"id":2026020046,"startTimeUTC":"2026-10-07T02:30:00Z","gameState":"FUT","homeTeam":{"abbrev":"LAK"},"awayTeam":{"abbrev":"SJS"}}
+		  {"gameType":2,"id":2026020046,"startTimeUTC":"2026-10-07T02:30:00Z","gameState":"FUT","homeTeam":{"abbrev":"LAK"},"awayTeam":{"abbrev":"SJS"}}
 		]}`))
 	})
 	mux.HandleFunc("/gamecenter/2026020044/boxscore", func(w http.ResponseWriter, r *http.Request) {
@@ -303,5 +303,24 @@ func TestCareer(t *testing.T) {
 	if s := seasons[0]; s.Year != 2024 || s.Label != "2023-24" || s.League != "OHL" || s.Team != "Erie Otters" ||
 		s.Games != 47 || s.Stats["goals"] != 44 || s.Stats["assists"] != 76 {
 		t.Errorf("junior season = %+v", s)
+	}
+}
+
+func TestGamesRegularSeasonOnly(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/score/2026-10-04", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"games":[{"id":1,"gameType":2,"startTimeUTC":"2026-10-04T17:00:00Z"},{"id":2,"gameType":1,"startTimeUTC":"2026-10-04T17:00:00Z"},{"id":3,"gameType":3,"startTimeUTC":"2026-10-04T17:00:00Z"},{"id":4,"startTimeUTC":"2026-10-04T17:00:00Z"}]}`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	src := New(ingest.NewClient(0))
+	src.Base = server.URL
+	day, _ := time.Parse(time.DateOnly, "2026-10-04")
+	games, err := src.Games(context.Background(), day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(games) != 1 || games[0].ProviderID != "1" {
+		t.Fatalf("regular-season games = %+v", games)
 	}
 }

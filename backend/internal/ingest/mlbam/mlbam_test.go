@@ -139,12 +139,12 @@ func TestGamesAndBoxScore(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"dates":[{"games":[
-		  {"gamePk":849819,"gameDate":"2026-10-06T22:00:00Z","status":{"abstractGameState":"Final"},
+		  {"gameType":"R","gamePk":849819,"gameDate":"2026-10-06T22:00:00Z","status":{"abstractGameState":"Final"},
 		   "teams":{"home":{"score":3,"team":{"id":144}},"away":{"score":1,"team":{"id":119}}},
 		   "linescore":{"currentInningOrdinal":"9th","inningState":"Bottom"}},
-		  {"gamePk":849820,"gameDate":"2026-10-07T00:08:00Z","status":{"abstractGameState":"Preview"},
+		  {"gameType":"R","gamePk":849820,"gameDate":"2026-10-07T00:08:00Z","status":{"abstractGameState":"Preview"},
 		   "teams":{"home":{"team":{"id":147}},"away":{"team":{"id":111}}}},
-		  {"gamePk":849821,"gameDate":"2026-10-07T00:38:00Z","status":{"abstractGameState":"Live"},
+		  {"gameType":"R","gamePk":849821,"gameDate":"2026-10-07T00:38:00Z","status":{"abstractGameState":"Live"},
 		   "teams":{"home":{"score":2,"team":{"id":121}},"away":{"score":4,"team":{"id":143}}},
 		   "linescore":{"currentInningOrdinal":"5th","inningState":"Top"}}
 		]}]}`))
@@ -241,5 +241,27 @@ func TestSeasonStats(t *testing.T) {
 	may, _ := time.Parse(time.DateOnly, "2026-05-01")
 	if src.LatestSeason(march) != 2025 || src.LatestSeason(may) != 2026 {
 		t.Errorf("LatestSeason = %d in March and %d in May 2026, want 2025 and 2026", src.LatestSeason(march), src.LatestSeason(may))
+	}
+}
+
+func TestGamesRegularSeasonOnly(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("gameType") != "R" {
+			t.Errorf("gameType = %q", r.URL.Query().Get("gameType"))
+		}
+		w.Write([]byte(`{"dates":[{"games":[{"gamePk":1,"gameType":"R","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":2,"gameType":"S","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":3,"gameType":"F","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":4,"gameType":"D","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":5,"gameType":"L","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":6,"gameType":"W","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":7,"gameType":"A","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":8,"gameDate":"2026-10-04T17:00:00Z"}]}]}`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	src := New(ingest.NewClient(0))
+	src.Base = server.URL
+	day, _ := time.Parse(time.DateOnly, "2026-10-04")
+	games, err := src.Games(context.Background(), day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(games) != 1 || games[0].ProviderID != "1" {
+		t.Fatalf("regular-season games = %+v", games)
 	}
 }
