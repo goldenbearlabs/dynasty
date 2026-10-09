@@ -146,9 +146,11 @@ order by p.full_name, p.id, g.starts_at;
 -- each day's stat lines for whoever was in the lineup in force that day,
 -- weighted by the league's scoring rules. A slot may count only some of a
 -- player's games each week (games_per_week): those are his first so many on
--- or after the day his manager picked. Weeks are counted from week_start,
--- the first day of the week from_day falls in, so a span that begins
--- mid-week still knows which games came earlier.
+-- or after the day his manager picked. A league may also cap a team's
+-- pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
+-- in the order they were played, score nothing. Weeks are counted from
+-- week_start, the first day of the week from_day falls in, so a span that
+-- begins mid-week still knows which games came earlier.
 with days as (
   select generate_series(@week_start::date, @to_day::date, interval '1 day')::date as day
 ), in_force as (
@@ -164,9 +166,20 @@ with days as (
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
          row_number() over (partition by i.franchise_id, e.player_id, (g.day - @week_start::date) / 7
-                            order by g.starts_at, g.id) as nth
+                            order by g.starts_at, g.id) as nth,
+         coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
+         -- A start, for the cap: he started the game, and if he is a reliever
+         -- he went more than an inning, so an opener does not use one up.
+         (coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
+          and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)) as is_start,
+         sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
+                   and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
+                  then 1 else 0 end)
+           over (partition by i.franchise_id, (g.day - @week_start::date) / 7
+                 order by g.starts_at, g.id, e.player_id) as starts_so_far
   from in_force i
   join lineup_entries e on e.league_id = @league_id and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
+  join players pl on pl.id = e.player_id
   join leagues l on l.id = @league_id
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
@@ -189,9 +202,30 @@ from started st
 join players p on p.id = st.player_id
 cross join lateral jsonb_each_text(st.stats) s
 join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
-where st.day >= @from_day::date and (st.games_per_week = 0 or st.nth <= st.games_per_week)
+where st.day >= @from_day::date
+  and (st.games_per_week = 0 or st.nth <= st.games_per_week)
+  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url
 order by points desc;
+
+-- name: ListWeekStarts :many
+-- The pitcher starts one franchise's starters have made in a week, in the
+-- order they were played. See ListLineupPoints for what counts as one.
+select pl.id as player_id, pl.full_name, g.day, g.starts_at,
+       coalesce((sl.stats->>'pit_ip')::numeric, 0)::float8 as innings
+from generate_series(@week_start::date, @week_end::date, interval '1 day') as d(day)
+join lateral (
+  select max(n.effective_on) as effective_on from lineups n
+  where n.league_id = @league_id and n.franchise_id = @franchise_id and n.effective_on <= d.day::date
+) in_force on true
+join lineup_entries e on e.league_id = @league_id and e.franchise_id = @franchise_id and e.effective_on = in_force.effective_on
+join players pl on pl.id = e.player_id
+join leagues l on l.id = @league_id
+join games g on g.competition = l.competition and g.day = d.day::date
+join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+where coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
+  and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
+order by g.starts_at, g.id, e.player_id;
 
 -- ---- merging players ----
 

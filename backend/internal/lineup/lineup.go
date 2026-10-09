@@ -45,6 +45,24 @@ type View struct {
 	Players []Player        `json:"players"`
 	// Locked is why the whole lineup can no longer change, or empty.
 	Locked string `json:"locked"`
+	// Starts is the week's pitcher starts against the league's cap; nil in
+	// a league without one.
+	Starts *Starts `json:"starts"`
+}
+
+// Starts is how many pitcher starts a franchise has used in the week of a
+// lineup. Those beyond the limit, in the order played, score nothing.
+type Starts struct {
+	Limit int     `json:"limit"`
+	Made  []Start `json:"made"`
+}
+
+type Start struct {
+	PlayerID pgtype.UUID `json:"player_id"`
+	FullName string      `json:"full_name"`
+	Day      string      `json:"day"`
+	Innings  float64     `json:"innings"`
+	Counts   bool        `json:"counts"`
 }
 
 type Player struct {
@@ -156,6 +174,22 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			p.Slot = ""
 		}
 		settle(p, rules.Lineup, now)
+	}
+	if limit := rules.Lineup.PitcherStartsPerWeek; limit > 0 {
+		week := sportsday.WeekStart(first, rules.Lineup.WeekStart)
+		made, err := q.ListWeekStarts(ctx, db.ListWeekStartsParams{
+			LeagueID: league.ID, FranchiseID: franchiseID,
+			WeekStart: sportsday.Date(week), WeekEnd: sportsday.Date(week.AddDate(0, 0, 6)),
+		})
+		if err != nil {
+			return View{}, err
+		}
+		view.Starts = &Starts{Limit: limit, Made: []Start{}}
+		for i, m := range made {
+			view.Starts.Made = append(view.Starts.Made, Start{
+				PlayerID: m.PlayerID, FullName: m.FullName, Day: m.Day.Time.Format(time.DateOnly), Innings: m.Innings, Counts: i < limit,
+			})
+		}
 	}
 	return view, nil
 }

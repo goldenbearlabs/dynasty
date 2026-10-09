@@ -112,6 +112,13 @@
 							</li>
 							{#if some.length < g.rules.lineup.slots.length}<li>Every game counts in the other slots</li>{/if}
 						{/if}
+						{#if g.rules.lineup.pitcher_starts_per_week > 0}
+							<li>
+								<strong>A team's pitchers score in {g.rules.lineup.pitcher_starts_per_week} starts a week.</strong>
+								A start beyond that, in the order played, scores nothing. A reliever who opens a game uses one only if he
+								pitches more than an inning.
+							</li>
+						{/if}
 					</ul>
 
 					<h3 class="eyebrow">Season</h3>
@@ -199,7 +206,7 @@
 				<li><strong>Basketball counts one game a week per player.</strong> Stars separate from the field so much that counting every game changes little, and one game keeps lineups a decision. Three-pointers score so that guards are worth as much as big men.</li>
 				<li><strong>Hockey scores shots at half a point.</strong> Shot volume is the steadiest sign of who the good players are, and it was the one change that lifted every tier of player. Lineup size made almost no difference, so it stays at eight forwards and four defensemen.</li>
 				<li><strong>One goalie, scored generously.</strong> A second goalie slot mostly adds luck. With wins, shutouts and saves weighted up, the best goalies are worth an early pick without swamping the skaters.</li>
-				<li><strong>Baseball has a utility slot and four starting pitchers.</strong> Without the utility slot a designated hitter could not play anywhere. Each starting-pitcher slot counts one start a week.</li>
+				<li><strong>Baseball has a utility slot and four starts a week.</strong> Without the utility slot a designated hitter could not play anywhere. A team's pitchers score in four starts a week between them, however the manager spreads them.</li>
 				<li><strong>Football is full-point PPR with a superflex.</strong> Sixteen teams starting up to two quarterbacks makes the position scarce enough to matter.</li>
 				<li><strong>The WNBA keeps rosters short.</strong> The whole league is 180 players, so 16 franchises can hold little more than their starters before nobody is left on waivers.</li>
 			</ul>

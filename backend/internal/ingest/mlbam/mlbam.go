@@ -413,6 +413,7 @@ var (
 	}
 	pitchingStats = map[string]string{
 		"pit_so": "strikeOuts", "pit_w": "wins", "pit_l": "losses", "pit_sv": "saves", "pit_hld": "holds",
+		"pit_gs": "gamesStarted", // not scored itself: it is how a team's starts are counted
 		"pit_er": "earnedRuns", "pit_h": "hits", "pit_bb": "baseOnBalls",
 	}
 )

@@ -53,6 +53,10 @@ type Lineup struct {
 	WeekStart   string   `json:"week_start"` // weekday a weekly lineup begins on, e.g. "monday"
 	Lock        string   `json:"lock"`       // LockGameStart | LockPeriodStart
 	Slots       []Slot   `json:"slots"`
+	// PitcherStartsPerWeek, when above zero, is how many starts by a team's
+	// pitchers score in a week; a start beyond it scores nothing. A reliever
+	// who opens a game counts only if he pitches more than an inning. Baseball only.
+	PitcherStartsPerWeek int `json:"pitcher_starts_per_week"`
 }
 
 // Slot is a starting position. A player fits when one of his positions is
@@ -182,6 +186,7 @@ func (l League) Validate(c Catalog) error {
 		oneOf("lineup.period", l.Lineup.Period, PeriodDay, PeriodWeek),
 		oneOf("lineup.week_start", l.Lineup.WeekStart, sportsday.Weekdays...),
 		oneOf("lineup.lock", l.Lineup.Lock, LockGameStart, LockPeriodStart),
+		between("lineup.pitcher_starts_per_week", l.Lineup.PitcherStartsPerWeek, 0, 30),
 		l.validateSlots(c),
 		l.validateConferences(c),
 		l.validateScoring(c),
