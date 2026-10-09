@@ -131,6 +131,33 @@
 	);
 	const active = $derived(cards.filter((c) => c.phase.key === 'in').length);
 
+	// ---- rookie-draft picks waiting to be signed ----
+	let clock = $state(Date.now());
+	$effect(() => {
+		const timer = setInterval(() => (clock = Date.now()), 30_000);
+		return () => clearInterval(timer);
+	});
+	// "6 days 4 hours", "3 hours 12 minutes": how long is left to sign.
+	function timeLeft(until: string): string {
+		const minutes = Math.max(0, Math.floor((new Date(until).getTime() - clock) / 60_000));
+		const count = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+		const days = Math.floor(minutes / 1440);
+		const hours = Math.floor((minutes % 1440) / 60);
+		if (days > 0) return `${count(days, 'day')} ${count(hours, 'hour')}`;
+		return hours > 0 ? `${count(hours, 'hour')} ${count(minutes % 60, 'minute')}` : count(minutes, 'minute');
+	}
+	// The soonest deadline among a roster's unsigned picks, if the draft has ended.
+	const deadline = (r: LeagueRoster) =>
+		on(r, 'rights')
+			.map((p) => p.rights_until)
+			.filter((d): d is string => d !== null)
+			.sort()[0];
+
+	// Picks in the drafts to come, by year.
+	const pickYears = $derived(
+		[...new Set(data.picks.map((p) => p.year))].sort().map((year) => ({ year, picks: data.picks.filter((p) => p.year === year) }))
+	);
+
 	// ---- one league ----
 	const roster = $derived(data.rosters.find((r) => r.league_id === league?.id));
 	const now = $derived(league ? standing(league.id) : undefined);
@@ -143,14 +170,14 @@
 	// A commissioner editing someone else's roster is overriding the rules.
 	async function change(r: LeagueRoster, action: 'drop' | 'move', player: RosterPlayer, list?: List) {
 		const days = r.limits.reserve_lock_days;
-		if (mine && list === 'reserve' && days > 0 && player.status !== 'prospect') {
+		if (mine && list === 'reserve' && days > 0 && player.status !== 'prospect' && player.list !== 'rights') {
 			if (!confirm(`${player.full_name} will be locked on the reserve list for ${days} ${days === 1 ? 'day' : 'days'}. Move him?`)) return;
 		}
-		if (action === 'drop' && !confirm(`Drop ${player.full_name}?`)) return;
+		if (action === 'drop' && !confirm(`${player.list === 'rights' ? 'Release' : 'Drop'} ${player.full_name}?`)) return;
 		try {
 			await changeRoster(r.league_id, action, { player_id: player.player_id, list, franchise_id: team.id, force: !mine });
 			await invalidateAll();
-			toast.good(action === 'drop' ? `Dropped ${player.full_name}.` : `Moved ${player.full_name}.`);
+			toast.good(action === 'drop' ? `Released ${player.full_name}.` : player.list === 'rights' ? `Signed ${player.full_name}.` : `Moved ${player.full_name}.`);
 		} catch (e) {
 			toast.error(e);
 		}
@@ -231,6 +258,12 @@
 							{on(c.roster, 'main').length}/{c.roster.limits.main} main · {on(c.roster, 'reserve').length}/{c.roster.limits.reserve} reserve
 						</span>
 						{#if c.roster.overage > 0}<span class="pill bad">Over the limit by {c.roster.overage}</span>{/if}
+						{#if on(c.roster, 'rights').length > 0}
+							{@const due = deadline(c.roster)}
+							<span class="pill gold">
+								{on(c.roster, 'rights').length} {on(c.roster, 'rights').length === 1 ? 'pick' : 'picks'} to sign{due ? ` · ${timeLeft(due)} left` : ''}
+							</span>
+						{/if}
 						{#if mine && c.phase.key === 'in' && openSlots[c.roster.league_id] > 0}
 							<span class="pill gold">{openSlots[c.roster.league_id]} open lineup {openSlots[c.roster.league_id] === 1 ? 'slot' : 'slots'}</span>
 						{/if}
@@ -244,18 +277,25 @@
 			{#if data.picks.length === 0}
 				<p class="muted small-text pad">No picks in upcoming drafts.</p>
 			{:else}
-				<ul class="picks">
-					{#each data.picks as pick (pick.id)}
-						<li>
-							<TradeAsset
-								draft={pick.draft_name}
-								round={pick.round}
-								sport={pick.competitions.length === 1 ? pick.competitions[0] : ''}
-								via={pick.original_franchise_id !== team.id ? nameOf(pick.original_franchise_id) : ''}
-							/>
-						</li>
-					{/each}
-				</ul>
+				<p class="muted small-text pad">
+					Every pick in the drafts to come, in every league. Any of them can be traded, for players or picks in any league,
+					until its draft starts.{#if mine} <a href="/trades/new">Start a trade</a>.{/if}
+				</p>
+				{#each pickYears as group (group.year)}
+					<h3 class="eyebrow listhead">{group.year} <span class="muted">· {group.picks.length} {group.picks.length === 1 ? 'pick' : 'picks'}</span></h3>
+					<ul class="picks">
+						{#each group.picks as pick (pick.id)}
+							<li>
+								<TradeAsset
+									draft={pick.draft_name}
+									round={pick.round}
+									sport={pick.competitions.length === 1 ? pick.competitions[0] : ''}
+									via={pick.original_franchise_id !== team.id ? nameOf(pick.original_franchise_id) : ''}
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/each}
 			{/if}
 		</section>
 	{:else if roster && now}
@@ -275,6 +315,52 @@
 					</a>
 				{/if}
 			</div>
+
+			{#if on(roster, 'rights').length > 0}
+				{@const due = deadline(roster)}
+				{@const room = roster.limits.reserve - on(roster, 'reserve').length}
+				<section class="panel signing">
+					<h2 class="bar">
+						<span class="pill gold">Sign</span> Draft picks to sign
+						{#if due}<span class="left">{timeLeft(due)} left</span>{/if}
+					</h2>
+					<p class="pad small-text muted">
+						{#if due}
+							Sign each pick to the reserve list by {clockTime(due)}. Any left unsigned become free agents.
+						{:else}
+							These picks can be signed to the reserve list now; the deadline is set when the draft ends.
+						{/if}
+						{#if room > 0}
+							The reserve list has room for {room} more.
+						{:else}
+							The reserve list is full ({roster.limits.reserve}): drop or trade someone from it below to make room.
+						{/if}
+					</p>
+					<table>
+						<tbody>
+							{#each on(roster, 'rights') as player (player.player_id)}
+								<tr>
+									<td>
+										<div class="player">
+											<Headshot name={player.full_name} src={player.headshot_url} />
+											<div>
+												<strong>{player.full_name}</strong>
+												<div class="muted small-text">{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}</div>
+											</div>
+										</div>
+									</td>
+									{#if canEdit}
+										<td class="actions">
+											<button class="small primary" disabled={mine && room <= 0} onclick={() => change(roster, 'move', player, 'reserve')}>Sign</button>
+											<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Release</button>
+										</td>
+									{/if}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</section>
+			{/if}
 
 			<section class="stack tight">
 				<h2>Lineup</h2>
@@ -524,6 +610,14 @@
 	.standings tr.me td {
 		background: var(--brand-soft);
 		font-weight: 650;
+	}
+	.signing {
+		border-top: 3px solid var(--gold);
+	}
+	.left {
+		margin-left: auto;
+		font: 650 0.85rem var(--mono);
+		color: var(--gold);
 	}
 	.picks {
 		list-style: none;

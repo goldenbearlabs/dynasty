@@ -214,9 +214,16 @@
 </fieldset>
 
 <fieldset>
-	<legend>Seasonal draft</legend>
+	<legend>Rookie draft</legend>
 	<div class="row end">
-		<label class="field">Rounds <input type="number" min="1" bind:value={settings.draft.rounds} /></label>
+		<label class="field" title="Leave at 0 to size the draft to the reserve list its picks are signed to.">
+			Rounds (0 = half the reserve list: {Math.max(1, Math.ceil(settings.roster.reserve / 2))})
+			<input type="number" min="0" bind:value={settings.draft.rounds} />
+		</label>
+		<label class="field" title="After the draft, picks not signed to the reserve list in this time become free agents.">
+			Days to sign picks
+			<input type="number" min="1" max="60" bind:value={settings.draft.signing_days} />
+		</label>
 		<label class="field">
 			Order
 			<select bind:value={settings.draft.order}>

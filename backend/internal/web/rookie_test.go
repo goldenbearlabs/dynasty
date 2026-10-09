@@ -120,6 +120,11 @@ func TestRookieDraft(t *testing.T) {
 		t.Fatalf("the rookie pool = %v; want the three rookies and not the veteran", pool)
 	}
 
+	// Ann's roster is over its limits (a veteran on a prospects-only reserve list). That stops
+	// ordinary moves, but not a rookie pick, which is held on no list.
+	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+league+"/roster/add",
+		map[string]any{"player_id": id["Zk Veteran"], "list": "reserve", "force": true}, nil)
+
 	// --- picking, and passing ---------------------------------------------------
 	ann.want(http.StatusNoContent, "POST", "/api/admin/drafts/"+next.ID+"/start", nil, nil)
 	pick := func(b *browser, want int, player string) {
@@ -127,7 +132,7 @@ func TestRookieDraft(t *testing.T) {
 		b.want(want, "POST", draftURL+"/pick", map[string]string{"player_id": id[player], "list": "main"}, nil)
 	}
 	bob.want(http.StatusUnprocessableEntity, "POST", draftURL+"/pass", nil, nil) // not Bob's pick
-	pick(ann, http.StatusUnprocessableEntity, "Zk Veteran")                      // a free agent, not a rookie
+	pick(ann, http.StatusUnprocessableEntity, "Zk Veteran")                      // on a roster, and in any case not a rookie
 	pick(ann, http.StatusNoContent, "Zk Rookie One")
 	bob.want(http.StatusNoContent, "POST", draftURL+"/pass", nil, nil)
 	pick(ann, http.StatusNoContent, "Zk Rookie Two")
@@ -162,7 +167,7 @@ func TestRookieDraft(t *testing.T) {
 			}
 		}
 	}
-	lists := func(b *browser, team string) map[string]string {
+	lists := func(b *browser, team string, over int) map[string]string {
 		t.Helper()
 		var h held
 		b.want(http.StatusOK, "GET", "/api/franchises/"+slug[team], nil, &h)
@@ -173,22 +178,23 @@ func TestRookieDraft(t *testing.T) {
 				t.Errorf("%s is held without a deadline", p.FullName)
 			}
 		}
-		if h.Rosters[0].Overage != 0 {
-			t.Errorf("%s is over its limits by %d; unsigned picks count against nothing", team, h.Rosters[0].Overage)
+		if h.Rosters[0].Overage != over {
+			t.Errorf("%s is over its limits by %d, want %d; unsigned picks count against nothing", team, h.Rosters[0].Overage, over)
 		}
 		return out
 	}
-	if l := lists(ann, "Ann"); l["Zk Rookie One"] != "rights" || l["Zk Rookie Two"] != "rights" {
+	if l := lists(ann, "Ann", 1); l["Zk Rookie One"] != "rights" || l["Zk Rookie Two"] != "rights" { // over by the veteran alone
 		t.Fatalf("Ann's picks are held as %v, want rights", l)
 	}
 	move := func(b *browser, want int, action, player, list string) {
 		t.Helper()
 		b.want(want, "POST", "/api/leagues/"+league+"/roster/"+action, map[string]string{"player_id": id[player], "list": list}, nil)
 	}
+	move(ann, http.StatusNoContent, "drop", "Zk Veteran", "")                  // back under the limits
 	move(ann, http.StatusUnprocessableEntity, "move", "Zk Rookie One", "main") // signed to the reserve list first
 	// He is not a prospect, and this league's reserve list is for prospects: a signed rookie may sit there all the same.
 	move(ann, http.StatusNoContent, "move", "Zk Rookie One", "reserve")
-	if l := lists(ann, "Ann"); l["Zk Rookie One"] != "reserve" {
+	if l := lists(ann, "Ann", 0); l["Zk Rookie One"] != "reserve" {
 		t.Fatalf("after signing: %v", l)
 	}
 

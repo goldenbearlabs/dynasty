@@ -43,7 +43,7 @@ export function assetsOf(detail: FranchiseDetail, franchises: Franchise[]): Asse
 					positions: p.positions,
 					headshot: p.headshot_url,
 					sport: roster.competition,
-					note: p.list === 'reserve' ? '· reserve' : ''
+					note: p.list === 'reserve' ? '· reserve' : p.list === 'rights' ? '· unsigned pick' : ''
 				}
 			})
 		)

@@ -2,7 +2,7 @@
 	// How each league is played: its lineup, roster and scoring, read from
 	// the league's own rules so the page is right whatever the commissioner
 	// has changed, and why the starting rules are what they are.
-	import type { Competition, LeagueSettings } from '#lib/api.ts';
+	import { rookieRounds, type Competition, type LeagueSettings } from '#lib/api.ts';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import type { PageProps } from './$types';
 
@@ -146,7 +146,19 @@
 								{g.rules.waivers.mode === 'faab' ? `the highest blind bid (budget ${g.rules.waivers.budget} a season)` : 'the claim highest in the waiver order'}
 							{/if}
 						</li>
-						<li>Seasonal draft: {plural(g.rules.draft.rounds, 'round')}</li>
+					</ul>
+
+					<h3 class="eyebrow">Rookie draft</h3>
+					<ul>
+						<li>
+							<strong>{plural(rookieRounds(g.rules), 'round')} a year</strong>{g.rules.draft.rounds ? '' : ', half the reserve list rounded up'},
+							for players new to the pool since the last draft. A pick can be passed.
+						</li>
+						<li>
+							Picks are held, not rostered. After the draft there {g.rules.draft.signing_days === 1 ? 'is 1 day' : `are ${g.rules.draft.signing_days} days`}
+							to sign each one to the reserve list, making room if it is full. A pick left unsigned becomes a free agent.
+						</li>
+						<li>The next {plural(g.rules.draft.future_years, 'year')} of picks exist already and can be traded, for any league's players or picks</li>
 					</ul>
 				</div>
 

@@ -11,6 +11,7 @@
 		getRankings,
 		importRanking,
 		makePick,
+		passPick,
 		setDraftClock,
 		setQueue,
 		type DraftAction,
@@ -58,7 +59,7 @@
 	);
 	const made = $derived(picks.filter((p) => p.player_id));
 	const ordered = $derived(picks.toSorted((a, b) => a.position - b.position));
-	const upcoming = $derived(ordered.filter((p) => !p.player_id && !p.skipped_at));
+	const upcoming = $derived(ordered.filter((p) => !p.player_id && !p.skipped_at && !p.passed_at));
 	const nextMine = $derived(upcoming.find((p) => p.current_franchise_id === me?.id));
 	const picksAway = $derived(
 		nextMine ? upcoming.filter((p) => p.position < nextMine.position).length : 0
@@ -85,7 +86,7 @@
 	// Whose pick a click on "Draft" would use.
 	const onClock = $derived(picks.find((p) => p.id === room?.state?.on_clock_pick_id));
 	const myMakeUp = $derived(
-		picks.find((p) => !p.player_id && p.skipped_at && p.current_franchise_id === me?.id)
+		picks.find((p) => !p.player_id && p.skipped_at && !p.passed_at && p.current_franchise_id === me?.id)
 	);
 	const myTurn = $derived(onClock !== undefined && onClock.current_franchise_id === me?.id);
 	const target = $derived.by(() => {
@@ -139,6 +140,17 @@
 	});
 
 	// ---- actions ----
+	// A rookie draft holds its picks as rights, to be signed afterwards, and lets a pick be passed.
+	const rookie = $derived(draft?.kind === 'seasonal');
+	async function pass() {
+		if (!onClock || !confirm(`Pass pick #${onClock.position}? It cannot be made later.`)) return;
+		try {
+			await passPick(id);
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+
 	async function pick(player: Player, list: List) {
 		if (!target || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
 			return;
@@ -300,7 +312,12 @@
 							>{myTurn
 								? 'You’re up'
 								: `${picksAway} ${picksAway === 1 ? 'pick' : 'picks'} away`}</strong
-						><span>R{nextMine.round} · #{nextMine.position}</span>{:else}<strong
+						><span>R{nextMine.round} · #{nextMine.position}</span>
+						{#if rookie && draft.status === 'live' && (myTurn || commissioner) && onClock}
+							<button class="small quiet pass" title="Give up this pick. It cannot be made later." onclick={pass}>
+								{myTurn ? 'Pass this pick' : `Pass for ${franchise(onClock.current_franchise_id)?.name ?? 'them'}`}
+							</button>
+						{/if}{:else}<strong
 							>{myMakeUp && draft.status !== 'complete'
 								? 'Skipped pick owed'
 								: 'No picks remaining'}</strong
@@ -494,13 +511,13 @@
 		<button
 			class="small primary"
 			disabled={!target || picking || !room?.connected}
-			onclick={() => pick(player, 'main')}>{picking ? 'Drafting…' : 'Draft to main'}</button
+			onclick={() => pick(player, rookie ? 'rights' : 'main')}>{picking ? 'Drafting…' : rookie ? 'Draft' : 'Draft to main'}</button
 		>
-		<button
-			class="small"
-			disabled={!target || picking || !room?.connected}
-			onclick={() => pick(player, 'reserve')}>To reserve</button
-		>
+		{#if !rookie}<button
+				class="small"
+				disabled={!target || picking || !room?.connected}
+				onclick={() => pick(player, 'reserve')}>To reserve</button
+			>{/if}
 		{@render queueAction(player)}
 		{#if !target}<p class="target-note muted">
 				{draft?.status === 'paused'
@@ -649,6 +666,11 @@
 	h2 {
 		font-size: 0.9rem;
 		white-space: nowrap;
+	}
+	.pass {
+		margin-top: 0.2rem;
+		padding: 0.15rem 0.4rem;
+		font-size: 0.72rem;
 	}
 	.import {
 		max-width: 11rem;

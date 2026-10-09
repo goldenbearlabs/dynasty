@@ -67,7 +67,10 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 	case Waivers:
 		kind = "claim"
 	}
-	return apply(ctx, q, c, kind, true, func(rules settings.League, roster []Entry) ([]Entry, error) {
+	// A rookie-draft pick is held on no list, so no limit can refuse it: not
+	// even for a franchise that is over its limits already.
+	checked := c.List != settings.ListRights
+	return apply(ctx, q, c, kind, checked, func(rules settings.League, roster []Entry) ([]Entry, error) {
 		player, err := q.GetPlayer(ctx, c.PlayerID)
 		if err != nil {
 			return nil, err

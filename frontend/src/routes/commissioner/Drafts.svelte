@@ -82,7 +82,7 @@
 		<div>
 			<strong>Future draft picks</strong>
 			<p class="muted small-text">
-				Creates each league's seasonal drafts for the coming years (as many as its rules allow trading ahead), so their picks
+				Each league's rookie drafts for the coming years are created automatically; this fills in any that are missing (as many as its rules allow trading ahead), so their picks
 				exist and can be traded.
 			</p>
 		</div>
@@ -109,7 +109,7 @@
 				Kind
 				<select value={draft.kind} onchange={(e) => setKind(e.currentTarget.value as NewDraft['kind'])}>
 					<option value="startup">Startup: everyone is available</option>
-					<option value="seasonal">Seasonal: one league's yearly draft</option>
+					<option value="seasonal">Rookie draft: one league's yearly draft</option>
 				</select>
 			</label>
 			<label class="field">Year <input type="number" bind:value={draft.year} /></label>
