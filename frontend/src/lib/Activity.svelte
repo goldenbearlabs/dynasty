@@ -20,6 +20,10 @@
 				return ['drafted', ''];
 			case 'drop':
 				return ['dropped', ''];
+			case 'sign':
+				return ['signed', 'to the reserve list'];
+			case 'unsigned':
+				return ['did not sign', 'who is now a free agent'];
 			case 'move':
 				return ['moved', `to the ${listName(a)}`];
 			case 'graduated':

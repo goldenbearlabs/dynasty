@@ -51,11 +51,11 @@ func (s *Service) Create(ctx context.Context, dynastyID pgtype.UUID, in NewDraft
 	case name == "":
 		return db.Draft{}, problem.New("The draft needs a name.")
 	case in.Kind != "startup" && in.Kind != "seasonal":
-		return db.Draft{}, problem.New("A draft is either startup or seasonal.")
+		return db.Draft{}, problem.New("A draft is either a startup draft or a rookie draft.")
 	case len(in.LeagueIDs) == 0:
 		return db.Draft{}, problem.New("Pick at least one league to draft.")
 	case in.Kind == "seasonal" && len(in.LeagueIDs) > 1:
-		return db.Draft{}, problem.New("A seasonal draft covers one league. Only a startup draft can combine leagues.")
+		return db.Draft{}, problem.New("A rookie draft covers one league. Only a startup draft can combine leagues.")
 	case in.Rounds < 1 || in.Rounds > 500:
 		return db.Draft{}, problem.New("Rounds must be between 1 and 500.")
 	case in.Order != settings.OrderLinear && in.Order != settings.OrderSnake:
@@ -74,6 +74,16 @@ func (s *Service) Create(ctx context.Context, dynastyID pgtype.UUID, in NewDraft
 			league, err := q.GetLeague(ctx, id)
 			if err != nil || league.DynastyID != dynastyID {
 				return problem.New("One of those leagues is not in this dynasty.")
+			}
+			if in.Kind == "startup" {
+				// A league is stocked once; every draft after that is a rookie draft.
+				held, err := q.StartupDraftExists(ctx, id)
+				if err != nil {
+					return err
+				}
+				if held {
+					return problem.New("%s has already had its startup draft. Every draft after that is a rookie draft.", league.Name)
+				}
 			}
 			rules, err := settings.Parse[settings.League](league.Settings)
 			if err != nil {
@@ -258,7 +268,7 @@ func (s *Service) CreateFuture(ctx context.Context, dynastyID pgtype.UUID) (int,
 				Kind:             "seasonal",
 				Year:             year,
 				LeagueIDs:        []pgtype.UUID{league.ID},
-				Rounds:           rules.Draft.Rounds,
+				Rounds:           rules.RookieRounds(),
 				Order:            rules.Draft.Order,
 				PickClockSeconds: rules.Draft.PickClockSeconds,
 			}); err != nil {

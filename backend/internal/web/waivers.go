@@ -3,6 +3,8 @@ package web
 import (
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"crossover/internal/db"
 	"crossover/internal/waiver"
 )
@@ -45,6 +47,21 @@ func (s *Server) cancelWaiverClaim(w http.ResponseWriter, r *http.Request, me db
 		return
 	}
 	s.done(w, r, s.Waivers.Cancel(r.Context(), me, id))
+}
+
+// setWaiverOrder is the commissioner's override of a league's waiver order.
+func (s *Server) setWaiverOrder(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		FranchiseIDs []pgtype.UUID `json:"franchise_ids"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	league, ok := s.pathLeague(w, r)
+	if !ok {
+		return
+	}
+	s.done(w, r, s.Waivers.SetOrder(r.Context(), league, body.FranchiseIDs))
 }
 
 // pathLeague loads the league named in the path, answering the request

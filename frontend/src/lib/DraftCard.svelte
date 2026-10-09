@@ -22,7 +22,7 @@
 	</div>
 	<strong class="name">{draft.name}</strong>
 	<span class="muted small-text">
-		{draft.kind === 'startup' ? 'Startup' : 'Seasonal'} · {draft.year} · {draft.picks_made} of {draft.picks} picks made
+		{draft.kind === 'startup' ? 'Startup' : 'Rookie draft'} · {draft.year} · {draft.picks_made} of {draft.picks} picks made
 	</span>
 </a>
 

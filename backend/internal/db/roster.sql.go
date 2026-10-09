@@ -32,7 +32,7 @@ func (q *Queries) DeleteRosterEntry(ctx context.Context, arg DeleteRosterEntryPa
 }
 
 const getRosterEntry = `-- name: GetRosterEntry :one
-select league_id, franchise_id, player_id, list, acquired_via, acquired_at, reserved_at from roster_entries where league_id = $1 and player_id = $2
+select league_id, franchise_id, player_id, list, acquired_via, acquired_at, reserved_at, rights_until, rookie from roster_entries where league_id = $1 and player_id = $2
 `
 
 type GetRosterEntryParams struct {
@@ -51,6 +51,8 @@ func (q *Queries) GetRosterEntry(ctx context.Context, arg GetRosterEntryParams) 
 		&i.AcquiredVia,
 		&i.AcquiredAt,
 		&i.ReservedAt,
+		&i.RightsUntil,
+		&i.Rookie,
 	)
 	return i, err
 }
@@ -179,8 +181,47 @@ func (q *Queries) ListActivity(ctx context.Context, arg ListActivityParams) ([]L
 	return items, nil
 }
 
+const listExpiredRights = `-- name: ListExpiredRights :many
+select r.league_id, r.franchise_id, r.player_id, f.dynasty_id
+from roster_entries r
+join franchises f on f.id = r.franchise_id
+where r.list = 'rights' and r.rights_until <= now()
+`
+
+type ListExpiredRightsRow struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	DynastyID   pgtype.UUID `json:"dynasty_id"`
+}
+
+func (q *Queries) ListExpiredRights(ctx context.Context) ([]ListExpiredRightsRow, error) {
+	rows, err := q.db.Query(ctx, listExpiredRights)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpiredRightsRow{}
+	for rows.Next() {
+		var i ListExpiredRightsRow
+		if err := rows.Scan(
+			&i.LeagueID,
+			&i.FranchiseID,
+			&i.PlayerID,
+			&i.DynastyID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFranchiseRoster = `-- name: ListFranchiseRoster :many
-select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at,
+select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie,
        p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(n.nickname, '')::text as nickname
@@ -198,6 +239,8 @@ type ListFranchiseRosterRow struct {
 	AcquiredVia string             `json:"acquired_via"`
 	AcquiredAt  pgtype.Timestamptz `json:"acquired_at"`
 	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
+	RightsUntil pgtype.Timestamptz `json:"rights_until"`
+	Rookie      bool               `json:"rookie"`
 	PlayerID    pgtype.UUID        `json:"player_id"`
 	FullName    string             `json:"full_name"`
 	Positions   []string           `json:"positions"`
@@ -226,6 +269,8 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 			&i.AcquiredVia,
 			&i.AcquiredAt,
 			&i.ReservedAt,
+			&i.RightsUntil,
+			&i.Rookie,
 			&i.PlayerID,
 			&i.FullName,
 			&i.Positions,
@@ -248,7 +293,7 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 }
 
 const listRosterEntries = `-- name: ListRosterEntries :many
-select r.player_id, r.list, p.status, coalesce(t.conference, '')::text as conference
+select r.player_id, r.list, r.rookie, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
@@ -263,6 +308,7 @@ type ListRosterEntriesParams struct {
 type ListRosterEntriesRow struct {
 	PlayerID   pgtype.UUID `json:"player_id"`
 	List       string      `json:"list"`
+	Rookie     bool        `json:"rookie"`
 	Status     string      `json:"status"`
 	Conference string      `json:"conference"`
 }
@@ -280,6 +326,7 @@ func (q *Queries) ListRosterEntries(ctx context.Context, arg ListRosterEntriesPa
 		if err := rows.Scan(
 			&i.PlayerID,
 			&i.List,
+			&i.Rookie,
 			&i.Status,
 			&i.Conference,
 		); err != nil {
@@ -310,13 +357,15 @@ func (q *Queries) LockFranchiseRoster(ctx context.Context, arg LockFranchiseRost
 }
 
 const setRosterList = `-- name: SetRosterList :exec
-update roster_entries set list = $1, reserved_at = $2
-where league_id = $3 and franchise_id = $4 and player_id = $5
+update roster_entries set list = $1, reserved_at = $2, rookie = $3,
+       rights_until = case when $1::text = 'rights' then rights_until end
+where league_id = $4 and franchise_id = $5 and player_id = $6
 `
 
 type SetRosterListParams struct {
 	List        string             `json:"list"`
 	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
+	Rookie      bool               `json:"rookie"`
 	LeagueID    pgtype.UUID        `json:"league_id"`
 	FranchiseID pgtype.UUID        `json:"franchise_id"`
 	PlayerID    pgtype.UUID        `json:"player_id"`
@@ -326,9 +375,28 @@ func (q *Queries) SetRosterList(ctx context.Context, arg SetRosterListParams) er
 	_, err := q.db.Exec(ctx, setRosterList,
 		arg.List,
 		arg.ReservedAt,
+		arg.Rookie,
 		arg.LeagueID,
 		arg.FranchiseID,
 		arg.PlayerID,
 	)
+	return err
+}
+
+const startSigningWindow = `-- name: StartSigningWindow :exec
+update roster_entries set rights_until = $1
+where list = 'rights' and rights_until is null
+  and league_id in (select league_id from draft_leagues where draft_id = $2)
+`
+
+type StartSigningWindowParams struct {
+	RightsUntil pgtype.Timestamptz `json:"rights_until"`
+	DraftID     pgtype.UUID        `json:"draft_id"`
+}
+
+// When a rookie draft ends, every pick still unsigned in its leagues gets
+// the same deadline.
+func (q *Queries) StartSigningWindow(ctx context.Context, arg StartSigningWindowParams) error {
+	_, err := q.db.Exec(ctx, startSigningWindow, arg.RightsUntil, arg.DraftID)
 	return err
 }

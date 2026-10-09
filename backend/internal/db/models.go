@@ -40,6 +40,7 @@ type DraftPick struct {
 	PickedAt            pgtype.Timestamptz `json:"picked_at"`
 	AutoPicked          bool               `json:"auto_picked"`
 	SkippedAt           pgtype.Timestamptz `json:"skipped_at"`
+	PassedAt            pgtype.Timestamptz `json:"passed_at"`
 }
 
 type DraftQueue struct {
@@ -222,6 +223,8 @@ type RosterEntry struct {
 	AcquiredVia string             `json:"acquired_via"`
 	AcquiredAt  pgtype.Timestamptz `json:"acquired_at"`
 	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
+	RightsUntil pgtype.Timestamptz `json:"rights_until"`
+	Rookie      bool               `json:"rookie"`
 }
 
 type Season struct {
@@ -309,4 +312,11 @@ type WaiverClaim struct {
 	Reason       string             `json:"reason"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	ResolvedAt   pgtype.Timestamptz `json:"resolved_at"`
+	List         string             `json:"list"`
+}
+
+type WaiverOrder struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Position    int32       `json:"position"`
 }

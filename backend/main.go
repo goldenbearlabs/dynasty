@@ -94,6 +94,22 @@ func run(log *slog.Logger) error {
 	// Players come off waivers a minute or less after their time is up.
 	waivers := waiver.NewService(pool, log)
 	go waivers.Run(ctx, time.Minute)
+	// Rookie-draft picks not signed in time are released, checked as often.
+	go func() {
+		for tick := time.NewTicker(time.Minute); ; {
+			if n, err := rosters.ReleaseUnsigned(ctx); err != nil && ctx.Err() == nil {
+				log.Error("release unsigned picks", "err", err)
+			} else if n > 0 {
+				log.Info("released unsigned picks", "players", n)
+			}
+			select {
+			case <-ctx.Done():
+				tick.Stop()
+				return
+			case <-tick.C:
+			}
+		}
+	}()
 
 	schedule := cron.New()
 	// Rosters refresh daily and prospects weekly, one competition after another.

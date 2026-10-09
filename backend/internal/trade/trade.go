@@ -312,7 +312,7 @@ func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []
 		league := leagues[slices.IndexFunc(leagues, func(l db.League) bool { return l.ID == key.league })]
 		var before, after []roster.Entry
 		for _, r := range rows {
-			entry := roster.Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", StarterIneligible: !rules[key.league].CanStart(league.Competition, r.Conference)}
+			entry := roster.Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, StarterIneligible: !rules[key.league].CanStart(league.Competition, r.Conference)}
 			before = append(before, entry)
 			leaving := slices.ContainsFunc(items, func(i Item) bool {
 				return i.PlayerID == r.PlayerID && i.LeagueID == key.league && i.From == key.franchise
@@ -336,7 +336,7 @@ func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []
 				if err != nil {
 					return false, err
 				}
-				after = append(after, roster.Entry{PlayerID: item.PlayerID, List: arriving.List, Prospect: player.Status == "prospect", StarterIneligible: !rules[key.league].CanStart(league.Competition, conference)})
+				after = append(after, roster.Entry{PlayerID: item.PlayerID, List: arriving.List, Prospect: player.Status == "prospect", Rookie: arriving.Rookie, StarterIneligible: !rules[key.league].CanStart(league.Competition, conference)})
 			}
 		}
 		if err := roster.Check(rules[key.league].Roster, before, after); err != nil {

@@ -8,7 +8,7 @@ import (
 
 func nhl(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 18, 8 // 13 starters and 5 on the bench
+	rules.Roster.Main, rules.Roster.Reserve = 18, 10 // 13 starters and 5 on the bench
 	rules.Lineup.Slots = []settings.Slot{
 		slot("F", 8, "C", "L", "R"),
 		slot("D", 4, "D"),

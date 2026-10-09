@@ -156,6 +156,7 @@ func TestLeagueFlow(t *testing.T) {
 
 	nba, _ := registry.Get("nba")
 	cbb, _ := registry.Get("cbb")
+	nba.Defaults.Roster.ReserveEligibility = "prospects_only" // this walk-through starts from the stricter rule and relaxes it
 	setup := dynasty.Setup{
 		Name: "Test Dynasty",
 		Leagues: []dynasty.LeagueSetup{

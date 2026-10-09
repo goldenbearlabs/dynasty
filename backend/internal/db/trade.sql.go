@@ -368,7 +368,7 @@ func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trad
 }
 
 const lockDraftPick = `-- name: LockDraftPick :one
-select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current_franchise_id, k.player_id, k.league_id, k.picked_at, k.auto_picked, k.skipped_at, d.status as draft_status
+select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current_franchise_id, k.player_id, k.league_id, k.picked_at, k.auto_picked, k.skipped_at, k.passed_at, d.status as draft_status
 from draft_picks k
 join drafts d on d.id = k.draft_id
 where k.id = $1
@@ -387,6 +387,7 @@ type LockDraftPickRow struct {
 	PickedAt            pgtype.Timestamptz `json:"picked_at"`
 	AutoPicked          bool               `json:"auto_picked"`
 	SkippedAt           pgtype.Timestamptz `json:"skipped_at"`
+	PassedAt            pgtype.Timestamptz `json:"passed_at"`
 	DraftStatus         string             `json:"draft_status"`
 }
 
@@ -406,6 +407,7 @@ func (q *Queries) LockDraftPick(ctx context.Context, id pgtype.UUID) (LockDraftP
 		&i.PickedAt,
 		&i.AutoPicked,
 		&i.SkippedAt,
+		&i.PassedAt,
 		&i.DraftStatus,
 	)
 	return i, err

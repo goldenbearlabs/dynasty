@@ -27,8 +27,9 @@ export type LeagueSettings = {
 	/** weekly_limit: acquisitions a franchise may make in a week; 0 for no limit. */
 	free_agency: { mode: 'open' | 'closed'; new_entrants_draft_only: boolean; weekly_limit: number };
 	/** What happens to a dropped player: days on waivers, and how claims are ordered. */
-	waivers: { mode: 'none' | 'rolling' | 'faab'; days: number; budget: number };
-	draft: { rounds: number; order: 'linear' | 'snake'; pick_clock_seconds: number; future_years: number };
+	waivers: { mode: 'none' | 'rolling' | 'faab'; hours: number; budget: number };
+	/** rounds 0 means half the reserve list, rounded up. signing_days: how long picks can be signed after a rookie draft. */
+	draft: { rounds: number; order: 'linear' | 'snake'; pick_clock_seconds: number; future_years: number; signing_days: number };
 	trades: { deadline: string; approval: 'none' | 'commissioner' };
 	continuity: { into: string; land_on: List } | null;
 };
@@ -39,7 +40,8 @@ export type DynastySettings = {
 
 // ---- data ----
 
-export type List = 'main' | 'reserve';
+/** "rights" is a rookie-draft pick not yet signed: owned, but on neither list. */
+export type List = 'main' | 'reserve' | 'rights';
 
 export type Competition = {
 	conferences: { id: string; name: string }[] | null;
@@ -263,7 +265,12 @@ export type RosterPlayer = {
 	team_abbrev: string;
 	/** Set while a reserve lock keeps him off the main roster. */
 	locked_until: string | null;
+	/** For a rookie-draft pick held as rights: when he is released if not signed. Null until the draft ends. */
+	rights_until: string | null;
 };
+
+/** How many rounds a league's rookie draft has: its own number, or half the reserve list, rounded up. */
+export const rookieRounds = (rules: LeagueSettings) => rules.draft.rounds || Math.max(1, Math.ceil(rules.roster.reserve / 2));
 
 export type LeagueRoster = {
  team_name: string; image_url: string;
@@ -570,6 +577,8 @@ export type DraftPick = {
 	picked_at: string | null;
 	auto_picked: boolean;
 	skipped_at: string | null;
+	/** Set when the owner gave the pick up in a rookie draft: it cannot be made later. */
+	passed_at: string | null;
 	player_name: string;
 	player_positions: string[];
 	player_headshot: string;
@@ -667,6 +676,7 @@ export type Waivers = {
 		id: string;
 		player_id: string;
 		bid: number;
+		list: 'main' | 'reserve';
 		status: 'pending' | 'won' | 'lost';
 		reason: string;
 		player_name: string;
@@ -675,7 +685,7 @@ export type Waivers = {
 		resolved_at: string | null;
 	}[];
 };
-export type WaiverClaim = { player_id: string; drop_player_id?: string; bid: number };
+export type WaiverClaim = { player_id: string; drop_player_id?: string; bid: number; list?: 'main' | 'reserve' };
 
 export type RosterChange = { player_id: string; list?: List; franchise_id?: string; force?: boolean };
 
@@ -759,6 +769,8 @@ export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move', 
 export const getWaivers = (leagueId: string) => request<Waivers>('GET', `/leagues/${leagueId}/waivers`);
 export const claimWaiver = (leagueId: string, claim: WaiverClaim) =>
 	request<void>('POST', `/leagues/${leagueId}/waivers/claims`, claim);
+export const setWaiverOrder = (leagueId: string, franchise_ids: string[]) =>
+	request<void>('PUT', `/admin/leagues/${leagueId}/waiver-order`, { franchise_ids });
 export const cancelWaiverClaim = (id: string) => request<void>('DELETE', `/waivers/claims/${id}`);
 export const getActivity = () => request<Activity[]>('GET', '/activity');
 
@@ -788,6 +800,7 @@ export const getDrafts = () => orNull(request<DraftSummary[]>('GET', '/drafts'))
 export const getDraft = (id: string) => request<DraftState>('GET', `/drafts/${id}`);
 export const makePick = (id: string, pick: { player_id: string; list: List; pick_id?: string }) =>
 	request<void>('POST', `/drafts/${id}/pick`, pick);
+export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
 

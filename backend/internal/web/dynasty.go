@@ -67,8 +67,22 @@ func (s *Server) createDynasty(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.futureDrafts(r)
 	s.signIn(w, r, commissioner)
 	w.WriteHeader(http.StatusCreated)
+}
+
+// futureDrafts makes sure every league has its coming rookie drafts on the
+// books, so their picks exist and can be traded from the first day. The
+// request that needed them does not fail if this does.
+func (s *Server) futureDrafts(r *http.Request) {
+	d, err := s.Queries.GetDynasty(r.Context())
+	if err == nil {
+		_, err = s.Drafts.CreateFuture(r.Context(), d.ID)
+	}
+	if err != nil {
+		s.Log.Warn("create future drafts", "err", err)
+	}
 }
 
 // addLeague starts a league in one more sport for the existing dynasty.
@@ -89,6 +103,7 @@ func (s *Server) addLeague(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.futureDrafts(r)
 	writeJSON(w, http.StatusCreated, league)
 }
 

@@ -78,6 +78,16 @@ func (s *Server) makePick(w http.ResponseWriter, r *http.Request, me db.Franchis
 	s.done(w, r, err)
 }
 
+// passPick gives up the pick on the clock in a rookie draft.
+func (s *Server) passPick(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.done(w, r, s.Drafts.Pass(r.Context(), id, me))
+}
+
 func (s *Server) getQueue(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	id, err := pathID(r, "id")
 	if err != nil {

@@ -31,7 +31,7 @@
 			.toSorted((a, b) => a.position - b.position)
 			.filter((p) => p.current_franchise_id === myId && !p.player_id)
 	);
-	const next = $derived(mine.find((p) => !p.skipped_at) ?? mine[0]);
+	const next = $derived(mine.find((p) => !p.skipped_at && !p.passed_at) ?? mine[0]);
 	let board: HTMLDivElement;
 	let focused = false;
 	$effect(() => {
@@ -102,9 +102,11 @@
 								{:else}<span class="pending"
 										>{pick.id === onClockId
 											? 'On the clock'
-											: pick.skipped_at
-												? 'Skipped · owed'
-												: 'Upcoming'}</span
+											: pick.passed_at
+												? 'Passed'
+												: pick.skipped_at
+													? 'Skipped · owed'
+													: 'Upcoming'}</span
 									>{/if}
 								{#if pick.original_franchise_id !== pick.current_franchise_id}<span
 										class="via"

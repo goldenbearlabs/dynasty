@@ -67,7 +67,10 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 	case Waivers:
 		kind = "claim"
 	}
-	return apply(ctx, q, c, kind, true, func(rules settings.League, roster []Entry) ([]Entry, error) {
+	// A rookie-draft pick is held on no list, so no limit can refuse it: not
+	// even for a franchise that is over its limits already.
+	checked := c.List != settings.ListRights
+	return apply(ctx, q, c, kind, checked, func(rules settings.League, roster []Entry) ([]Entry, error) {
 		player, err := q.GetPlayer(ctx, c.PlayerID)
 		if err != nil {
 			return nil, err
@@ -141,16 +144,59 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 		}); err != nil {
 			return nil, err
 		}
-		if rules.Waivers.Mode != settings.WaiversNone {
-			if err := q.PutOnWaivers(ctx, db.PutOnWaiversParams{
-				LeagueID: c.League.ID, PlayerID: c.PlayerID,
-				ClearsAt: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, rules.Waivers.Days), Valid: true},
-			}); err != nil {
-				return nil, err
-			}
+		// Whoever is released, from whichever list, waits on waivers first.
+		if err := waive(ctx, q, rules, c.League.ID, c.PlayerID); err != nil {
+			return nil, err
 		}
 		return slices.Delete(roster, i, i+1), lineup.Bench(ctx, q, c.League.ID, c.Franchise.ID, c.PlayerID)
 	})
+}
+
+// waive puts a released player on waivers for as long as the league's rule
+// says, in the caller's transaction. A league without waivers skips it.
+func waive(ctx context.Context, q *db.Queries, rules settings.League, leagueID, playerID pgtype.UUID) error {
+	if rules.Waivers.Mode == settings.WaiversNone {
+		return nil
+	}
+	clears := time.Now().Add(time.Duration(rules.Waivers.Hours) * time.Hour)
+	return q.PutOnWaivers(ctx, db.PutOnWaiversParams{
+		LeagueID: leagueID, PlayerID: playerID, ClearsAt: pgtype.Timestamptz{Time: clears, Valid: true},
+	})
+}
+
+// ReleaseUnsigned releases every rookie-draft pick whose time to be signed
+// has run out, onto waivers. It reports how many were released.
+func (s *Service) ReleaseUnsigned(ctx context.Context) (int, error) {
+	expired, err := db.New(s.pool).ListExpiredRights(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range expired {
+		err := db.InTx(ctx, s.pool, func(q *db.Queries) error {
+			if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{LeagueID: e.LeagueID, FranchiseID: e.FranchiseID, PlayerID: e.PlayerID}); err != nil {
+				return err
+			}
+			league, err := q.GetLeague(ctx, e.LeagueID)
+			if err != nil {
+				return err
+			}
+			rules, err := settings.Parse[settings.League](league.Settings)
+			if err != nil {
+				return err
+			}
+			if err := waive(ctx, q, rules, e.LeagueID, e.PlayerID); err != nil {
+				return err
+			}
+			return q.InsertTransaction(ctx, db.InsertTransactionParams{
+				DynastyID: e.DynastyID, LeagueID: e.LeagueID, FranchiseID: e.FranchiseID,
+				Kind: "unsigned", PlayerID: e.PlayerID, Detail: json.RawMessage(`{}`),
+			})
+		})
+		if err != nil {
+			return 0, err
+		}
+	}
+	return len(expired), nil
 }
 
 // Acquisitions counts the players a franchise has acquired for itself in
@@ -183,7 +229,12 @@ func underWeeklyLimit(ctx context.Context, q *db.Queries, rules settings.League,
 // league's reserve lock, and cannot bring him back until it runs out.
 func (s *Service) Move(ctx context.Context, c Change) error {
 	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
-		return apply(ctx, q, c, "move", true, func(rules settings.League, roster []Entry) ([]Entry, error) {
+		// Signing a rookie-draft pick is a move too, recorded under its own name.
+		kind := "move"
+		if held, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: c.League.ID, PlayerID: c.PlayerID}); err == nil && held.List == settings.ListRights {
+			kind = "sign"
+		}
+		return apply(ctx, q, c, kind, true, func(rules settings.League, roster []Entry) ([]Entry, error) {
 			i := index(roster, c.PlayerID)
 			if i < 0 {
 				return nil, problem.New("That player is not on this roster.")
@@ -194,20 +245,26 @@ func (s *Service) Move(ctx context.Context, c Change) error {
 			}
 			managed := c.Source != Commissioner
 			reserved := entry.ReservedAt // unchanged unless he changes lists
+			rookie := entry.Rookie
 			switch {
 			case c.List == entry.List:
+			case entry.List == settings.ListRights:
+				// Signing a rookie-draft pick, to either list if it has room. On
+				// the reserve list he may stay whatever the league's rule for it.
+				rookie = c.List == settings.ListReserve
 			case c.List == settings.ListReserve:
 				reserved = reservedNow(managed && !roster[i].Prospect)
 			default:
+				rookie = false // once on the main roster he is a rookie no longer
 				if until := LockedUntil(rules.Roster, entry.ReservedAt); managed && time.Now().Before(until) {
 					return nil, problem.New("This player is locked on the reserve list until %s.", sportsday.Clock(until))
 				}
 				reserved = pgtype.Timestamptz{}
 			}
 
-			roster[i].List = c.List
+			roster[i].List, roster[i].Rookie = c.List, rookie
 			if err := q.SetRosterList(ctx, db.SetRosterListParams{
-				LeagueID: c.League.ID, FranchiseID: c.Franchise.ID, PlayerID: c.PlayerID, List: c.List, ReservedAt: reserved,
+				LeagueID: c.League.ID, FranchiseID: c.Franchise.ID, PlayerID: c.PlayerID, List: c.List, ReservedAt: reserved, Rookie: rookie,
 			}); err != nil {
 				return nil, err
 			}
@@ -225,7 +282,9 @@ func (s *Service) Move(ctx context.Context, c Change) error {
 func apply(ctx context.Context, q *db.Queries, c Change, kind string, checked bool,
 	edit func(rules settings.League, roster []Entry) ([]Entry, error)) error {
 
-	if kind != "drop" && c.List != settings.ListMain && c.List != settings.ListReserve {
+	// Only a rookie-draft pick arrives as rights; nobody is moved there.
+	rights := c.List == settings.ListRights && c.Source == Draft && kind == "pick"
+	if kind != "drop" && c.List != settings.ListMain && c.List != settings.ListReserve && !rights {
 		return problem.New("List must be main or reserve.")
 	}
 	rules, err := settings.Parse[settings.League](c.League.Settings)
@@ -244,7 +303,7 @@ func apply(ctx context.Context, q *db.Queries, c Change, kind string, checked bo
 	}
 	before := make([]Entry, len(rows))
 	for i, r := range rows {
-		before[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", StarterIneligible: !rules.CanStart(c.League.Competition, r.Conference)}
+		before[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, StarterIneligible: !rules.CanStart(c.League.Competition, r.Conference)}
 	}
 
 	after, err := edit(rules, slices.Clone(before))

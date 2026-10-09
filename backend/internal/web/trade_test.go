@@ -115,13 +115,15 @@ func TestTradeFlow(t *testing.T) {
 	// --- future drafts give everyone picks to trade ------------------------
 	var made struct{ Created int }
 	bob.want(http.StatusForbidden, "POST", "/api/admin/drafts/future", nil, nil)
-	ann.want(http.StatusCreated, "POST", "/api/admin/drafts/future", nil, &made)
-	if made.Created != 6 { // three years ahead for each of two leagues
-		t.Fatalf("created %d future drafts, want 6", made.Created)
+	// They were created with the dynasty: three years ahead for each of two leagues.
+	var listed []struct{ Kind string }
+	ann.want(http.StatusOK, "GET", "/api/drafts", nil, &listed)
+	if len(listed) != 6 {
+		t.Fatalf("a new dynasty has %d drafts on the books, want 6", len(listed))
 	}
 	ann.want(http.StatusCreated, "POST", "/api/admin/drafts/future", nil, &made)
 	if made.Created != 0 {
-		t.Fatalf("a second run created %d more drafts, want none", made.Created)
+		t.Fatalf("asking again created %d more drafts, want none", made.Created)
 	}
 
 	type heldPick struct {

@@ -43,9 +43,9 @@ where ($1::text = '' or p.competition = $1)
         and p.competition = (select l.competition from leagues l where l.id = $4)))
   and ($5::uuid is null or (
         r.player_id is null
-        and p.competition in (select l.competition from draft_leagues dl
-                              join leagues l on l.id = dl.league_id
-                              where dl.draft_id = $5)))
+        and exists (select 1 from draft_leagues dl
+                    join leagues l on l.id = dl.league_id
+                    where dl.draft_id = $5 and l.competition = p.competition)))
 `
 
 type CountPlayersParams struct {
@@ -579,7 +579,7 @@ func (q *Queries) ListPlayerHistory(ctx context.Context, arg ListPlayerHistoryPa
 }
 
 const listPlayerRosterEntries = `-- name: ListPlayerRosterEntries :many
-select re.league_id, re.franchise_id, re.player_id, re.list, re.acquired_via, re.acquired_at, re.reserved_at from roster_entries re where re.player_id = $1
+select re.league_id, re.franchise_id, re.player_id, re.list, re.acquired_via, re.acquired_at, re.reserved_at, re.rights_until, re.rookie from roster_entries re where re.player_id = $1
 `
 
 func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.UUID) ([]RosterEntry, error) {
@@ -599,6 +599,8 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 			&i.AcquiredVia,
 			&i.AcquiredAt,
 			&i.ReservedAt,
+			&i.RightsUntil,
+			&i.Rookie,
 		); err != nil {
 			return nil, err
 		}
@@ -666,9 +668,9 @@ where ($1::text = '' or p.competition = $1)
         and p.competition = (select l.competition from leagues l where l.id = $4)))
   and ($5::uuid is null or (
         r.player_id is null
-        and p.competition in (select l.competition from draft_leagues dl
-                              join leagues l on l.id = dl.league_id
-                              where dl.draft_id = $5)))
+        and exists (select 1 from draft_leagues dl
+                    join leagues l on l.id = dl.league_id
+                    where dl.draft_id = $5 and l.competition = p.competition)))
 order by case $6::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
