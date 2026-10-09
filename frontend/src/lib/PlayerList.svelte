@@ -2,7 +2,7 @@
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
 	import { untrack, type Snippet } from 'svelte';
-	import { getPlayers, type Player, type PlayerPage } from '#lib/api.ts';
+	import { getPlayers, getStatSeasons, type Player, type PlayerPage, type StatSeason } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -20,7 +20,11 @@
 		action?: Snippet<[Player]>;
 		/** Change this to reload the current page, e.g. after a roster move. */
 		version?: number;
-		/** Start sorted by last season's fantasy points, with a control to switch to names. */
+		/**
+		 * Rank by a season's fantasy points: highest first, with controls for the
+		 * season and the order. One sport is ordered by its points; a list of
+		 * several sports by the index that makes them comparable.
+		 */
 		byPoints?: boolean;
 		/** Compact rows with a name button that opens inline research. */
 		compact?: boolean;
@@ -43,7 +47,21 @@
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
 	let availableOnly = $state(false);
-	let order = $state(untrack(() => (byPoints ? 'points' : 'name')));
+	const usual = () => (!byPoints ? 'name' : competition ? 'points' : 'index');
+	let order = $state(untrack(usual));
+	let chose = false; // whether the order was picked by hand, and so is kept
+	let seasonBack = $state(0);
+	let seasons = $state<StatSeason[]>([]);
+	if (untrack(() => byPoints)) getStatSeasons().then((s) => (seasons = s), () => {});
+	// One sport offers its own seasons by name; several sports can only count back.
+	const seasonChoices = $derived.by(() => {
+		if (competition) return seasons.filter((s) => s.competition === competition).map((s) => s.label);
+		const deepest = Math.max(0, ...Object.values(Object.groupBy(seasons, (s) => s.competition)).map((list) => list!.length));
+		return Array.from({ length: Math.min(deepest, 10) }, (_, back) =>
+			back === 0 ? 'Latest season' : `${back} ${back === 1 ? 'season' : 'seasons'} back`
+		);
+	});
+	const ranked = $derived(order !== 'name');
 	const fantasyPoints = (n: number) => Math.round(n).toLocaleString();
 	let page = $state(1);
 
@@ -68,6 +86,8 @@
 		if (competition !== shown) {
 			shown = competition;
 			page = 1;
+			seasonBack = 0;
+			if (!chose) order = usual();
 		}
 	});
 
@@ -82,7 +102,8 @@
 			q: query,
 			page,
 			draft_id: draftId,
-			sort: order === 'points' ? 'points' : undefined,
+			sort: ranked ? order : undefined,
+			season_back: ranked && seasonBack > 0 ? seasonBack : undefined,
 			available_in: availableOnly ? leagueId : undefined
 		})
 			.then((data) => {
@@ -118,10 +139,23 @@
 			<option value="inactive">Inactive</option>
 		</select>
 		{#if byPoints}
-			<select aria-label="Order" bind:value={order} onchange={() => (page = 1)}>
-				<option value="points">Last season's points</option>
-				<option value="name">Name</option>
+			<select
+				aria-label="Order"
+				bind:value={order}
+				onchange={() => {
+					chose = true;
+					page = 1;
+				}}
+			>
+				<option value="points">By fantasy points</option>
+				<option value="index">By league index</option>
+				<option value="name">By name</option>
 			</select>
+			{#if ranked && seasonChoices.length > 0}
+				<select aria-label="Season" bind:value={seasonBack} onchange={() => (page = 1)}>
+					{#each seasonChoices as label, back (back)}<option value={back}>{label}</option>{/each}
+				</select>
+			{/if}
 		{/if}
 		{#if leagueId && !draftId}
 			<label class="check">
@@ -144,7 +178,7 @@
 							<th>Player</th>
 							<th>Pos</th>
 							{#if !compact}<th class="wide">Team</th><th class="wide num">Age</th>{/if}
-							{#if !compact && order === 'points'}<th class="num">Last season</th>{/if}
+							{#if !compact && ranked}<th class="num">Points</th><th class="num" title="100 is the average rostered player; 15 is one standard deviation">Index</th>{/if}
 							<th class="num"
 								>{result.total.toLocaleString()} {result.total === 1 ? 'player' : 'players'}</th
 							>
@@ -176,7 +210,11 @@
 											</div>
 											{#if compact}<div class="muted small-text">
 													{player.team_abbrev || player.team_name || 'No team'} · {player.status}
-													{#if order === 'points' && player.last_points}· <strong>{fantasyPoints(player.last_points)}</strong> pts{/if}
+													{#if ranked && player.season}
+														· <strong>{fantasyPoints(player.season_points)}</strong> pts
+														{#if player.season_index}· <span title="League index: 100 is the average rostered player, 15 is one standard deviation">index <strong>{Math.round(player.season_index)}</strong></span>{/if}
+														{#if !competition}· {player.season}{/if}
+													{/if}
 												</div>{:else if player.note}<div class="muted small-text">
 													{player.note}
 												</div>{/if}
@@ -186,7 +224,8 @@
 								<td>{player.positions.join('/')}</td>
 								{#if !compact}<td class="wide muted" title={player.team_name}>{player.team_name}</td
 									><td class="wide num">{age(player.birth_date)}</td>{/if}
-								{#if !compact && order === 'points'}<td class="num">{player.last_points ? fantasyPoints(player.last_points) : ''}</td>{/if}
+								{#if !compact && ranked}<td class="num">{player.season ? fantasyPoints(player.season_points) : ''}</td
+									><td class="num">{player.season_index ? Math.round(player.season_index) : ''}</td>{/if}
 								<td class="actions">
 									{#if player.owner_slug}
 										<a class="small-text" href="/franchise/{player.owner_slug}"

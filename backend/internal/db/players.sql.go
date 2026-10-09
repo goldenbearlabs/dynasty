@@ -598,17 +598,32 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 }
 
 const listPlayers = `-- name: ListPlayers :many
-with reference as materialized ( -- worked out once, not once per player
-  select distinct on (competition) competition, year
-  from (
-    select competition, year, sum(games) as played,
-           row_number() over (partition by competition order by year desc) as recency
-    from player_seasons
-    where league = ''
-    group by competition, year
-  ) recent
-  where recency <= 2
-  order by competition, played desc
+with seasons as (
+  select distinct competition, year from player_seasons where league = ''
+), reference as materialized (
+  -- the season with exactly season_back newer ones in its sport
+  select s.competition, s.year from seasons s
+  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $9::int
+), scored as materialized (
+  select ps.player_id, ps.competition, max(ps.label)::text as label,
+         sum(stat.value::numeric * rule.value::numeric) as points
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  join leagues l on l.competition = ps.competition
+  cross join lateral jsonb_each_text(ps.stats) stat
+  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
+  where ps.league = '' and ($1::text = '' or ps.competition = $1)
+  group by ps.player_id, ps.competition
+), rostered as materialized (
+  -- The players a league would hold, by points: what "average" is measured on.
+  select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
+  from (select sc.competition, sc.points,
+               row_number() over (partition by sc.competition order by sc.points desc) as place
+        from scored sc) placed
+  join leagues l on l.competition = placed.competition
+  where placed.place <= greatest(1, (l.settings->'roster'->>'main')::int
+                                    * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id))
+  group by placed.competition
 )
 select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
@@ -617,21 +632,16 @@ select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
        w.clears_at                  as waiver_until,
-       coalesce(last.points, 0)::float8 as last_points
+       coalesce(sc.label, '')::text     as season,
+       coalesce(sc.points, 0)::float8   as season_points,
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
-left join lateral (
-  select sum(stat.value::numeric * rule.value::numeric) as points
-  from player_seasons ps
-  join reference on reference.competition = ps.competition and reference.year = ps.year
-  join leagues l on l.competition = ps.competition
-  cross join lateral jsonb_each_text(ps.stats) stat
-  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
-  where ps.player_id = p.id and ps.competition = p.competition and ps.league = ''
-) last on true
+left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
+left join rostered         on rostered.competition = p.competition
 where ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
@@ -643,7 +653,11 @@ where ($1::text = '' or p.competition = $1)
         and p.competition in (select l.competition from draft_leagues dl
                               join leagues l on l.id = dl.league_id
                               where dl.draft_id = $5)))
-order by case when $6::boolean then coalesce(last.points, 0) end desc nulls last, p.full_name, p.id
+order by case $6::text
+           when 'points' then sc.points
+           when 'index' then case when rostered.spread > 0 then (sc.points - rostered.mean) / rostered.spread end
+         end desc nulls last,
+         p.full_name, p.id
 limit $8 offset $7
 `
 
@@ -653,9 +667,10 @@ type ListPlayersParams struct {
 	Search      string      `json:"search"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
-	ByPoints    bool        `json:"by_points"`
+	SortBy      string      `json:"sort_by"`
 	PageOffset  int32       `json:"page_offset"`
 	PageSize    int32       `json:"page_size"`
+	SeasonBack  int32       `json:"season_back"`
 }
 
 type ListPlayersRow struct {
@@ -674,17 +689,22 @@ type ListPlayersRow struct {
 	OwnerName     string             `json:"owner_name"`
 	OwnerSlug     string             `json:"owner_slug"`
 	WaiverUntil   pgtype.Timestamptz `json:"waiver_until"`
-	LastPoints    float64            `json:"last_points"`
+	Season        string             `json:"season"`
+	SeasonPoints  float64            `json:"season_points"`
+	SeasonIndex   float64            `json:"season_index"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
 // competition and are on nobody's roster there. draft_id does the same for
 // every league a draft covers.
 //
-// last_points is what each player scored last season under the rules of his
-// sport's league here, and by_points puts the highest first. "Last season"
-// is, of a sport's two most recent seasons, the one with more games played:
-// the season just finished until the new one has overtaken it.
+// Each player comes with one season's fantasy points under the rules of his
+// sport's league here: the sport's most recent season, or one further back
+// (season_back counts how many). season_index puts those points on a scale
+// shared by every sport, so players can be compared across leagues: 100 is
+// the average of the players a league that size would roster (the top
+// franchises x main-roster spots by points), and 15 is one standard
+// deviation among them. sort_by "points" or "index" puts the highest first.
 func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
 	rows, err := q.db.Query(ctx, listPlayers,
 		arg.Competition,
@@ -692,9 +712,10 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		arg.Search,
 		arg.AvailableIn,
 		arg.DraftID,
-		arg.ByPoints,
+		arg.SortBy,
 		arg.PageOffset,
 		arg.PageSize,
+		arg.SeasonBack,
 	)
 	if err != nil {
 		return nil, err
@@ -719,7 +740,9 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.OwnerName,
 			&i.OwnerSlug,
 			&i.WaiverUntil,
-			&i.LastPoints,
+			&i.Season,
+			&i.SeasonPoints,
+			&i.SeasonIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -777,6 +800,41 @@ func (q *Queries) ListRosteredInactive(ctx context.Context, dynastyID pgtype.UUI
 			&i.FranchiseName,
 			&i.FranchiseSlug,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStatSeasons = `-- name: ListStatSeasons :many
+select competition, year, max(label)::text as label
+from player_seasons
+where league = ''
+group by competition, year
+order by competition, year desc
+`
+
+type ListStatSeasonsRow struct {
+	Competition string `json:"competition"`
+	Year        int32  `json:"year"`
+	Label       string `json:"label"`
+}
+
+// The seasons there are stats for in each sport, newest first.
+func (q *Queries) ListStatSeasons(ctx context.Context) ([]ListStatSeasonsRow, error) {
+	rows, err := q.db.Query(ctx, listStatSeasons)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStatSeasonsRow{}
+	for rows.Next() {
+		var i ListStatSeasonsRow
+		if err := rows.Scan(&i.Competition, &i.Year, &i.Label); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -82,7 +82,7 @@ func TestRankings(t *testing.T) {
 	var sorted struct {
 		Players []struct {
 			FullName   string  `json:"full_name"`
-			LastPoints float64 `json:"last_points"`
+			LastPoints float64 `json:"season_points"`
 		}
 	}
 	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba&sort=points", nil, &sorted)
@@ -94,6 +94,27 @@ func TestRankings(t *testing.T) {
 	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba", nil, &sorted)
 	if p := sorted.Players; p[0].FullName != "Zr One" || p[1].FullName != "Zr Three" {
 		t.Fatalf("without a sort = %+v; want them by name", p)
+	}
+	// The index orders one sport the same way, and a season nobody played in scores nothing.
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba&sort=index", nil, &sorted)
+	if p := sorted.Players; p[0].FullName != "Zr Three" || p[1].FullName != "Zr One" {
+		t.Fatalf("by index = %+v; want the same order as by points", p)
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zr+&competition=nba&sort=points&season_back=40", nil, &sorted)
+	if p := sorted.Players; len(p) != 3 || p[0].LastPoints != 0 || p[0].FullName != "Zr One" {
+		t.Fatalf("in a season long before any stats = %+v; want no points and name order", p)
+	}
+	var seasons []struct {
+		Competition, Label string
+		Year               int
+	}
+	ann.want(http.StatusOK, "GET", "/api/stat-seasons", nil, &seasons)
+	found := false
+	for _, season := range seasons {
+		found = found || (season.Competition == "nba" && season.Year == 2026 && season.Label == "2025-26")
+	}
+	if !found {
+		t.Fatalf("stat seasons = %+v; want the NBA's 2025-26 among them", seasons)
 	}
 
 	draft := func(name, kind, competition string) string {

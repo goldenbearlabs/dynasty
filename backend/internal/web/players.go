@@ -107,6 +107,20 @@ func (s *Server) listCompetitions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+// listStatSeasons names the seasons there are stats for in each sport,
+// newest first, so a list of players can be put in any of them.
+func (s *Server) listStatSeasons(w http.ResponseWriter, r *http.Request) {
+	seasons, err := s.Queries.ListStatSeasons(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if seasons == nil {
+		seasons = []db.ListStatSeasonsRow{}
+	}
+	writeJSON(w, http.StatusOK, seasons)
+}
+
 func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	page, _ := strconv.Atoi(query.Get("page"))
@@ -119,13 +133,16 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	var draftID pgtype.UUID // likewise, for every league a draft covers
 	draftID.Scan(query.Get("draft_id"))
 
+	seasonBack, _ := strconv.Atoi(query.Get("season_back"))
+
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
 		Competition: competition,
 		Status:      status,
 		Search:      search,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
-		ByPoints:    query.Get("sort") == "points", // last season's fantasy points, highest first
+		SortBy:      query.Get("sort"),         // "points" or "index": highest first; otherwise by name
+		SeasonBack:  int32(max(seasonBack, 0)), // 0 is each sport's latest season, 1 the one before
 		PageSize:    playersPerPage,
 		PageOffset:  int32((page - 1) * playersPerPage),
 	})

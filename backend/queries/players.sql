@@ -76,21 +76,39 @@ delete from pro_teams where competition = @competition and provider_id <> all(@t
 -- competition and are on nobody's roster there. draft_id does the same for
 -- every league a draft covers.
 --
--- last_points is what each player scored last season under the rules of his
--- sport's league here, and by_points puts the highest first. "Last season"
--- is, of a sport's two most recent seasons, the one with more games played:
--- the season just finished until the new one has overtaken it.
-with reference as materialized ( -- worked out once, not once per player
-  select distinct on (competition) competition, year
-  from (
-    select competition, year, sum(games) as played,
-           row_number() over (partition by competition order by year desc) as recency
-    from player_seasons
-    where league = ''
-    group by competition, year
-  ) recent
-  where recency <= 2
-  order by competition, played desc
+-- Each player comes with one season's fantasy points under the rules of his
+-- sport's league here: the sport's most recent season, or one further back
+-- (season_back counts how many). season_index puts those points on a scale
+-- shared by every sport, so players can be compared across leagues: 100 is
+-- the average of the players a league that size would roster (the top
+-- franchises x main-roster spots by points), and 15 is one standard
+-- deviation among them. sort_by "points" or "index" puts the highest first.
+with seasons as (
+  select distinct competition, year from player_seasons where league = ''
+), reference as materialized (
+  -- the season with exactly season_back newer ones in its sport
+  select s.competition, s.year from seasons s
+  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = @season_back::int
+), scored as materialized (
+  select ps.player_id, ps.competition, max(ps.label)::text as label,
+         sum(stat.value::numeric * rule.value::numeric) as points
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  join leagues l on l.competition = ps.competition
+  cross join lateral jsonb_each_text(ps.stats) stat
+  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
+  where ps.league = '' and (@competition::text = '' or ps.competition = @competition)
+  group by ps.player_id, ps.competition
+), rostered as materialized (
+  -- The players a league would hold, by points: what "average" is measured on.
+  select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
+  from (select sc.competition, sc.points,
+               row_number() over (partition by sc.competition order by sc.points desc) as place
+        from scored sc) placed
+  join leagues l on l.competition = placed.competition
+  where placed.place <= greatest(1, (l.settings->'roster'->>'main')::int
+                                    * (select count(*) from franchises f where f.dynasty_id = l.dynasty_id))
+  group by placed.competition
 )
 select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
@@ -99,21 +117,16 @@ select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
        w.clears_at                  as waiver_until,
-       coalesce(last.points, 0)::float8 as last_points
+       coalesce(sc.label, '')::text     as season,
+       coalesce(sc.points, 0)::float8   as season_points,
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
-left join lateral (
-  select sum(stat.value::numeric * rule.value::numeric) as points
-  from player_seasons ps
-  join reference on reference.competition = ps.competition and reference.year = ps.year
-  join leagues l on l.competition = ps.competition
-  cross join lateral jsonb_each_text(ps.stats) stat
-  join lateral jsonb_each_text(l.settings->'scoring') rule on rule.key = stat.key
-  where ps.player_id = p.id and ps.competition = p.competition and ps.league = ''
-) last on true
+left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
+left join rostered         on rostered.competition = p.competition
 where (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
@@ -125,8 +138,20 @@ where (@competition::text = '' or p.competition = @competition)
         and p.competition in (select l.competition from draft_leagues dl
                               join leagues l on l.id = dl.league_id
                               where dl.draft_id = sqlc.narg('draft_id'))))
-order by case when @by_points::boolean then coalesce(last.points, 0) end desc nulls last, p.full_name, p.id
+order by case @sort_by::text
+           when 'points' then sc.points
+           when 'index' then case when rostered.spread > 0 then (sc.points - rostered.mean) / rostered.spread end
+         end desc nulls last,
+         p.full_name, p.id
 limit @page_size offset @page_offset;
+
+-- name: ListStatSeasons :many
+-- The seasons there are stats for in each sport, newest first.
+select competition, year, max(label)::text as label
+from player_seasons
+where league = ''
+group by competition, year
+order by competition, year desc;
 
 -- name: CountPlayers :one
 select count(*)

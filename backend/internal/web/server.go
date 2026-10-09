@@ -60,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/competitions", s.listCompetitions)
 	mux.HandleFunc("GET /api/players", s.listPlayers)
+	mux.HandleFunc("GET /api/stat-seasons", s.listStatSeasons)
 	mux.HandleFunc("GET /api/research", s.listResearch)
 	mux.HandleFunc("GET /api/players/{id}", s.researchPlayer)
 	mux.HandleFunc("GET /api/players/{id}/seasons", s.playerSeasons)

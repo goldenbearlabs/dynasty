@@ -96,9 +96,19 @@ export type Player = {
 	owner_slug: string;
 	/** Set while he is on waivers: he can be claimed, not added. */
 	waiver_until: string | null;
-	/** Fantasy points last season under his league's scoring; 0 without a season on record. */
-	last_points: number;
+	/** The season the two figures below are for, e.g. "2025-26"; empty when he has none on record. */
+	season: string;
+	/** Fantasy points that season under his league's scoring. */
+	season_points: number;
+	/**
+	 * Those points on a scale shared by every sport: 100 is the average player a league
+	 * that size would roster, and 15 is one standard deviation among them. 0 when unknown.
+	 */
+	season_index: number;
 };
+
+/** A season there are stats for in one sport. */
+export type StatSeason = { competition: string; year: number; label: string };
 
 export type PlayerPage = { players: Player[]; total: number; page: number; per_page: number };
 
@@ -141,8 +151,10 @@ export type PlayerFilter = {
 	q?: string;
 	available_in?: string;
 	draft_id?: string;
-	/** "points" puts last season's highest fantasy scorers first; otherwise by name. */
+	/** "points" or "index" puts the season's highest scorers first; otherwise by name. */
 	sort?: string;
+	/** Which season to score: 0 is each sport's latest, 1 the one before, and so on. */
+	season_back?: number;
 	page?: number;
 };
 
@@ -615,6 +627,7 @@ export const getCompetitions = () => request<Competition[]>('GET', '/competition
 export const getPlayers = (filter: PlayerFilter) => request<PlayerPage>('GET', `/players${query(filter)}`);
 export const getResearch = (filter: PlayerFilter & { season?: string; sort?: string }) =>
 	request<ResearchPage>('GET', `/research${query(filter)}`);
+export const getStatSeasons = () => request<StatSeason[]>('GET', '/stat-seasons');
 export const getPlayerResearch = (id: string) => request<PlayerResearch>('GET', `/players/${id}`);
 export const getPlayerSeasons = (id: string) => request<PlayerSeason[]>('GET', `/players/${id}/seasons`);
 
