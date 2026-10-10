@@ -577,7 +577,7 @@ func pickFirst(ctx context.Context, q *db.Queries, draft db.Draft, pick *db.List
 // SetAutoPick turns a franchise's auto pick on or off for a draft. If the
 // franchise is on the clock, its clock starts again to match.
 func (s *Service) SetAutoPick(ctx context.Context, draftID, franchiseID pgtype.UUID, on bool) error {
-	return s.change(ctx, draftID, true, func(q *db.Queries, draft db.Draft) error {
+	return s.change(ctx, draftID, false, func(q *db.Queries, draft db.Draft) error {
 		if draft.Status == "complete" {
 			return problem.New("This draft is over.")
 		}

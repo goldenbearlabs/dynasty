@@ -14,7 +14,8 @@ import (
 // Callers subscribe before building the snapshot, so nothing is missed in
 // between.
 func (s *Server) stream(w http.ResponseWriter, r *http.Request, snapshot []byte, messages <-chan []byte) {
-	conn, err := websocket.Accept(w, r, nil)
+	// Compressed: a big draft's opening snapshot is most of a megabyte of JSON.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionNoContextTakeover})
 	if err != nil {
 		return // Accept has already answered
 	}

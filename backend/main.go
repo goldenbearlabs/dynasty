@@ -50,7 +50,16 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := pgxpool.New(ctx, env("DATABASE_URL", "postgres://crossover:crossover@localhost:5433/crossover"))
+	config, err := pgxpool.ParseConfig(env("DATABASE_URL", "postgres://crossover:crossover@localhost:5433/crossover"))
+	if err != nil {
+		return err
+	}
+	// Plan every query for the values it is run with. Left to itself Postgres
+	// switches a statement to one generic plan after five runs on a
+	// connection, and for the player list, whose filters are mostly optional,
+	// that plan is some fifty times slower.
+	config.ConnConfig.RuntimeParams["plan_cache_mode"] = "force_custom_plan"
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return err
 	}
