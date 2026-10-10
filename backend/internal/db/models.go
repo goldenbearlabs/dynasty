@@ -32,6 +32,11 @@ type Draft struct {
 	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
 }
 
+type DraftAutopick struct {
+	DraftID     pgtype.UUID `json:"draft_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
 type DraftLeague struct {
 	DraftID  pgtype.UUID `json:"draft_id"`
 	LeagueID pgtype.UUID `json:"league_id"`
@@ -111,6 +116,14 @@ type IngestRun struct {
 	Error        string             `json:"error"`
 }
 
+type InjuryReserveLock struct {
+	SeasonID      pgtype.UUID        `json:"season_id"`
+	PlayerID      pgtype.UUID        `json:"player_id"`
+	FranchiseID   pgtype.UUID        `json:"franchise_id"`
+	ReplacementID pgtype.UUID        `json:"replacement_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type League struct {
 	ID          pgtype.UUID        `json:"id"`
 	DynastyID   pgtype.UUID        `json:"dynasty_id"`
@@ -160,19 +173,21 @@ type PeriodScore struct {
 }
 
 type Player struct {
-	ID              pgtype.UUID        `json:"id"`
-	Competition     string             `json:"competition"`
-	Status          string             `json:"status"`
-	EligibleSince   pgtype.Timestamptz `json:"eligible_since"`
-	FullName        string             `json:"full_name"`
-	Positions       []string           `json:"positions"`
-	BirthDate       pgtype.Date        `json:"birth_date"`
-	ProTeamID       pgtype.UUID        `json:"pro_team_id"`
-	Class           string             `json:"class"`
-	Note            string             `json:"note"`
-	HeadshotUrl     string             `json:"headshot_url"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	CareerCheckedAt pgtype.Timestamptz `json:"career_checked_at"`
+	ID                pgtype.UUID        `json:"id"`
+	Competition       string             `json:"competition"`
+	Status            string             `json:"status"`
+	EligibleSince     pgtype.Timestamptz `json:"eligible_since"`
+	FullName          string             `json:"full_name"`
+	Positions         []string           `json:"positions"`
+	BirthDate         pgtype.Date        `json:"birth_date"`
+	ProTeamID         pgtype.UUID        `json:"pro_team_id"`
+	Class             string             `json:"class"`
+	Note              string             `json:"note"`
+	HeadshotUrl       string             `json:"headshot_url"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CareerCheckedAt   pgtype.Timestamptz `json:"career_checked_at"`
+	InjuryDesignation string             `json:"injury_designation"`
+	InjuryCheckedAt   pgtype.Timestamptz `json:"injury_checked_at"`
 }
 
 type PlayerExternalID struct {
@@ -243,6 +258,7 @@ type RosterEntry struct {
 	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
 	RightsUntil pgtype.Timestamptz `json:"rights_until"`
 	Rookie      bool               `json:"rookie"`
+	Startup     bool               `json:"startup"`
 }
 
 type Season struct {

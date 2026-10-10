@@ -8,7 +8,7 @@ import (
 
 func mlb(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 20, 14 // 15 starters and 5 on the bench
+	rules.Roster.Main, rules.Roster.Reserve = 30, 10 // 15 starters and 15 on the bench
 	hitters := []string{"C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH", "TWP"}
 	// Lineups are set by the day. A team's pitchers score in four starts a
 	// week between them: a fifth start, by anyone, scores nothing.

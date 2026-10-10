@@ -1,4 +1,5 @@
 <script lang="ts">
+ import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
  import PlayerSearch from '#lib/PlayerSearch.svelte';
  import { onMount, untrack } from 'svelte';
  import { page as route } from '$app/state';
@@ -231,7 +232,7 @@
     <ColumnHeader label="Roster owner" help="Current fantasy owner in the competition, rather than historical ownership in this season." active={sort==='owner'} {ascending} onsort={() => sortBy('owner')} />
    </tr></thead><tbody>
     {#each result.players as player (player.row_key)}<tr class:selected={selectedId===player.id}>
-     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
+     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><InjuryBadge designation={player.injury_designation} /><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
      <td><div class="row tight"><SportBadge sport={player.competition} /><strong>{player.season || 'No season'}</strong></div>{#if player.scoring_source==='defaults'}<small class="muted">Sport default scoring</small>{/if}</td>
      <td>{player.positions.join('/') || '—'}</td><td class="muted">{player.team || '—'}</td>
      <td class="num">{player.season ? formatValue(player.games) : '—'}</td><td class="num">{player.has_scoring_stats ? formatValue(player.points) : '—'}</td><td class="num">{player.has_scoring_stats && player.games>0 ? formatValue(player.points_per_game) : '—'}</td>

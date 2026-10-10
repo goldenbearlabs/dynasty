@@ -9,19 +9,22 @@ import (
 
 	"crossover/internal/problem"
 	"crossover/internal/settings"
+	"crossover/internal/sportsday"
 )
 
 // Entry is what the limits need to know about one rostered player.
 type Entry struct {
-	PlayerID          pgtype.UUID
-	List              string
-	Prospect          bool
-	StarterIneligible bool
-	Rookie            bool // signed from a rookie draft, and still on the reserve list
+	InjuryReserveLocked bool
+	PlayerID            pgtype.UUID
+	List                string
+	Prospect            bool
+	StarterIneligible   bool
+	Rookie              bool // signed from a rookie draft, and still on the reserve list
+	Startup             bool // picked in the league's startup draft
 }
 
 func reserveEligible(limits settings.Roster, e Entry) bool {
-	return limits.ReserveEligibility == settings.ReserveAnyone || e.Prospect || e.Rookie ||
+	return e.InjuryReserveLocked || limits.ReserveEligibility == settings.ReserveAnyone || e.Prospect || e.Rookie || e.Startup ||
 		(limits.ReserveEligibility == settings.ReserveProspectsOrIneligible && e.StarterIneligible)
 }
 
@@ -49,6 +52,11 @@ func Overage(limits settings.Roster, entries []Entry) int {
 // legal result is always allowed. A franchise already over its limits (after
 // a graduation, or a rule change) may only make moves that reduce the overage.
 func Check(limits settings.Roster, before, after []Entry) error {
+	for _, entry := range after {
+		if entry.InjuryReserveLocked && entry.List != settings.ListReserve {
+			return problem.New("A player who used an injury swap must stay on reserve for the rest of the season.")
+		}
+	}
 	was, now := Overage(limits, before), Overage(limits, after)
 	switch {
 	case now == 0, now < was:
@@ -88,13 +96,21 @@ func explain(limits settings.Roster, entries []Entry) error {
 	return nil
 }
 
-// LockedUntil is when a player sent to the reserve list at reservedAt may
-// return to the main roster. The zero time means he is not locked.
-func LockedUntil(limits settings.Roster, reservedAt pgtype.Timestamptz) time.Time {
-	if !reservedAt.Valid || limits.ReserveLockDays == 0 {
-		return time.Time{}
+// LockedUntil is when a player on the reserve list, sent there at
+// reservedAt, may return to the main roster. seasonEnds is the last day of
+// the season being played, and zero between seasons. The zero time means he
+// is not locked.
+func LockedUntil(limits settings.Roster, reservedAt pgtype.Timestamptz, seasonEnds time.Time) time.Time {
+	var until time.Time
+	if limits.ReserveLockSeason && !seasonEnds.IsZero() {
+		until = sportsday.Start(seasonEnds.AddDate(0, 0, 1))
 	}
-	return reservedAt.Time.AddDate(0, 0, limits.ReserveLockDays)
+	if reservedAt.Valid && limits.ReserveLockDays > 0 {
+		if days := reservedAt.Time.AddDate(0, 0, limits.ReserveLockDays); days.After(until) {
+			until = days
+		}
+	}
+	return until
 }
 
 // Acquirable decides whether an unrostered player may be added as a free

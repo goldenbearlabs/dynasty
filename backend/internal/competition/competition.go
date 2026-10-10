@@ -5,6 +5,7 @@ package competition
 
 import (
 	"crossover/internal/ingest"
+	"crossover/internal/ingest/espn"
 	"crossover/internal/settings"
 )
 
@@ -26,6 +27,7 @@ type Competition struct {
 	// fantasy season; the commissioner sets the real dates.
 	Season [2]string `json:"season"`
 
+	Injuries  ingest.InjurySource   `json:"-"`
 	Source    ingest.Source         `json:"-"`
 	Games     ingest.GameSource     `json:"-"`
 	Seasons   ingest.SeasonSource   `json:"-"`
@@ -43,7 +45,16 @@ type Stat struct {
 type Registry []Competition
 
 func NewRegistry(client *ingest.Client) Registry {
-	return Registry{cbb(client), nba(client), wnba(client), nhl(client), nfl(client), mlb(client)}
+	registry := Registry{cbb(client), nba(client), wnba(client), nhl(client), nfl(client), mlb(client)}
+	paths := map[string]string{"cbb": "basketball/mens-college-basketball", "nba": "basketball/nba", "wnba": "basketball/wnba", "nhl": "hockey/nhl", "nfl": "football/nfl", "mlb": "baseball/mlb"}
+	for i := range registry {
+		if source, ok := registry[i].Source.(*espn.Source); ok {
+			registry[i].Injuries = source
+		} else {
+			registry[i].Injuries = espn.New(client, espn.League{Path: paths[registry[i].Key], Provider: "espn_" + registry[i].Key})
+		}
+	}
+	return registry
 }
 
 func (r Registry) Get(key string) (Competition, bool) {
@@ -72,8 +83,9 @@ func (c Competition) Catalog(otherLeagues []string) settings.Catalog {
 // own roster, lineup, scoring and draft length.
 func defaults() settings.League {
 	return settings.League{
-		// A free agent can be added to either list.
-		Roster: settings.Roster{ReserveEligibility: settings.ReserveAnyone},
+		// A free agent can be added to either list. Once the season starts,
+		// whoever is on reserve stays there until it ends.
+		Roster: settings.Roster{ReserveEligibility: settings.ReserveAnyone, ReserveLockSeason: true},
 		Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday", Lock: settings.LockGameStart},
 		// Head to head, a week at a time: the format the scoring was balanced for.
 		Format: settings.Format{Type: settings.FormatHeadToHead, MatchupDays: 7, PlayoffTeams: 6},

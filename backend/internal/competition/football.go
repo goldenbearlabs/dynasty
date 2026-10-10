@@ -14,7 +14,7 @@ var footballPositions = []string{"QB", "RB", "FB", "WR", "TE"}
 
 func nfl(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 14, 6                              // 9 starters and 5 on the bench
+	rules.Roster.Main, rules.Roster.Reserve = 17, 6                              // 9 starters and 8 on the bench
 	rules.Lineup.Period, rules.Lineup.WeekStart = settings.PeriodWeek, "tuesday" // a week runs Thursday to Monday
 	rules.Lineup.Slots = []settings.Slot{
 		slot("QB", 1, "QB"),

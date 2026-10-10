@@ -75,7 +75,7 @@ func basketballLineup(guards, forwards, util int) settings.Lineup {
 
 func cbb(client *ingest.Client) Competition {
 	rules := defaults()
-	rules.Roster.Main, rules.Roster.Reserve = 12, 5 // 7 starters and 5 on the bench
+	rules.Roster.Main, rules.Roster.Reserve = 11, 5 // 7 starters and 4 on the bench
 	rules.Lineup = basketballLineup(3, 3, 0)
 	rules.Lineup.Conferences = settings.DefaultCollegeConferences()
 	rules.Roster.ReserveEligibility = settings.ReserveProspectsOrIneligible

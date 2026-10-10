@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"crossover/internal/db"
+	"crossover/internal/roster"
 	"crossover/internal/settings"
 	"crossover/internal/sportsday"
 	"github.com/jackc/pgx/v5"
@@ -274,8 +275,15 @@ func (s *Service) Profile(ctx context.Context, id pgtype.UUID) (Profile, error) 
 	}
 	for _, owned := range result.Ownership {
 		r := rules[owned.Competition]
-		if owned.ReservedAt.Valid && r.Roster.ReserveLockDays > 0 {
-			result.ReserveLockedUntil[owned.LeagueID.String()] = owned.ReservedAt.Time.AddDate(0, 0, r.Roster.ReserveLockDays)
+		if owned.List != settings.ListReserve {
+			continue
+		}
+		seasonEnds, err := roster.SeasonEnds(ctx, q, owned.LeagueID)
+		if err != nil {
+			return result, err
+		}
+		if until := roster.LockedUntil(r.Roster, owned.ReservedAt, seasonEnds); !until.IsZero() {
+			result.ReserveLockedUntil[owned.LeagueID.String()] = until
 		}
 	}
 	result.Drafts, err = q.ListPlayerDraftRecord(ctx, id)

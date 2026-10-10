@@ -116,6 +116,32 @@ func (s *Server) setQueue(w http.ResponseWriter, r *http.Request, me db.Franchis
 	s.done(w, r, s.Drafts.SetQueue(r.Context(), id, me.ID, body.PlayerIDs))
 }
 
+// setAutoPick turns auto pick on or off for the signed-in franchise, or
+// for another one when a commissioner asks.
+func (s *Server) setAutoPick(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	var body struct {
+		On          bool        `json:"on"`
+		FranchiseID pgtype.UUID `json:"franchise_id"` // commissioner only
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	franchise := me.ID
+	if body.FranchiseID.Valid && body.FranchiseID != me.ID {
+		if !me.IsCommissioner {
+			writeError(w, http.StatusForbidden, "You can only set auto pick for your own franchise.")
+			return
+		}
+		franchise = body.FranchiseID
+	}
+	s.done(w, r, s.Drafts.SetAutoPick(r.Context(), id, franchise, body.On))
+}
+
 // ---- commissioner ----
 
 func (s *Server) createDraft(w http.ResponseWriter, r *http.Request) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A franchise across every sport. The organization view says where each
 	// team stands at a glance; picking a league opens that team: its lineup,
 	// its matchup, the standings, and its roster and reserve list.
@@ -7,6 +8,7 @@
 	import { page } from '$app/state';
 	import {
 		changeRoster,
+		setRoster,
 		getLineup,
 		getMatchups,
 		getStandings,
@@ -165,16 +167,47 @@
 	// ---- one league ----
 	const roster = $derived(data.rosters.find((r) => r.league_id === league?.id));
 	const now = $derived(league ? standing(league.id) : undefined);
-	const on = (r: LeagueRoster, list: List) => r.players.filter((p) => p.list === list);
+	// While the manager is setting the roster, plan holds where each moved
+	// player is headed; nothing is saved until the whole split is.
+	let plan = $state<Record<string, List>>();
+	let rosterOpen = $state(false);
+	$effect(() => {
+		void league?.id;
+		void team.id;
+		plan = undefined;
+	});
+	const on = (r: LeagueRoster, list: List) => r.players.filter((p) => (plan?.[p.player_id] ?? p.list) === list);
+	const over = (r: LeagueRoster) => on(r, 'main').length > r.limits.main || on(r, 'reserve').length > r.limits.reserve;
+	// Whether a player sent to reserve now is there for the rest of the season.
+	const seasonLocked = (r: LeagueRoster) => r.limits.reserve_lock_season && standing(r.league_id).phase.key === 'in';
+	const sentDown = (r: LeagueRoster) => r.players.filter((p) => p.list === 'main' && plan?.[p.player_id] === 'reserve').length;
 	const lists: { key: List; title: string; other: List; move: string }[] = [
 		{ key: 'main', title: 'Main roster', other: 'reserve', move: 'To reserve' },
 		{ key: 'reserve', title: 'Reserve list', other: 'main', move: 'To main' }
 	];
 
+	let injuryReplacement = $state<Record<string,string>>({});
+	let swapping = $state(false);
+	const injuryEligible = (player: RosterPlayer) => ['IR','OUT','IL7','IL10','IL15','IL60'].includes(player.injury_designation);
+	async function injurySwap(r: LeagueRoster, player: RosterPlayer) {
+		const replacement = r.players.find(p => p.player_id === injuryReplacement[player.player_id]);
+		if (!replacement || swapping) return;
+		if (!confirm(`Move ${player.full_name} to reserve for the rest of this season and call up ${replacement.full_name}? ${player.full_name} cannot return to the main roster this season, even after recovering.`)) return;
+		swapping = true;
+		try {
+			await changeRoster(r.league_id,'injury-swap',{player_id:player.player_id,replacement_id:replacement.player_id,franchise_id:team.id});
+			await invalidateAll();
+			delete injuryReplacement[player.player_id];
+			toast.good(`Called up ${replacement.full_name}. ${player.full_name} is on reserve for the rest of the season.`);
+		} catch(e) { toast.error(e); } finally { swapping = false; }
+	}
+
 	// A commissioner editing someone else's roster is overriding the rules.
 	async function change(r: LeagueRoster, action: 'drop' | 'move', player: RosterPlayer, list?: List) {
 		const days = r.limits.reserve_lock_days;
-		if (mine && list === 'reserve' && days > 0 && player.status !== 'prospect' && player.list !== 'rights') {
+		if (mine && list === 'reserve' && player.list === 'main' && seasonLocked(r)) {
+			if (!confirm(`${player.full_name} will stay on the reserve list until the season ends. Move him?`)) return;
+		} else if (mine && list === 'reserve' && days > 0 && player.status !== 'prospect' && player.list !== 'rights') {
 			if (!confirm(`${player.full_name} will be locked on the reserve list for ${days} ${days === 1 ? 'day' : 'days'}. Move him?`)) return;
 		}
 		if (action === 'drop' && !confirm(`${player.list === 'rights' ? 'Release' : 'Drop'} ${player.full_name}?`)) return;
@@ -182,6 +215,21 @@
 			await changeRoster(r.league_id, action, { player_id: player.player_id, list, franchise_id: team.id, force: !mine });
 			await invalidateAll();
 			toast.good(action === 'drop' ? `Released ${player.full_name}.` : player.list === 'rights' ? `Signed ${player.full_name}.` : `Moved ${player.full_name}.`);
+		} catch (e) {
+			toast.error(e);
+		}
+	}
+
+	async function saveRoster(r: LeagueRoster) {
+		const down = sentDown(r);
+		if (mine && down > 0 && seasonLocked(r)) {
+			if (!confirm(`${down === 1 ? 'The player' : `The ${down} players`} you are sending to reserve will stay there until the season ends. Save?`)) return;
+		}
+		try {
+			await setRoster(r.league_id, { reserve: on(r, 'reserve').map((p) => p.player_id), franchise_id: team.id, force: !mine });
+			await invalidateAll();
+			plan = undefined;
+			toast.good('Roster set.');
 		} catch (e) {
 			toast.error(e);
 		}
@@ -370,7 +418,15 @@
 				{/key}
 			</section>
 
-			<details class="panel fold">
+			{#if canEdit && !plan && tables.length > 0 && roster.limits.reserve_lock_season && roster.limits.reserve > 0 && on(roster, 'main').length + on(roster, 'reserve').length > 0 && (now.phase.key === 'upcoming' || now.phase.key === 'none')}
+				<p class="card small-text">
+					<span class="pill gold">Set your roster</span> Choose who is on the reserve list before the season starts. Whoever is on it
+					then stays there until the season ends.
+					<button class="small" onclick={() => ((plan = {}), (rosterOpen = true))}>Set roster</button>
+				</p>
+			{/if}
+
+			<details class="panel fold" bind:open={rosterOpen}>
 				<summary>
 					<strong>Roster and reserve list</strong>
 					<span class="muted small-text">
@@ -382,6 +438,18 @@
 					<Meter label="Main" value={on(roster, 'main').length} max={roster.limits.main} />
 					<Meter label="Reserve" value={on(roster, 'reserve').length} max={roster.limits.reserve} />
 				</div>
+				{#if canEdit}
+					<p class="pad small-text row">
+						{#if plan}
+							<span class="muted grow">Move players between the lists, then save. Nothing changes until you do.</span>
+							<button class="small primary" disabled={mine && over(roster)} onclick={() => saveRoster(roster)}>Save roster</button>
+							<button class="small quiet" onclick={() => (plan = undefined)}>Cancel</button>
+						{:else}
+							<span class="muted grow">Swapping players between two full lists? Set the roster in one save.</span>
+							<button class="small" onclick={() => (plan = {})}>Set roster</button>
+						{/if}
+					</p>
+				{/if}
 				{#each lists as list (list.key)}
 					{@const players = on(roster, list.key)}
 					<h3 class="eyebrow listhead">{list.title}</h3>
@@ -399,10 +467,13 @@
 													<div>
 														<div class="row who">
 															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
-															{#if player.class}<span class="pill">{player.class}</span>{/if}
+															<InjuryBadge designation={player.injury_designation} />
+														{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}
 															{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
-															{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
+															{#if player.injury_reserve_locked}<span class="pill gold">Injury swap · Reserve for season</span>{/if}
+														{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
+															{#if player.list !== list.key}<span class="pill brand">Moved</span>{/if}
 														</div>
 														<PlayerNickname franchiseID={team.id} playerID={player.player_id} playerName={player.full_name} initialNickname={player.nickname} editable={canEdit} />
  <div class="muted small-text">
@@ -413,8 +484,21 @@
 											</td>
 											{#if canEdit}
 												<td class="actions">
-													<button class="small" disabled={mine && !!player.locked_until} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>
-													<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Drop</button>
+													{#if plan}
+														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => (plan![player.player_id] = list.other)}>{list.move}</button>
+													{:else}
+														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>
+														<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Drop</button>
+													{#if list.key === 'main' && injuryEligible(player)}
+														<div class="injury-swap-controls">
+															<select aria-label="Reserve replacement for {player.full_name}" bind:value={injuryReplacement[player.player_id]} disabled={swapping}>
+																<option value="">Call up from reserve…</option>
+																{#each on(roster,'reserve').filter(p => !p.injury_reserve_locked) as replacement (replacement.player_id)}<option value={replacement.player_id}>{replacement.full_name}</option>{/each}
+															</select>
+															<button class="small" disabled={swapping || !injuryReplacement[player.player_id]} onclick={() => injurySwap(roster,player)}>Season injury swap</button>
+														</div>
+													{/if}
+													{/if}
 												</td>
 											{/if}
 										</tr>
@@ -464,6 +548,7 @@
 </div>
 
 <style>
+ .injury-swap-controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}.injury-swap-controls select{max-width:15rem;font-size:.8rem}
 	.head {
 		display: flex;
 		flex-wrap: wrap;

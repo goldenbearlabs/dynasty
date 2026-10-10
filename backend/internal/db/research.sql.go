@@ -83,7 +83,7 @@ with latest as (
   from stats left join leagues l on l.competition = stats.competition
   group by stats.player_id, stats.competition
 ), pool as (
-  select p.id, p.competition, p.full_name, p.positions, p.status, p.headshot_url,
+  select p.id, p.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
          coalesce(totals.season_team, t.abbrev, '')::text as team,
          coalesce(f.name, '')::text as owner_name, coalesce(f.slug, '')::text as owner_slug,
          coalesce(totals.season, '')::text as season,
@@ -104,7 +104,7 @@ with latest as (
     and ($9::uuid is null or (
       r.player_id is null and p.competition = (select competition from leagues where id = $9)))
 )
-select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, pool.headshot_url, pool.team, pool.owner_name, pool.owner_slug, pool.season, pool.games, pool.stats, pool.points, pool.points_per_game from pool
+select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, pool.injury_designation, pool.headshot_url, pool.team, pool.owner_name, pool.owner_slug, pool.season, pool.games, pool.stats, pool.points, pool.points_per_game from pool
 order by
   case when $1::text = 'name' then full_name end asc,
   case when $1 = 'points' and season <> '' then points
@@ -128,20 +128,21 @@ type ListResearchPlayersParams struct {
 }
 
 type ListResearchPlayersRow struct {
-	ID            pgtype.UUID     `json:"id"`
-	Competition   string          `json:"competition"`
-	FullName      string          `json:"full_name"`
-	Positions     []string        `json:"positions"`
-	Status        string          `json:"status"`
-	HeadshotUrl   string          `json:"headshot_url"`
-	Team          string          `json:"team"`
-	OwnerName     string          `json:"owner_name"`
-	OwnerSlug     string          `json:"owner_slug"`
-	Season        string          `json:"season"`
-	Games         int32           `json:"games"`
-	Stats         json.RawMessage `json:"stats"`
-	Points        float64         `json:"points"`
-	PointsPerGame float64         `json:"points_per_game"`
+	ID                pgtype.UUID     `json:"id"`
+	Competition       string          `json:"competition"`
+	FullName          string          `json:"full_name"`
+	Positions         []string        `json:"positions"`
+	Status            string          `json:"status"`
+	InjuryDesignation string          `json:"injury_designation"`
+	HeadshotUrl       string          `json:"headshot_url"`
+	Team              string          `json:"team"`
+	OwnerName         string          `json:"owner_name"`
+	OwnerSlug         string          `json:"owner_slug"`
+	Season            string          `json:"season"`
+	Games             int32           `json:"games"`
+	Stats             json.RawMessage `json:"stats"`
+	Points            float64         `json:"points"`
+	PointsPerGame     float64         `json:"points_per_game"`
 }
 
 // Latest means the newest imported season in each competition, shared by
@@ -171,6 +172,7 @@ func (q *Queries) ListResearchPlayers(ctx context.Context, arg ListResearchPlaye
 			&i.FullName,
 			&i.Positions,
 			&i.Status,
+			&i.InjuryDesignation,
 			&i.HeadshotUrl,
 			&i.Team,
 			&i.OwnerName,
@@ -209,7 +211,7 @@ with selected as (
 ), stats as (
  select player_id,jsonb_object_agg(key,value) as stats from stat_values group by player_id
 )
-select p.id, totals.competition, p.full_name, p.positions, p.status, p.headshot_url,
+select p.id, totals.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
        coalesce(totals.team,'')::text as team,
        coalesce(f.name,'')::text as owner_name, coalesce(f.slug,'')::text as owner_slug,
        totals.season, totals.games, coalesce(stats.stats,'{}'::jsonb) as stats,
@@ -228,20 +230,21 @@ type ListResearchSeasonPoolParams struct {
 }
 
 type ListResearchSeasonPoolRow struct {
-	ID            pgtype.UUID     `json:"id"`
-	Competition   string          `json:"competition"`
-	FullName      string          `json:"full_name"`
-	Positions     []string        `json:"positions"`
-	Status        string          `json:"status"`
-	HeadshotUrl   string          `json:"headshot_url"`
-	Team          string          `json:"team"`
-	OwnerName     string          `json:"owner_name"`
-	OwnerSlug     string          `json:"owner_slug"`
-	Season        string          `json:"season"`
-	Games         int32           `json:"games"`
-	Stats         json.RawMessage `json:"stats"`
-	Points        float64         `json:"points"`
-	PointsPerGame float64         `json:"points_per_game"`
+	ID                pgtype.UUID     `json:"id"`
+	Competition       string          `json:"competition"`
+	FullName          string          `json:"full_name"`
+	Positions         []string        `json:"positions"`
+	Status            string          `json:"status"`
+	InjuryDesignation string          `json:"injury_designation"`
+	HeadshotUrl       string          `json:"headshot_url"`
+	Team              string          `json:"team"`
+	OwnerName         string          `json:"owner_name"`
+	OwnerSlug         string          `json:"owner_slug"`
+	Season            string          `json:"season"`
+	Games             int32           `json:"games"`
+	Stats             json.RawMessage `json:"stats"`
+	Points            float64         `json:"points"`
+	PointsPerGame     float64         `json:"points_per_game"`
 }
 
 // Historical pools follow the competition where the stats were recorded,
@@ -261,6 +264,7 @@ func (q *Queries) ListResearchSeasonPool(ctx context.Context, arg ListResearchSe
 			&i.FullName,
 			&i.Positions,
 			&i.Status,
+			&i.InjuryDesignation,
 			&i.HeadshotUrl,
 			&i.Team,
 			&i.OwnerName,

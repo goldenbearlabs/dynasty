@@ -162,12 +162,14 @@
 			title: 'Drafts',
 			about: 'The startup draft, rookie drafts, and signing your picks.',
 			rules: [
-				['One startup draft per league.', 'It fills every main roster, starters and bench, and can cover several leagues at once. Reserve lists are not drafted: they fill afterwards from free agency and the rookie drafts. Picks are slow, eight hours each unless the commissioner sets another clock. A league never has a second.'],
+				['One startup draft per league.', 'It fills every roster, the main roster and the reserve list, and can cover several leagues at once. Prospects can be drafted too. A pick lands on the main roster until it is full and then on the reserve list, a prospect the other way round, and afterwards you set your reserve list yourself on your team page, any time before the season starts. A startup pick can sit on reserve whatever the league\'s rule for it. Picks are slow, four hours each unless the commissioner sets another clock. A league never has a second.'],
+				['Your queue and auto pick.', 'Queue the players you want, in order. If your clock runs out, you get the first one still available; with nobody queued the pick is skipped and owed to you. Turn auto pick on in the draft room and your picks are made about three seconds after they come up: the top of your queue, or with nobody queued a random one of the best players left that you have a roster or reserve spot for. Your slots on the board change color so everyone can see it is on.'],
 				['Then a rookie draft every year.', 'Open to anyone not on a roster: players new to the pool and free agents alike. The number of rounds is half the league’s reserve list, rounded up, unless the commissioner sets it.'],
 				['Picks exist years ahead.', 'Each league’s next few rookie drafts are on the books from the day the league is created, so their picks can be traded.'],
 				['The clock.', 'If a league uses a pick clock and yours runs out, the first available player in your queue is drafted for you. With an empty queue the pick is skipped, and you can make it up later while the draft is still running.'],
 				['Passing.', 'In a rookie draft you may pass the pick you are on. A passed pick is gone for good.'],
 				['Rankings and queues.', 'You can keep private ranked lists ahead of a draft and load one into your queue in the draft room. Players already taken are left out.'],
+				['Season injury swaps.', 'A main-roster player tagged IR, IL or Out can swap with one reserve player, once per injured player per season. Both moves happen together. The injured player remains on reserve for the rest of that season, even after recovering, being traded or being dropped and re-added.'],
 				['Rookie picks are held, then signed.', 'A rookie-draft pick is yours but on neither list, and counts against no limit. When the draft ends you have the league’s signing window to sign each one to the reserve list or the main roster, making room if you must.'],
 				['Unsigned picks are released.', 'A pick you release, or have not signed when the window closes, goes on waivers like anyone else.'],
 				['The commissioner runs the room.', 'They set the pick order before it starts, and can pause, undo the last pick, or finish the draft early, which forfeits picks not yet made.']
@@ -286,9 +288,14 @@
 				<ul>
 					<li><strong>{g.rules.roster.main}</strong> on the main roster: {plural(count, 'starter')} and {plural(Math.max(g.rules.roster.main - count, 0), 'bench spot')}</li>
 					<li><strong>{g.rules.roster.reserve}</strong> on the reserve list, open to {reserveFor[g.rules.roster.reserve_eligibility]}</li>
+					{#if g.rules.roster.reserve_lock_season}
+						<li>Once the season starts, nobody on the reserve list can be called up until it ends. A player can still be sent down, and stays there</li>
+					{/if}
 					<li>
 						{#if g.rules.roster.reserve_lock_days > 0}
 							A player sent to reserve is locked there for {plural(g.rules.roster.reserve_lock_days, 'day')}
+						{:else if g.rules.roster.reserve_lock_season}
+							Between seasons a player can move between the lists at any time
 						{:else}
 							No reserve lock: a player can come back up at any time
 						{/if}

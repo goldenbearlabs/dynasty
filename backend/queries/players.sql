@@ -116,7 +116,7 @@ with seasons as (
   where placed.place <= sizes.spots
   group by placed.competition
 )
-select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
+select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
@@ -271,7 +271,7 @@ select * from leagues where dynasty_id = @dynasty_id and competition = @competit
 
 -- name: GetPlayerProfile :one
 -- A player's identity and current ownership for inline draft research.
-select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
+select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
@@ -313,3 +313,12 @@ on conflict (provider, provider_id) do nothing;
 select coalesce(t.conference, '')::text as conference
 from players p left join pro_teams t on t.id = p.pro_team_id
 where p.id = @id;
+
+-- name: ListInjuryPlayers :many
+select id, full_name from players where competition = @competition;
+
+-- name: ClearInjuryDesignations :exec
+update players set injury_designation = '', injury_checked_at = now() where competition = @competition;
+
+-- name: SetInjuryDesignation :exec
+update players set injury_designation = @injury_designation where id = @id;

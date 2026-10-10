@@ -1267,6 +1267,24 @@ func (q *Queries) ReopenSeason(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const runningSeasonEnd = `-- name: RunningSeasonEnd :one
+select ends_on from seasons
+where league_id = $1 and status = 'active' and $2::date between starts_on and ends_on
+`
+
+type RunningSeasonEndParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+// The last day of the season a league is playing on this day, if it is.
+func (q *Queries) RunningSeasonEnd(ctx context.Context, arg RunningSeasonEndParams) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, runningSeasonEnd, arg.LeagueID, arg.Day)
+	var ends_on pgtype.Date
+	err := row.Scan(&ends_on)
+	return ends_on, err
+}
+
 const setPeriodByHand = `-- name: SetPeriodByHand :exec
 update periods set by_hand = $1 where id = $2
 `

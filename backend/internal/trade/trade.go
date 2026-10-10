@@ -23,6 +23,7 @@ import (
 	"crossover/internal/problem"
 	"crossover/internal/roster"
 	"crossover/internal/settings"
+	"crossover/internal/sportsday"
 )
 
 type Service struct {
@@ -312,7 +313,7 @@ func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []
 		league := leagues[slices.IndexFunc(leagues, func(l db.League) bool { return l.ID == key.league })]
 		var before, after []roster.Entry
 		for _, r := range rows {
-			entry := roster.Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, StarterIneligible: !rules[key.league].CanStart(league.Competition, r.Conference)}
+			entry := roster.Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, Startup: r.Startup, InjuryReserveLocked: r.InjuryReserveLocked, StarterIneligible: !rules[key.league].CanStart(league.Competition, r.Conference)}
 			before = append(before, entry)
 			leaving := slices.ContainsFunc(items, func(i Item) bool {
 				return i.PlayerID == r.PlayerID && i.LeagueID == key.league && i.From == key.franchise
@@ -336,7 +337,11 @@ func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []
 				if err != nil {
 					return false, err
 				}
-				after = append(after, roster.Entry{PlayerID: item.PlayerID, List: arriving.List, Prospect: player.Status == "prospect", Rookie: arriving.Rookie, StarterIneligible: !rules[key.league].CanStart(league.Competition, conference)})
+				injuryLocked, err := q.HasInjuryReserveLock(ctx, db.HasInjuryReserveLockParams{LeagueID: key.league, PlayerID: item.PlayerID, Day: sportsday.Date(sportsday.Today())})
+				if err != nil {
+					return false, err
+				}
+				after = append(after, roster.Entry{PlayerID: item.PlayerID, List: arriving.List, Prospect: player.Status == "prospect", Rookie: arriving.Rookie, Startup: arriving.Startup, InjuryReserveLocked: injuryLocked, StarterIneligible: !rules[key.league].CanStart(league.Competition, conference)})
 			}
 		}
 		if err := roster.Check(rules[key.league].Roster, before, after); err != nil {

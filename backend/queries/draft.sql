@@ -138,3 +138,29 @@ values (@draft_id, @franchise_id, @player_id, @rank);
 -- name: RemoveFromDraftQueues :exec
 -- A drafted player leaves everyone's queue.
 delete from draft_queue where draft_id = @draft_id and player_id = @player_id;
+
+-- name: SetDraftAutopick :exec
+insert into draft_autopick (draft_id, franchise_id) values (@draft_id, @franchise_id)
+on conflict do nothing;
+
+-- name: ClearDraftAutopick :exec
+delete from draft_autopick where draft_id = @draft_id and franchise_id = @franchise_id;
+
+-- name: ListDraftAutopick :many
+select franchise_id from draft_autopick where draft_id = @draft_id order by franchise_id;
+
+-- name: ListAutoPickCandidates :many
+-- The best players nobody has rostered in one sport, by fantasy points in
+-- its latest season under the rules of the league here: who auto pick
+-- chooses among when a franchise's queue is empty.
+select p.id
+from players p
+join (select ps.player_id, sum(ps.points) as points
+      from player_seasons ps
+      where ps.competition = @competition and ps.league = '' and ps.points is not null
+        and ps.year = (select max(s.year) from stat_seasons s where s.competition = @competition)
+      group by ps.player_id) scored on scored.player_id = p.id
+where p.competition = @competition
+  and not exists (select 1 from roster_entries r where r.player_id = p.id)
+order by scored.points desc, p.id
+limit @page_size;

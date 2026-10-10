@@ -47,6 +47,7 @@ type Change struct {
 	Source    Source      // defaults to FreeAgency
 	PickID    pgtype.UUID // the draft pick used, when Source is Draft
 	Bid       int         // what the claim cost, when Source is Waivers
+	Startup   bool        // a startup-draft pick, which may sit on reserve whatever the rule
 }
 
 // Add puts an unrostered player on the franchise's roster.
@@ -77,6 +78,13 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 		}
 		if player.Competition != c.League.Competition {
 			return nil, problem.New("%s does not play in this league's competition.", player.FullName)
+		}
+		injuryLocked, err := q.HasInjuryReserveLock(ctx, db.HasInjuryReserveLockParams{LeagueID: c.League.ID, PlayerID: c.PlayerID, Day: sportsday.Date(sportsday.Today())})
+		if err != nil {
+			return nil, err
+		}
+		if injuryLocked && c.List != settings.ListReserve {
+			return nil, problem.New("This player must remain on reserve for the rest of the season after an injury swap.")
 		}
 		if c.Source == FreeAgency {
 			drafting, err := q.LeagueHasOpenDraft(ctx, c.League.ID)
@@ -110,6 +118,7 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 			List:        c.List,
 			AcquiredVia: string(c.Source),
 			ReservedAt:  reservedNow(c.Source == FreeAgency && c.List == settings.ListReserve && player.Status != "prospect"),
+			Startup:     c.Startup,
 		})
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique violation: first come, first served
@@ -122,7 +131,7 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 		if err != nil {
 			return nil, err
 		}
-		return append(roster, Entry{PlayerID: c.PlayerID, List: c.List, Prospect: player.Status == "prospect", StarterIneligible: !rules.CanStart(c.League.Competition, conference)}), nil
+		return append(roster, Entry{PlayerID: c.PlayerID, List: c.List, Prospect: player.Status == "prospect", Startup: c.Startup, InjuryReserveLocked: injuryLocked, StarterIneligible: !rules.CanStart(c.League.Competition, conference)}), nil
 	})
 }
 
@@ -228,52 +237,138 @@ func underWeeklyLimit(ctx context.Context, q *db.Queries, rules settings.League,
 // manager who sends a player other than a prospect to reserve starts the
 // league's reserve lock, and cannot bring him back until it runs out.
 func (s *Service) Move(ctx context.Context, c Change) error {
-	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
-		// Signing a rookie-draft pick is a move too, recorded under its own name.
-		kind := "move"
-		if held, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: c.League.ID, PlayerID: c.PlayerID}); err == nil && held.List == settings.ListRights {
-			kind = "sign"
-		}
-		return apply(ctx, q, c, kind, true, func(rules settings.League, roster []Entry) ([]Entry, error) {
-			i := index(roster, c.PlayerID)
-			if i < 0 {
-				return nil, problem.New("That player is not on this roster.")
-			}
-			entry, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: c.League.ID, PlayerID: c.PlayerID})
-			if err != nil {
-				return nil, err
-			}
-			managed := c.Source != Commissioner
-			reserved := entry.ReservedAt // unchanged unless he changes lists
-			rookie := entry.Rookie
-			switch {
-			case c.List == entry.List:
-			case entry.List == settings.ListRights:
-				// Signing a rookie-draft pick, to either list if it has room. On
-				// the reserve list he may stay whatever the league's rule for it.
-				rookie = c.List == settings.ListReserve
-			case c.List == settings.ListReserve:
-				reserved = reservedNow(managed && !roster[i].Prospect)
-			default:
-				rookie = false // once on the main roster he is a rookie no longer
-				if until := LockedUntil(rules.Roster, entry.ReservedAt); managed && time.Now().Before(until) {
-					return nil, problem.New("This player is locked on the reserve list until %s.", sportsday.Clock(until))
-				}
-				reserved = pgtype.Timestamptz{}
-			}
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error { return moveIn(ctx, q, c, true) })
+}
 
-			roster[i].List, roster[i].Rookie = c.List, rookie
-			if err := q.SetRosterList(ctx, db.SetRosterListParams{
-				LeagueID: c.League.ID, FranchiseID: c.Franchise.ID, PlayerID: c.PlayerID, List: c.List, ReservedAt: reserved, Rookie: rookie,
-			}); err != nil {
-				return nil, err
+// Set declares a franchise's whole reserve list at once: the players named
+// go to the reserve list and everyone else it has signed goes to the main
+// roster. Each move obeys the reserve lock, but the limits are checked only
+// on the result, so two full lists can swap players.
+func (s *Service) Set(ctx context.Context, c Change, reserve []pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		rules, err := settings.Parse[settings.League](c.League.Settings)
+		if err != nil {
+			return err
+		}
+		before, err := entries(ctx, q, c, rules)
+		if err != nil {
+			return err
+		}
+		for _, id := range reserve {
+			if i := index(before, id); i < 0 || before[i].List == settings.ListRights {
+				return problem.New("One of those players is not signed to this roster.")
 			}
-			if c.List == settings.ListReserve { // reserve players cannot start
-				return roster, lineup.Bench(ctx, q, c.League.ID, c.Franchise.ID, c.PlayerID)
+		}
+		for _, e := range before {
+			list := settings.ListMain
+			if slices.Contains(reserve, e.PlayerID) {
+				list = settings.ListReserve
 			}
-			return roster, nil
-		})
+			if e.List == settings.ListRights || e.List == list {
+				continue
+			}
+			c.PlayerID, c.List = e.PlayerID, list
+			if err := moveIn(ctx, q, c, false); err != nil {
+				return err
+			}
+		}
+		if c.Source == Commissioner {
+			return nil
+		}
+		after, err := entries(ctx, q, c, rules)
+		if err != nil {
+			return err
+		}
+		return Check(rules.Roster, before, after)
 	})
+}
+
+// moveIn is one move inside a transaction the caller owns. checked says
+// whether the roster limits apply to it alone.
+func moveIn(ctx context.Context, q *db.Queries, c Change, checked bool) error {
+	// Signing a rookie-draft pick is a move too, recorded under its own name.
+	kind := "move"
+	if held, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: c.League.ID, PlayerID: c.PlayerID}); err == nil && held.List == settings.ListRights {
+		kind = "sign"
+	}
+	return apply(ctx, q, c, kind, checked, func(rules settings.League, roster []Entry) ([]Entry, error) {
+		i := index(roster, c.PlayerID)
+		if i < 0 {
+			return nil, problem.New("That player is not on this roster.")
+		}
+		entry, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: c.League.ID, PlayerID: c.PlayerID})
+		if err != nil {
+			return nil, err
+		}
+		if roster[i].InjuryReserveLocked && c.List != settings.ListReserve {
+			return nil, problem.New("This player used an injury swap and must remain on reserve for the rest of the season.")
+		}
+		managed := c.Source != Commissioner
+		reserved := entry.ReservedAt // unchanged unless he changes lists
+		rookie := entry.Rookie
+		switch {
+		case c.List == entry.List:
+		case entry.List == settings.ListRights:
+			// Signing a rookie-draft pick, to either list if it has room. On
+			// the reserve list he may stay whatever the league's rule for it.
+			rookie = c.List == settings.ListReserve
+		case c.List == settings.ListReserve:
+			reserved = reservedNow(managed && !roster[i].Prospect)
+		default:
+			rookie = false // once on the main roster he is a rookie no longer
+			if managed {
+				if err := callable(ctx, q, c, rules.Roster, entry.ReservedAt); err != nil {
+					return nil, err
+				}
+			}
+			reserved = pgtype.Timestamptz{}
+		}
+
+		roster[i].List, roster[i].Rookie = c.List, rookie
+		if err := q.SetRosterList(ctx, db.SetRosterListParams{
+			LeagueID: c.League.ID, FranchiseID: c.Franchise.ID, PlayerID: c.PlayerID, List: c.List, ReservedAt: reserved, Rookie: rookie,
+		}); err != nil {
+			return nil, err
+		}
+		if c.List == settings.ListReserve { // reserve players cannot start
+			return roster, lineup.Bench(ctx, q, c.League.ID, c.Franchise.ID, c.PlayerID)
+		}
+		return roster, nil
+	})
+}
+
+// callable refuses a call-up from the reserve list while a lock holds.
+func callable(ctx context.Context, q *db.Queries, c Change, limits settings.Roster, reservedAt pgtype.Timestamptz) error {
+	ends, err := SeasonEnds(ctx, q, c.League.ID)
+	if err != nil {
+		return err
+	}
+	locked, err := q.HasInjuryReserveLock(ctx, db.HasInjuryReserveLockParams{LeagueID: c.League.ID, PlayerID: c.PlayerID, Day: sportsday.Date(sportsday.Today())})
+	if err != nil {
+		return err
+	}
+	if locked {
+		return problem.New("This player used an injury swap and must remain on reserve for the rest of the season.")
+	}
+	until := LockedUntil(limits, reservedAt, ends)
+	if !time.Now().Before(until) {
+		return nil
+	}
+	player, err := q.GetPlayer(ctx, c.PlayerID)
+	if err != nil {
+		return err
+	}
+	return problem.New("%s is locked on the reserve list until %s.", player.FullName, sportsday.Clock(until))
+}
+
+// SeasonEnds is the last day of the season a league is playing, or the zero
+// time between seasons.
+func SeasonEnds(ctx context.Context, q *db.Queries, leagueID pgtype.UUID) (time.Time, error) {
+	ends, err := q.RunningSeasonEnd(ctx, db.RunningSeasonEndParams{LeagueID: leagueID, Day: sportsday.Date(sportsday.Today())})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	return ends.Time, err
 }
 
 // apply runs one roster change inside q's transaction: it locks the
@@ -292,18 +387,9 @@ func apply(ctx context.Context, q *db.Queries, c Change, kind string, checked bo
 		return err
 	}
 
-	if err := q.LockFranchiseRoster(ctx, db.LockFranchiseRosterParams{
-		LeagueID: c.League.ID.String(), FranchiseID: c.Franchise.ID.String(),
-	}); err != nil {
-		return err
-	}
-	rows, err := q.ListRosterEntries(ctx, db.ListRosterEntriesParams{LeagueID: c.League.ID, FranchiseID: c.Franchise.ID})
+	before, err := entries(ctx, q, c, rules)
 	if err != nil {
 		return err
-	}
-	before := make([]Entry, len(rows))
-	for i, r := range rows {
-		before[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, StarterIneligible: !rules.CanStart(c.League.Competition, r.Conference)}
 	}
 
 	after, err := edit(rules, slices.Clone(before))
@@ -327,6 +413,25 @@ func apply(ctx context.Context, q *db.Queries, c Change, kind string, checked bo
 		DraftPickID: c.PickID,
 		Detail:      detail,
 	})
+}
+
+// entries locks the franchise's roster until the transaction ends and
+// returns it as the limits see it.
+func entries(ctx context.Context, q *db.Queries, c Change, rules settings.League) ([]Entry, error) {
+	if err := q.LockFranchiseRoster(ctx, db.LockFranchiseRosterParams{
+		LeagueID: c.League.ID.String(), FranchiseID: c.Franchise.ID.String(),
+	}); err != nil {
+		return nil, err
+	}
+	rows, err := q.ListRosterEntries(ctx, db.ListRosterEntriesParams{LeagueID: c.League.ID, FranchiseID: c.Franchise.ID})
+	if err != nil {
+		return nil, err
+	}
+	roster := make([]Entry, len(rows))
+	for i, r := range rows {
+		roster[i] = Entry{PlayerID: r.PlayerID, List: r.List, Prospect: r.Status == "prospect", Rookie: r.Rookie, Startup: r.Startup, InjuryReserveLocked: r.InjuryReserveLocked, StarterIneligible: !rules.CanStart(c.League.Competition, r.Conference)}
+	}
+	return roster, nil
 }
 
 // reservedNow is the reserve lock's starting time: now when it starts, and

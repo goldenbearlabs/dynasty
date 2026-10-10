@@ -31,6 +31,15 @@ func (q *Queries) AddPlayerExternalID(ctx context.Context, arg AddPlayerExternal
 	return err
 }
 
+const clearInjuryDesignations = `-- name: ClearInjuryDesignations :exec
+update players set injury_designation = '', injury_checked_at = now() where competition = $1
+`
+
+func (q *Queries) ClearInjuryDesignations(ctx context.Context, competition string) error {
+	_, err := q.db.Exec(ctx, clearInjuryDesignations, competition)
+	return err
+}
+
 const countPlayers = `-- name: CountPlayers :one
 select count(*)
 from players p
@@ -256,7 +265,7 @@ func (q *Queries) GetLeagueByCompetition(ctx context.Context, arg GetLeagueByCom
 }
 
 const getPlayer = `-- name: GetPlayer :one
-select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at from players where id = $1
+select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at, injury_designation, injury_checked_at from players where id = $1
 `
 
 func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error) {
@@ -276,6 +285,8 @@ func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error)
 		&i.HeadshotUrl,
 		&i.UpdatedAt,
 		&i.CareerCheckedAt,
+		&i.InjuryDesignation,
+		&i.InjuryCheckedAt,
 	)
 	return i, err
 }
@@ -312,7 +323,7 @@ func (q *Queries) GetPlayerExternalID(ctx context.Context, arg GetPlayerExternal
 }
 
 const getPlayerProfile = `-- name: GetPlayerProfile :one
-select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
+select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
@@ -326,19 +337,20 @@ where p.id = $1
 `
 
 type GetPlayerProfileRow struct {
-	ID          pgtype.UUID `json:"id"`
-	Competition string      `json:"competition"`
-	Status      string      `json:"status"`
-	FullName    string      `json:"full_name"`
-	Positions   []string    `json:"positions"`
-	BirthDate   pgtype.Date `json:"birth_date"`
-	Class       string      `json:"class"`
-	Note        string      `json:"note"`
-	HeadshotUrl string      `json:"headshot_url"`
-	TeamAbbrev  string      `json:"team_abbrev"`
-	TeamName    string      `json:"team_name"`
-	OwnerName   string      `json:"owner_name"`
-	OwnerSlug   string      `json:"owner_slug"`
+	ID                pgtype.UUID `json:"id"`
+	Competition       string      `json:"competition"`
+	Status            string      `json:"status"`
+	InjuryDesignation string      `json:"injury_designation"`
+	FullName          string      `json:"full_name"`
+	Positions         []string    `json:"positions"`
+	BirthDate         pgtype.Date `json:"birth_date"`
+	Class             string      `json:"class"`
+	Note              string      `json:"note"`
+	HeadshotUrl       string      `json:"headshot_url"`
+	TeamAbbrev        string      `json:"team_abbrev"`
+	TeamName          string      `json:"team_name"`
+	OwnerName         string      `json:"owner_name"`
+	OwnerSlug         string      `json:"owner_slug"`
 }
 
 // A player's identity and current ownership for inline draft research.
@@ -349,6 +361,7 @@ func (q *Queries) GetPlayerProfile(ctx context.Context, id pgtype.UUID) (GetPlay
 		&i.ID,
 		&i.Competition,
 		&i.Status,
+		&i.InjuryDesignation,
 		&i.FullName,
 		&i.Positions,
 		&i.BirthDate,
@@ -486,6 +499,35 @@ func (q *Queries) KeepEarliestEligibility(ctx context.Context, arg KeepEarliestE
 	return err
 }
 
+const listInjuryPlayers = `-- name: ListInjuryPlayers :many
+select id, full_name from players where competition = $1
+`
+
+type ListInjuryPlayersRow struct {
+	ID       pgtype.UUID `json:"id"`
+	FullName string      `json:"full_name"`
+}
+
+func (q *Queries) ListInjuryPlayers(ctx context.Context, competition string) ([]ListInjuryPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listInjuryPlayers, competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInjuryPlayersRow{}
+	for rows.Next() {
+		var i ListInjuryPlayersRow
+		if err := rows.Scan(&i.ID, &i.FullName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMergeSuggestions = `-- name: ListMergeSuggestions :many
 select a.id as prospect_id, a.full_name, a.competition, a.note as prospect_note,
        b.id as player_id, b.status as player_status, b.class as player_class,
@@ -607,7 +649,7 @@ func (q *Queries) ListPlayerHistory(ctx context.Context, arg ListPlayerHistoryPa
 }
 
 const listPlayerRosterEntries = `-- name: ListPlayerRosterEntries :many
-select re.league_id, re.franchise_id, re.player_id, re.list, re.acquired_via, re.acquired_at, re.reserved_at, re.rights_until, re.rookie from roster_entries re where re.player_id = $1
+select re.league_id, re.franchise_id, re.player_id, re.list, re.acquired_via, re.acquired_at, re.reserved_at, re.rights_until, re.rookie, re.startup from roster_entries re where re.player_id = $1
 `
 
 func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.UUID) ([]RosterEntry, error) {
@@ -629,6 +671,7 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 			&i.ReservedAt,
 			&i.RightsUntil,
 			&i.Rookie,
+			&i.Startup,
 		); err != nil {
 			return nil, err
 		}
@@ -669,7 +712,7 @@ with seasons as (
   where placed.place <= sizes.spots
   group by placed.competition
 )
-select p.id, p.competition, p.status, p.full_name, p.positions, p.birth_date,
+select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
@@ -718,24 +761,25 @@ type ListPlayersParams struct {
 }
 
 type ListPlayersRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	Competition   string             `json:"competition"`
-	Status        string             `json:"status"`
-	FullName      string             `json:"full_name"`
-	Positions     []string           `json:"positions"`
-	BirthDate     pgtype.Date        `json:"birth_date"`
-	Class         string             `json:"class"`
-	Note          string             `json:"note"`
-	HeadshotUrl   string             `json:"headshot_url"`
-	EligibleSince pgtype.Timestamptz `json:"eligible_since"`
-	TeamAbbrev    string             `json:"team_abbrev"`
-	TeamName      string             `json:"team_name"`
-	OwnerName     string             `json:"owner_name"`
-	OwnerSlug     string             `json:"owner_slug"`
-	WaiverUntil   pgtype.Timestamptz `json:"waiver_until"`
-	Season        string             `json:"season"`
-	SeasonPoints  float64            `json:"season_points"`
-	SeasonIndex   float64            `json:"season_index"`
+	ID                pgtype.UUID        `json:"id"`
+	Competition       string             `json:"competition"`
+	Status            string             `json:"status"`
+	InjuryDesignation string             `json:"injury_designation"`
+	FullName          string             `json:"full_name"`
+	Positions         []string           `json:"positions"`
+	BirthDate         pgtype.Date        `json:"birth_date"`
+	Class             string             `json:"class"`
+	Note              string             `json:"note"`
+	HeadshotUrl       string             `json:"headshot_url"`
+	EligibleSince     pgtype.Timestamptz `json:"eligible_since"`
+	TeamAbbrev        string             `json:"team_abbrev"`
+	TeamName          string             `json:"team_name"`
+	OwnerName         string             `json:"owner_name"`
+	OwnerSlug         string             `json:"owner_slug"`
+	WaiverUntil       pgtype.Timestamptz `json:"waiver_until"`
+	Season            string             `json:"season"`
+	SeasonPoints      float64            `json:"season_points"`
+	SeasonIndex       float64            `json:"season_index"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
@@ -772,6 +816,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.ID,
 			&i.Competition,
 			&i.Status,
+			&i.InjuryDesignation,
 			&i.FullName,
 			&i.Positions,
 			&i.BirthDate,
@@ -961,6 +1006,20 @@ type MoveTransactionsParams struct {
 
 func (q *Queries) MoveTransactions(ctx context.Context, arg MoveTransactionsParams) error {
 	_, err := q.db.Exec(ctx, moveTransactions, arg.KeepID, arg.DuplicateID)
+	return err
+}
+
+const setInjuryDesignation = `-- name: SetInjuryDesignation :exec
+update players set injury_designation = $1 where id = $2
+`
+
+type SetInjuryDesignationParams struct {
+	InjuryDesignation string      `json:"injury_designation"`
+	ID                pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetInjuryDesignation(ctx context.Context, arg SetInjuryDesignationParams) error {
+	_, err := q.db.Exec(ctx, setInjuryDesignation, arg.InjuryDesignation, arg.ID)
 	return err
 }
 

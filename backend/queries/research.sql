@@ -34,7 +34,7 @@ with latest as (
   from stats left join leagues l on l.competition = stats.competition
   group by stats.player_id, stats.competition
 ), pool as (
-  select p.id, p.competition, p.full_name, p.positions, p.status, p.headshot_url,
+  select p.id, p.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
          coalesce(totals.season_team, t.abbrev, '')::text as team,
          coalesce(f.name, '')::text as owner_name, coalesce(f.slug, '')::text as owner_slug,
          coalesce(totals.season, '')::text as season,
@@ -93,7 +93,7 @@ with selected as (
 ), stats as (
  select player_id,jsonb_object_agg(key,value) as stats from stat_values group by player_id
 )
-select p.id, totals.competition, p.full_name, p.positions, p.status, p.headshot_url,
+select p.id, totals.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
        coalesce(totals.team,'')::text as team,
        coalesce(f.name,'')::text as owner_name, coalesce(f.slug,'')::text as owner_slug,
        totals.season, totals.games, coalesce(stats.stats,'{}'::jsonb) as stats,

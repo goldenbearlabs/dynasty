@@ -38,7 +38,7 @@
 
 <section class="stack">
 	<p class="muted">
-		Rosters and season-by-season stat history refresh every night, prospects every week, and scores every 15 minutes for the
+		Rosters, injury designations and season-by-season stat history refresh every night, prospects every week, and scores every 15 minutes for the
 		sports this dynasty plays. Use these to refresh now.
 	</p>
 
@@ -52,6 +52,7 @@
 				<strong>{c.name}</strong>
 				<div class="row">
 					<button class="small" onclick={() => start(c, 'rosters')}><Icon name="refresh" size={14} /> Rosters</button>
+					<button class="small" onclick={() => start(c, 'injuries')}><Icon name="refresh" size={14} /> Injuries</button>
 					<button class="small" onclick={() => start(c, 'games')}><Icon name="refresh" size={14} /> Scores</button>
 					<button class="small" onclick={() => start(c, 'seasons')}><Icon name="refresh" size={14} /> Stat history</button>
 					{#if c.has_prospects}

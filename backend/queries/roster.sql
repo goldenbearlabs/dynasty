@@ -5,7 +5,7 @@ select pg_advisory_xact_lock(hashtextextended(@league_id::text || @franchise_id:
 
 -- name: ListRosterEntries :many
 -- The facts roster limits depend on.
-select r.player_id, r.list, r.rookie, p.status, coalesce(t.conference, '')::text as conference
+select r.player_id, r.list, r.rookie, r.startup, exists (select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id where i.player_id = r.player_id and s.league_id = r.league_id and s.status = 'active' and ((now() at time zone 'America/New_York') - interval '5 hours')::date between s.starts_on and s.ends_on) as injury_reserve_locked, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
@@ -13,8 +13,8 @@ where r.league_id = @league_id and r.franchise_id = @franchise_id;
 
 -- name: ListFranchiseRoster :many
 -- Every player a franchise holds, across all its leagues, for display.
-select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie,
-       p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
+select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie, r.startup, exists (select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id where i.player_id = r.player_id and s.league_id = r.league_id and s.status = 'active' and ((now() at time zone 'America/New_York') - interval '5 hours')::date between s.starts_on and s.ends_on) as injury_reserve_locked,
+       p.id as player_id, p.full_name, p.positions, p.status, p.injury_designation, p.class, p.note, p.birth_date, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(n.nickname, '')::text as nickname
 from roster_entries r
@@ -25,8 +25,8 @@ where r.franchise_id = @franchise_id
 order by p.full_name;
 
 -- name: InsertRosterEntry :exec
-insert into roster_entries (league_id, franchise_id, player_id, list, acquired_via, reserved_at)
-values (@league_id, @franchise_id, @player_id, @list, @acquired_via, @reserved_at);
+insert into roster_entries (league_id, franchise_id, player_id, list, acquired_via, reserved_at, startup)
+values (@league_id, @franchise_id, @player_id, @list, @acquired_via, @reserved_at, @startup);
 
 -- name: GetRosterEntry :one
 select * from roster_entries where league_id = @league_id and player_id = @player_id;
@@ -74,3 +74,18 @@ left join drafts d      on d.id = k.draft_id
 where x.dynasty_id = @dynasty_id
 order by x.id desc
 limit @page_size;
+
+-- name: InjurySwapSeason :one
+select * from seasons where league_id = @league_id and status = 'active'
+ and @day::date between starts_on and ends_on;
+
+-- name: HasInjuryReserveLock :one
+select exists (
+ select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id
+ where i.player_id = @player_id and s.league_id = @league_id
+ and s.status = 'active' and @day::date between s.starts_on and s.ends_on
+);
+
+-- name: InsertInjuryReserveLock :exec
+insert into injury_reserve_locks(season_id, player_id, franchise_id, replacement_id)
+values (@season_id, @player_id, @franchise_id, @replacement_id);

@@ -18,6 +18,8 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch job := r.PathValue("job"); {
+	case job == "injuries" && c.Injuries != nil:
+		go s.Syncer.SyncInjuries(s.Background, c.Key, c.Injuries)
 	case job == "rosters":
 		go s.Syncer.SyncRosters(s.Background, c.Key, c.Source)
 	case job == "prospects" && c.Prospects != nil:

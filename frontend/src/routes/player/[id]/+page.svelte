@@ -1,4 +1,5 @@
 <script lang="ts">
+ import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
  import { page } from '$app/state';
  import { invalidateAll } from '$app/navigation';
  import { getPlayerProfile, getPlayerTimeline, getPlayerGameLog, changeRoster, type PlayerProfile, type PlayerEvent, type ProfileGame, type List } from '#lib/api.ts';
@@ -99,7 +100,7 @@
  {:else if profile}
   {@const p = profile.player}
   <header class="hero card">
-   <div class="identity"><Headshot name={p.full_name} src={p.headshot_url} size={88} /><div class="stack tight"><span class="eyebrow">Player dossier · {nameSport(p.competition)}</span><h1>{p.full_name}</h1>{#if data.me}{#key data.me.id+p.id}<PlayerNickname franchiseID={data.me.id} playerID={p.id} playerName={p.full_name} load />{/key}{/if}<div class="row muted">{p.positions?.join(' / ')} · {p.team_abbrev || 'Team unavailable'}{#if age !== null} · Age {age}{/if}{#if p.class} · {p.class}{/if}<span class="pill">{human(p.status)}</span></div></div></div>
+   <div class="identity"><Headshot name={p.full_name} src={p.headshot_url} size={88} /><div class="stack tight"><span class="eyebrow">Player dossier · {nameSport(p.competition)}</span><h1>{p.full_name}</h1><InjuryBadge designation={p.injury_designation} />{#if data.me}{#key data.me.id+p.id}<PlayerNickname franchiseID={data.me.id} playerID={p.id} playerName={p.full_name} load />{/key}{/if}<div class="row muted">{p.positions?.join(' / ')} · {p.team_abbrev || 'Team unavailable'}{#if age !== null} · Age {age}{/if}{#if p.class} · {p.class}{/if}<span class="pill">{human(p.status)}</span></div></div></div>
    <div class="status"><span class="eyebrow">Fantasy status</span>{#if own}<a href="/franchise/{own.franchise_slug}"><strong>{own.franchise_name}</strong></a><span>{human(own.list)} roster{own.slot ? ` · Starting at ${own.slot}` : ' · Not currently starting'}</span>{:else}<strong>{waiver ? 'On waivers' : 'Unrostered'}</strong><span class="muted small-text">{league ? 'Subject to league acquisition rules' : 'No dynasty league for this sport'}</span>{/if}
     {#if data.me && league}{#if !own && waiver}<a href="/waivers?competition={p.competition}">Review waiver claim →</a>{:else if !own}<div class="row"><button class="small" disabled={adding} onclick={() => add('main')}>Add to main</button><button class="small" disabled={adding} onclick={() => add('reserve')}>Add to reserve</button></div>{:else if own.franchise_id !== data.me.id}<a href="/trades/new">Build a trade →</a>{:else}<a href="/franchise/{own.franchise_slug}">Manage on your roster →</a>{/if}{/if}
    </div>

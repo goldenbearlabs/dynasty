@@ -67,6 +67,11 @@ join leagues l on l.id = s.league_id
 where l.dynasty_id = @dynasty_id
 order by s.year desc;
 
+-- name: RunningSeasonEnd :one
+-- The last day of the season a league is playing on this day, if it is.
+select ends_on from seasons
+where league_id = @league_id and status = 'active' and @day::date between starts_on and ends_on;
+
 -- name: SetSeasonDates :exec
 update seasons set starts_on = @starts_on, ends_on = @ends_on where id = @id;
 

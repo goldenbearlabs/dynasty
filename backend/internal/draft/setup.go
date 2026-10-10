@@ -3,9 +3,9 @@
 //
 // A startup draft and a seasonal draft are the same thing; they differ only
 // in who is already on a roster and where a pick lands: a startup draft
-// fills the main rosters, starters and bench, and leaves the reserve lists
-// for afterwards. A combined draft is the same thing covering more than one
-// league.
+// fills both lists, the main roster and the reserve list, and a rookie
+// draft holds its picks as rights. A combined draft is the same thing
+// covering more than one league.
 package draft
 
 import (
@@ -70,8 +70,7 @@ func (s *Service) Create(ctx context.Context, dynastyID pgtype.UUID, in NewDraft
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 
-		// A franchise cannot draft more players than its rosters can hold: in
-		// a startup draft, its main rosters.
+		// A franchise cannot draft more players than its rosters can hold.
 		capacity := 0
 		for _, id := range in.LeagueIDs {
 			league, err := q.GetLeague(ctx, id)
@@ -92,10 +91,7 @@ func (s *Service) Create(ctx context.Context, dynastyID pgtype.UUID, in NewDraft
 			if err != nil {
 				return err
 			}
-			capacity += rules.Roster.Main
-			if in.Kind != "startup" {
-				capacity += rules.Roster.Reserve
-			}
+			capacity += rules.Roster.Main + rules.Roster.Reserve
 		}
 		if in.Rounds > capacity {
 			return problem.New("%d rounds is more than the %d roster spots each franchise has to fill.", in.Rounds, capacity)

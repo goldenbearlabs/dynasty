@@ -13,10 +13,12 @@
 		makePick,
 		passPick,
 		setDraftClock,
+		setAutoPick,
 		setQueue,
 		type DraftAction,
 		type Player,
 		type QueuedPlayer,
+		type RankedPlayer,
 		type RankingSummary
 	} from '#lib/api.ts';
 	import { DraftRoom } from '#lib/draftRoom.svelte.ts';
@@ -30,6 +32,7 @@
 	import type { PageProps } from './$types';
 	import Board from './Board.svelte';
 	import PickOrder from './PickOrder.svelte';
+	import RankingList from './RankingList.svelte';
 	import Research from './Research.svelte';
 	import Teams from './Teams.svelte';
 	import Queue from './Queue.svelte';
@@ -141,6 +144,12 @@
 	// ---- actions ----
 	// A rookie draft holds its picks as rights, to be signed afterwards, and lets a pick be passed.
 	const rookie = $derived(draft?.kind === 'seasonal');
+	// Auto pick makes my picks for me a few seconds after they come up: the
+	// top of my queue, or one of the best players left.
+	const autoIds = $derived(room?.state?.auto_pick_franchise_ids ?? []);
+	const myAuto = $derived(!!me && autoIds.includes(me.id));
+	const toggleAuto = () => setAutoPick(id, !myAuto).catch(toast.error);
+
 	async function pass() {
 		if (!onClock || !confirm(`Pass pick #${onClock.position}? It cannot be made later.`)) return;
 		try {
@@ -206,6 +215,13 @@
 			.filter((r) => r.players > 0 && (r.league_id ? room?.state?.league_ids.includes(r.league_id) : r.draft_id === id))
 			.toSorted((a, b) => Number(b.draft_id === id) - Number(a.draft_id === id))
 	);
+	// The pool pane shows every available player, or one of my lists.
+	let listId = $state('');
+	const list = $derived(importable.find((r) => r.id === listId));
+	const taken = $derived(
+		new Map(made.map((p) => [p.player_id!, franchise(p.current_franchise_id)?.name ?? 'Drafted']))
+	);
+
 	async function loadRanking(rankingId: string) {
 		if (!rankingId || savingQueue) return;
 		savingQueue = true;
@@ -322,6 +338,13 @@
 								? 'Skipped pick owed'
 								: 'No picks remaining'}</strong
 						>{/if}
+					{#if draft.status !== 'complete' && (nextMine || myMakeUp)}<button
+							class="small auto-toggle"
+							class:on={myAuto}
+							aria-pressed={myAuto}
+							title="Your picks are made for you about 3 seconds after they come up: the top of your queue, or one of the best players left."
+							onclick={toggleAuto}>Auto pick {myAuto ? 'on' : 'off'}</button
+						>{/if}
 				</div>{/if}
 			{#if commissioner}
 				<details class="admin">
@@ -362,6 +385,10 @@
 				</details>
 			{/if}
 		</header>
+		{#if me && !rookie && draft.status === 'complete'}<p class="makeup">
+				<span class="pill gold">Next</span> Set your roster: choose who is on your reserve list in each league,
+				on <a href="/franchise/{me.slug}">your team page</a>, before the season starts.
+			</p>{/if}
 		{#if myMakeUp && !myTurn && draft.status === 'live'}<p class="makeup">
 				<span class="pill gold">Skipped</span> Pick #{myMakeUp.position} is owed to you. Select a player
 				below to make it up.
@@ -393,6 +420,7 @@
 						{franchises}
 						onClockId={room?.state?.on_clock_pick_id ?? null}
 						myId={me?.id}
+						{autoIds}
 						showSport={sports.length > 1}
 						onselect={research}
 					/>
@@ -407,10 +435,26 @@
 				<div class="scouting" bind:this={scouting}>
 					<section class="pool-pane" id="draft-player-pool" aria-label="Available players">
 						<div class="section-heading">
-							<h2>Available players</h2>
-							<span class="hint">Click a name to research</span>
+							<h2>{list ? list.name : 'Available players'}</h2>
+							{#if importable.length > 0}
+								<select class="import" aria-label="Show available players or one of my lists" bind:value={listId}>
+									<option value="">All available players</option>
+									{#each importable as r (r.id)}<option value={r.id}>My list: {r.name} ({r.players})</option>{/each}
+								</select>
+							{:else}
+								<span class="hint">Click a name to research</span>
+							{/if}
 						</div>
 						<div class="pool-body">
+							{#if list}<RankingList
+									rankingId={list.id}
+									{taken}
+									showSport={sports.length > 1}
+									onselect={research}
+									{selectedId}
+									action={me && draft.status !== 'complete' ? listAction : undefined}
+								/>
+							{:else}
 							{#if sports.length > 1}<Tabs
 									tabs={sportTabs}
 									bind:value={sport}
@@ -427,6 +471,7 @@
 								{selectedId}
 								action={me && draft.status !== 'complete' ? queueAction : undefined}
 							/>
+							{/if}
 						</div>
 					</section>
 					<Splitter
@@ -490,7 +535,7 @@
 	</div>
 {/if}
 
-{#snippet queueAction(player: Player)}
+{#snippet queueAction(player: { id: string; full_name: string })}
 	{#if queue.some((q) => q.player_id === player.id)}<span class="queued">Queued</span>{:else}<button
 			class="quiet small"
 			disabled={savingQueue}
@@ -498,6 +543,10 @@
 			onclick={() => saveQueue([...queue.map((q) => q.player_id), player.id])}
 			><Icon name="plus" size={12} />Queue</button
 		>{/if}
+{/snippet}
+
+{#snippet listAction(player: RankedPlayer)}
+	{@render queueAction({ id: player.player_id, full_name: player.full_name })}
 {/snippet}
 
 {#snippet researchAction(player: Player)}
@@ -746,6 +795,11 @@
 	.target-note {
 		font-size: 0.72rem;
 		flex-basis: 100%;
+	}
+	.auto-toggle.on {
+		background: var(--gold-soft);
+		border-color: var(--gold);
+		color: var(--gold);
 	}
 	.makeup {
 		font-size: 0.78rem;

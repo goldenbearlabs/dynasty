@@ -25,6 +25,7 @@ export class DraftRoom {
 		// An update carries the draft header and only the picks that changed.
 		this.state.draft = message.draft;
 		this.state.on_clock_pick_id = message.on_clock_pick_id;
+		this.state.auto_pick_franchise_ids = message.auto_pick_franchise_ids;
 		for (const pick of message.picks) {
 			const i = this.state.picks.findIndex((p) => p.id === pick.id);
 			if (i >= 0) this.state.picks[i] = pick;

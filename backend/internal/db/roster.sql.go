@@ -32,7 +32,7 @@ func (q *Queries) DeleteRosterEntry(ctx context.Context, arg DeleteRosterEntryPa
 }
 
 const getRosterEntry = `-- name: GetRosterEntry :one
-select league_id, franchise_id, player_id, list, acquired_via, acquired_at, reserved_at, rights_until, rookie from roster_entries where league_id = $1 and player_id = $2
+select league_id, franchise_id, player_id, list, acquired_via, acquired_at, reserved_at, rights_until, rookie, startup from roster_entries where league_id = $1 and player_id = $2
 `
 
 type GetRosterEntryParams struct {
@@ -53,13 +53,82 @@ func (q *Queries) GetRosterEntry(ctx context.Context, arg GetRosterEntryParams) 
 		&i.ReservedAt,
 		&i.RightsUntil,
 		&i.Rookie,
+		&i.Startup,
 	)
 	return i, err
 }
 
+const hasInjuryReserveLock = `-- name: HasInjuryReserveLock :one
+select exists (
+ select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id
+ where i.player_id = $1 and s.league_id = $2
+ and s.status = 'active' and $3::date between s.starts_on and s.ends_on
+)
+`
+
+type HasInjuryReserveLockParams struct {
+	PlayerID pgtype.UUID `json:"player_id"`
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+func (q *Queries) HasInjuryReserveLock(ctx context.Context, arg HasInjuryReserveLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasInjuryReserveLock, arg.PlayerID, arg.LeagueID, arg.Day)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const injurySwapSeason = `-- name: InjurySwapSeason :one
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 and status = 'active'
+ and $2::date between starts_on and ends_on
+`
+
+type InjurySwapSeasonParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+func (q *Queries) InjurySwapSeason(ctx context.Context, arg InjurySwapSeasonParams) (Season, error) {
+	row := q.db.QueryRow(ctx, injurySwapSeason, arg.LeagueID, arg.Day)
+	var i Season
+	err := row.Scan(
+		&i.ID,
+		&i.LeagueID,
+		&i.Year,
+		&i.StartsOn,
+		&i.EndsOn,
+		&i.Status,
+		&i.ChampionFranchiseID,
+	)
+	return i, err
+}
+
+const insertInjuryReserveLock = `-- name: InsertInjuryReserveLock :exec
+insert into injury_reserve_locks(season_id, player_id, franchise_id, replacement_id)
+values ($1, $2, $3, $4)
+`
+
+type InsertInjuryReserveLockParams struct {
+	SeasonID      pgtype.UUID `json:"season_id"`
+	PlayerID      pgtype.UUID `json:"player_id"`
+	FranchiseID   pgtype.UUID `json:"franchise_id"`
+	ReplacementID pgtype.UUID `json:"replacement_id"`
+}
+
+func (q *Queries) InsertInjuryReserveLock(ctx context.Context, arg InsertInjuryReserveLockParams) error {
+	_, err := q.db.Exec(ctx, insertInjuryReserveLock,
+		arg.SeasonID,
+		arg.PlayerID,
+		arg.FranchiseID,
+		arg.ReplacementID,
+	)
+	return err
+}
+
 const insertRosterEntry = `-- name: InsertRosterEntry :exec
-insert into roster_entries (league_id, franchise_id, player_id, list, acquired_via, reserved_at)
-values ($1, $2, $3, $4, $5, $6)
+insert into roster_entries (league_id, franchise_id, player_id, list, acquired_via, reserved_at, startup)
+values ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertRosterEntryParams struct {
@@ -69,6 +138,7 @@ type InsertRosterEntryParams struct {
 	List        string             `json:"list"`
 	AcquiredVia string             `json:"acquired_via"`
 	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
+	Startup     bool               `json:"startup"`
 }
 
 func (q *Queries) InsertRosterEntry(ctx context.Context, arg InsertRosterEntryParams) error {
@@ -79,6 +149,7 @@ func (q *Queries) InsertRosterEntry(ctx context.Context, arg InsertRosterEntryPa
 		arg.List,
 		arg.AcquiredVia,
 		arg.ReservedAt,
+		arg.Startup,
 	)
 	return err
 }
@@ -221,8 +292,8 @@ func (q *Queries) ListExpiredRights(ctx context.Context) ([]ListExpiredRightsRow
 }
 
 const listFranchiseRoster = `-- name: ListFranchiseRoster :many
-select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie,
-       p.id as player_id, p.full_name, p.positions, p.status, p.class, p.note, p.birth_date, p.headshot_url,
+select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie, r.startup, exists (select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id where i.player_id = r.player_id and s.league_id = r.league_id and s.status = 'active' and ((now() at time zone 'America/New_York') - interval '5 hours')::date between s.starts_on and s.ends_on) as injury_reserve_locked,
+       p.id as player_id, p.full_name, p.positions, p.status, p.injury_designation, p.class, p.note, p.birth_date, p.headshot_url,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(n.nickname, '')::text as nickname
 from roster_entries r
@@ -234,23 +305,26 @@ order by p.full_name
 `
 
 type ListFranchiseRosterRow struct {
-	LeagueID    pgtype.UUID        `json:"league_id"`
-	List        string             `json:"list"`
-	AcquiredVia string             `json:"acquired_via"`
-	AcquiredAt  pgtype.Timestamptz `json:"acquired_at"`
-	ReservedAt  pgtype.Timestamptz `json:"reserved_at"`
-	RightsUntil pgtype.Timestamptz `json:"rights_until"`
-	Rookie      bool               `json:"rookie"`
-	PlayerID    pgtype.UUID        `json:"player_id"`
-	FullName    string             `json:"full_name"`
-	Positions   []string           `json:"positions"`
-	Status      string             `json:"status"`
-	Class       string             `json:"class"`
-	Note        string             `json:"note"`
-	BirthDate   pgtype.Date        `json:"birth_date"`
-	HeadshotUrl string             `json:"headshot_url"`
-	TeamAbbrev  string             `json:"team_abbrev"`
-	Nickname    string             `json:"nickname"`
+	LeagueID            pgtype.UUID        `json:"league_id"`
+	List                string             `json:"list"`
+	AcquiredVia         string             `json:"acquired_via"`
+	AcquiredAt          pgtype.Timestamptz `json:"acquired_at"`
+	ReservedAt          pgtype.Timestamptz `json:"reserved_at"`
+	RightsUntil         pgtype.Timestamptz `json:"rights_until"`
+	Rookie              bool               `json:"rookie"`
+	Startup             bool               `json:"startup"`
+	InjuryReserveLocked bool               `json:"injury_reserve_locked"`
+	PlayerID            pgtype.UUID        `json:"player_id"`
+	FullName            string             `json:"full_name"`
+	Positions           []string           `json:"positions"`
+	Status              string             `json:"status"`
+	InjuryDesignation   string             `json:"injury_designation"`
+	Class               string             `json:"class"`
+	Note                string             `json:"note"`
+	BirthDate           pgtype.Date        `json:"birth_date"`
+	HeadshotUrl         string             `json:"headshot_url"`
+	TeamAbbrev          string             `json:"team_abbrev"`
+	Nickname            string             `json:"nickname"`
 }
 
 // Every player a franchise holds, across all its leagues, for display.
@@ -271,10 +345,13 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 			&i.ReservedAt,
 			&i.RightsUntil,
 			&i.Rookie,
+			&i.Startup,
+			&i.InjuryReserveLocked,
 			&i.PlayerID,
 			&i.FullName,
 			&i.Positions,
 			&i.Status,
+			&i.InjuryDesignation,
 			&i.Class,
 			&i.Note,
 			&i.BirthDate,
@@ -293,7 +370,7 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 }
 
 const listRosterEntries = `-- name: ListRosterEntries :many
-select r.player_id, r.list, r.rookie, p.status, coalesce(t.conference, '')::text as conference
+select r.player_id, r.list, r.rookie, r.startup, exists (select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id where i.player_id = r.player_id and s.league_id = r.league_id and s.status = 'active' and ((now() at time zone 'America/New_York') - interval '5 hours')::date between s.starts_on and s.ends_on) as injury_reserve_locked, p.status, coalesce(t.conference, '')::text as conference
 from roster_entries r
 join players p on p.id = r.player_id
 left join pro_teams t on t.id = p.pro_team_id
@@ -306,11 +383,13 @@ type ListRosterEntriesParams struct {
 }
 
 type ListRosterEntriesRow struct {
-	PlayerID   pgtype.UUID `json:"player_id"`
-	List       string      `json:"list"`
-	Rookie     bool        `json:"rookie"`
-	Status     string      `json:"status"`
-	Conference string      `json:"conference"`
+	PlayerID            pgtype.UUID `json:"player_id"`
+	List                string      `json:"list"`
+	Rookie              bool        `json:"rookie"`
+	Startup             bool        `json:"startup"`
+	InjuryReserveLocked bool        `json:"injury_reserve_locked"`
+	Status              string      `json:"status"`
+	Conference          string      `json:"conference"`
 }
 
 // The facts roster limits depend on.
@@ -327,6 +406,8 @@ func (q *Queries) ListRosterEntries(ctx context.Context, arg ListRosterEntriesPa
 			&i.PlayerID,
 			&i.List,
 			&i.Rookie,
+			&i.Startup,
+			&i.InjuryReserveLocked,
 			&i.Status,
 			&i.Conference,
 		); err != nil {

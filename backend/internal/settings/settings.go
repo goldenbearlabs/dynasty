@@ -44,6 +44,9 @@ type Roster struct {
 	// How long a player who is not a prospect must stay on the reserve list
 	// once his manager sends him there. 0 means he can return at any time.
 	ReserveLockDays int `json:"reserve_lock_days"`
+	// When true, nobody on the reserve list can be called up to the main
+	// roster while the league's season is being played, only between seasons.
+	ReserveLockSeason bool `json:"reserve_lock_season"`
 }
 
 type Lineup struct {

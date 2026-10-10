@@ -101,3 +101,29 @@ func TestReserveOutsideStartingConferences(t *testing.T) {
 		t.Fatal("commissioner prospects-only rule ignored")
 	}
 }
+
+func TestStartupPickOnReserve(t *testing.T) {
+	limits := settings.Roster{Main: 1, Reserve: 1, ReserveEligibility: settings.ReserveProspects}
+	if err := Check(limits, nil, []Entry{{List: settings.ListReserve, Startup: true}}); err != nil {
+		t.Errorf("a startup pick was refused a reserve spot: %v", err)
+	}
+}
+
+func TestLockedUntil(t *testing.T) {
+	seasonEnds := time.Date(2027, 4, 1, 0, 0, 0, 0, time.UTC)
+	sent := pgtype.Timestamptz{Time: time.Date(2027, 3, 30, 12, 0, 0, 0, time.UTC), Valid: true}
+	season := settings.Roster{ReserveLockSeason: true}
+	if until := LockedUntil(season, pgtype.Timestamptz{}, time.Time{}); !until.IsZero() {
+		t.Errorf("locked until %v between seasons", until)
+	}
+	if until := LockedUntil(season, pgtype.Timestamptz{}, seasonEnds); !until.After(seasonEnds) || until.After(seasonEnds.AddDate(0, 0, 2)) {
+		t.Errorf("season lock lifts at %v, want the day after %v", until, seasonEnds)
+	}
+	if until := LockedUntil(settings.Roster{ReserveLockDays: 7}, sent, seasonEnds); !until.Equal(sent.Time.AddDate(0, 0, 7)) {
+		t.Errorf("day lock lifts at %v", until)
+	}
+	both := settings.Roster{ReserveLockSeason: true, ReserveLockDays: 7}
+	if until := LockedUntil(both, sent, seasonEnds); !until.Equal(sent.Time.AddDate(0, 0, 7)) {
+		t.Errorf("with both locks it lifts at %v, want the later of the two", until)
+	}
+}

@@ -8,6 +8,7 @@
 		franchises,
 		onClockId,
 		myId,
+		autoIds,
 		showSport,
 		onselect
 	}: {
@@ -15,6 +16,8 @@
 		franchises: Franchise[];
 		onClockId: string | null;
 		myId?: string;
+		/** Franchises with auto pick on. */
+		autoIds: string[];
 		showSport: boolean;
 		onselect?: (id: string) => void;
 	} = $props();
@@ -56,6 +59,7 @@
 <div class="board-tools">
 	<div class="legend">
 		<span class="key mine-key"></span>Your picks <span class="key clock-key"></span>On clock
+		<span class="key auto-key"></span>Auto pick on
 	</div>
 	<div class="row">
 		<button class="quiet small" disabled={!onClockId} onclick={() => jump(onClockId)}
@@ -77,6 +81,7 @@
 							class:clock={pick.id === onClockId}
 							class:mine={pick.current_franchise_id === myId}
 							class:made={!!pick.player_id}
+							class:auto={!pick.player_id && !pick.passed_at && autoIds.includes(pick.current_franchise_id)}
 						>
 							<div class="cell">
 								<div class="owner">
@@ -106,7 +111,9 @@
 												? 'Passed'
 												: pick.skipped_at
 													? 'Skipped · owed'
-													: 'Upcoming'}</span
+													: autoIds.includes(pick.current_franchise_id)
+														? 'Auto pick'
+														: 'Upcoming'}</span
 									>{/if}
 								{#if pick.original_franchise_id !== pick.current_franchise_id}<span
 										class="via"
@@ -150,6 +157,10 @@
 	.clock-key {
 		background: var(--brand);
 	}
+	.auto-key {
+		background: var(--gold-soft);
+		border: 1px solid var(--gold);
+	}
 	.board {
 		overflow: auto;
 		min-height: 0;
@@ -186,6 +197,13 @@
 	td.mine,
 	tbody tr:hover td.mine {
 		background: var(--brand-soft);
+	}
+	td.auto,
+	tbody tr:hover td.auto {
+		background: var(--gold-soft);
+	}
+	td.auto .pending {
+		color: var(--gold);
 	}
 	td.clock,
 	tbody tr:hover td.clock {

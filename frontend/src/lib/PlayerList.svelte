@@ -1,4 +1,5 @@
 <script lang="ts">
+ import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
 	import { untrack, type Snippet } from 'svelte';
@@ -215,6 +216,7 @@
 													>{:else}<a href="/player/{player.id}"><strong>{player.full_name}</strong></a>{/if}
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
+												<InjuryBadge designation={player.injury_designation} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
 													>{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}

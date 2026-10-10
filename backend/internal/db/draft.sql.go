@@ -25,6 +25,20 @@ func (q *Queries) AddDraftLeague(ctx context.Context, arg AddDraftLeagueParams) 
 	return err
 }
 
+const clearDraftAutopick = `-- name: ClearDraftAutopick :exec
+delete from draft_autopick where draft_id = $1 and franchise_id = $2
+`
+
+type ClearDraftAutopickParams struct {
+	DraftID     pgtype.UUID `json:"draft_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
+func (q *Queries) ClearDraftAutopick(ctx context.Context, arg ClearDraftAutopickParams) error {
+	_, err := q.db.Exec(ctx, clearDraftAutopick, arg.DraftID, arg.FranchiseID)
+	return err
+}
+
 const clearDraftPick = `-- name: ClearDraftPick :exec
 update draft_picks set player_id = null, league_id = null, picked_at = null, auto_picked = false, skipped_at = null, passed_at = null
 where id = $1
@@ -242,6 +256,72 @@ func (q *Queries) LeagueHasOpenDraft(ctx context.Context, leagueID pgtype.UUID) 
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listAutoPickCandidates = `-- name: ListAutoPickCandidates :many
+select p.id
+from players p
+join (select ps.player_id, sum(ps.points) as points
+      from player_seasons ps
+      where ps.competition = $1 and ps.league = '' and ps.points is not null
+        and ps.year = (select max(s.year) from stat_seasons s where s.competition = $1)
+      group by ps.player_id) scored on scored.player_id = p.id
+where p.competition = $1
+  and not exists (select 1 from roster_entries r where r.player_id = p.id)
+order by scored.points desc, p.id
+limit $2
+`
+
+type ListAutoPickCandidatesParams struct {
+	Competition string `json:"competition"`
+	PageSize    int32  `json:"page_size"`
+}
+
+// The best players nobody has rostered in one sport, by fantasy points in
+// its latest season under the rules of the league here: who auto pick
+// chooses among when a franchise's queue is empty.
+func (q *Queries) ListAutoPickCandidates(ctx context.Context, arg ListAutoPickCandidatesParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAutoPickCandidates, arg.Competition, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDraftAutopick = `-- name: ListDraftAutopick :many
+select franchise_id from draft_autopick where draft_id = $1 order by franchise_id
+`
+
+func (q *Queries) ListDraftAutopick(ctx context.Context, draftID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listDraftAutopick, draftID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var franchise_id pgtype.UUID
+		if err := rows.Scan(&franchise_id); err != nil {
+			return nil, err
+		}
+		items = append(items, franchise_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDraftLeagues = `-- name: ListDraftLeagues :many
@@ -568,6 +648,21 @@ type RemoveFromDraftQueuesParams struct {
 // A drafted player leaves everyone's queue.
 func (q *Queries) RemoveFromDraftQueues(ctx context.Context, arg RemoveFromDraftQueuesParams) error {
 	_, err := q.db.Exec(ctx, removeFromDraftQueues, arg.DraftID, arg.PlayerID)
+	return err
+}
+
+const setDraftAutopick = `-- name: SetDraftAutopick :exec
+insert into draft_autopick (draft_id, franchise_id) values ($1, $2)
+on conflict do nothing
+`
+
+type SetDraftAutopickParams struct {
+	DraftID     pgtype.UUID `json:"draft_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
+func (q *Queries) SetDraftAutopick(ctx context.Context, arg SetDraftAutopickParams) error {
+	_, err := q.db.Exec(ctx, setDraftAutopick, arg.DraftID, arg.FranchiseID)
 	return err
 }
 

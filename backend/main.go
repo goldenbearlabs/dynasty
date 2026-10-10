@@ -130,6 +130,7 @@ func run(log *slog.Logger) error {
 	schedule.AddFunc(env("SYNC_CRON", "0 4 * * *"), func() {
 		for _, c := range registry {
 			syncer.SyncRosters(ctx, c.Key, c.Source)
+			syncer.SyncInjuries(ctx, c.Key, c.Injuries)
 		}
 	})
 	schedule.AddFunc(env("PROSPECT_SYNC_CRON", "0 5 * * 1"), func() {

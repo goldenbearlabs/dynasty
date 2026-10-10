@@ -36,7 +36,8 @@ type roomMessage struct {
 		AutoPicked         bool    `json:"auto_picked"`
 		SkippedAt          *string `json:"skipped_at"`
 	}
-	OnClock *string `json:"on_clock_pick_id"`
+	OnClock  *string  `json:"on_clock_pick_id"`
+	AutoPick []string `json:"auto_pick_franchise_ids"`
 }
 
 // next waits for the next message from the room.
@@ -57,7 +58,8 @@ func (r *room) next() roomMessage {
 
 // TestDraftFlow runs a combined startup draft from creation to completion:
 // the commissioner's setup, live picks over the websocket, the roster
-// limits, the clock with a queue and without one, make-up picks and undo.
+// limits, the clock with a queue and without one, make-up picks and undo,
+// and then each franchise setting its reserve list before the season.
 func TestDraftFlow(t *testing.T) {
 	pool := dbtest.Open(t)
 	dbtest.Reset(t, pool)
@@ -70,11 +72,12 @@ func TestDraftFlow(t *testing.T) {
 	server, registry := startServer(t, pool)
 	ann, bob, cy := newBrowser(t, server.URL), newBrowser(t, server.URL), newBrowser(t, server.URL)
 
-	// --- a small dynasty: NBA rosters hold one main and one reserve ------
+	// --- a small dynasty: NBA rosters hold one main and one reserve, and
+	// only a prospect, or a startup pick, may be on reserve ---------------
 	nba, _ := registry.Get("nba")
 	nhl, _ := registry.Get("nhl")
 	tight := nba.Defaults
-	tight.Roster.Main, tight.Roster.Reserve, tight.Roster.ReserveEligibility = 1, 1, "anyone"
+	tight.Roster.Main, tight.Roster.Reserve, tight.Roster.ReserveEligibility = 1, 1, "prospects_only"
 	tight.Lineup.Slots = nil
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
 		Name: "Draft Test",
@@ -223,11 +226,8 @@ func TestDraftFlow(t *testing.T) {
 		t.Fatalf("after pick 1 = %+v", m)
 	}
 
-	// Pick 2 is Bob's own. The roster rules apply: a startup pick lands on
-	// the main roster, his one main NBA spot is taken, and a drafted player
-	// cannot be drafted again.
+	// Pick 2 is Bob's own. A drafted player cannot be drafted again.
 	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard One"), nil)
-	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard Two"), nil)
 	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater One"), nil) // another sport, same draft
 	if m := live.next(); m.Picks[0].Competition != "nhl" {
 		t.Fatalf("after pick 2 = %+v", m)
@@ -281,14 +281,55 @@ func TestDraftFlow(t *testing.T) {
 	}
 
 	// --- finishing -------------------------------------------------------
-	// Undo put pick 4 back on the clock. The commissioner picks for Cy.
-	ann.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Three"), nil)
+	// Undo put pick 4 back on the clock. Cy turns auto pick on with nobody
+	// queued: the room sees it, and a few seconds later he is given one of
+	// the best players left.
+	autoURL := draftURL + "/autopick"
+	bob.want(http.StatusForbidden, "PUT", autoURL, map[string]any{"on": true, "franchise_id": franchise["Cy"]}, nil)
+	cy.want(http.StatusNoContent, "PUT", autoURL, map[string]any{"on": true}, nil)
+	if m := live.next(); len(m.AutoPick) != 1 || m.AutoPick[0] != franchise["Cy"] || m.Draft.ClockExpiresAt == nil {
+		t.Fatalf("auto pick turned on = %+v, want Cy listed and a short clock", m)
+	}
+	if m := live.next(); len(m.Picks) != 1 || m.Picks[0].Position != 4 || !m.Picks[0].AutoPicked || m.Picks[0].PlayerName == "" {
+		t.Fatalf("auto pick with an empty queue = %+v, want pick 4 made from the pool", m)
+	}
+	// Bob's main NBA spot is taken, so his next guard lands on the reserve
+	// list. With both lists full the roster rules refuse a third.
+	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Guard Three"), nil)
 	live.next()
-	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Four"), nil)
+	listed := func() map[string]string {
+		var bobs struct {
+			Rosters []struct {
+				Players []struct {
+					FullName string `json:"full_name"`
+					List     string
+				}
+			}
+		}
+		ann.want(http.StatusOK, "GET", "/api/franchises/bob", nil, &bobs)
+		lists := map[string]string{}
+		for _, r := range bobs.Rosters {
+			for _, p := range r.Players {
+				lists[p.FullName] = p.List
+			}
+		}
+		return lists
+	}
+	if l := listed(); l["Zd Guard One"] != "main" || l["Zd Guard Three"] != "reserve" {
+		t.Fatalf("Bob's guards are on %v, want the first on main and the overflow on reserve", l)
+	}
+	ann.want(http.StatusNoContent, "POST", adminURL+"/undo", nil, nil)
 	live.next()
-	ann.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater Two"), nil)
-	if m := live.next(); m.Draft.Status != "complete" || m.OnClock != nil {
-		t.Fatalf("after the last pick = %+v, want the draft complete", m)
+	// Ann, up last, queues a player and turns auto pick on before her turn.
+	ann.want(http.StatusNoContent, "PUT", draftURL+"/queue", map[string][]string{"player_ids": {id["Zd Skater Two"]}}, nil)
+	ann.want(http.StatusNoContent, "PUT", autoURL, map[string]any{"on": true}, nil)
+	if m := live.next(); len(m.AutoPick) != 2 || *m.OnClock != state.Picks[4].ID || m.Draft.ClockExpiresAt != nil {
+		t.Fatalf("auto pick turned on while waiting = %+v, want Bob's clock left alone", m)
+	}
+	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Guard Three"), nil)
+	live.next()
+	if m := live.next(); m.Draft.Status != "complete" || m.OnClock != nil || m.Picks[0].PlayerName != "Zd Skater Two" || !m.Picks[0].AutoPicked {
+		t.Fatalf("after the last pick = %+v, want Ann's queued player taken for her and the draft complete", m)
 	}
 
 	// Everyone the draft passed over is now a free agent.
@@ -300,7 +341,46 @@ func TestDraftFlow(t *testing.T) {
 	for _, a := range activity {
 		kinds[a.Kind]++
 	}
-	if kinds["pick"] != 7 || kinds["undo_pick"] != 1 {
-		t.Errorf("activity kinds = %v, want 7 picks and 1 undo", kinds)
+	if kinds["pick"] != 8 || kinds["undo_pick"] != 2 {
+		t.Errorf("activity kinds = %v, want 8 picks and 2 undos", kinds)
 	}
+
+	// --- setting the reserve list ----------------------------------------
+	// Both of Bob's NBA lists are full, so swapping them takes one save.
+	// The veteran may sit on reserve here only because he was a startup pick.
+	nbaRoster := "/api/leagues/" + nbaLeague + "/roster/"
+	reserve := func(players ...string) map[string]any {
+		ids := []string{}
+		for _, p := range players {
+			ids = append(ids, id[p])
+		}
+		return map[string]any{"reserve": ids}
+	}
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"set", reserve("Zd Guard One", "Zd Guard Three"), nil) // more than it holds
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"set", reserve("Zd Guard Five"), nil)                  // Ann's
+	bob.want(http.StatusNoContent, "POST", nbaRoster+"set", reserve("Zd Guard One"), nil)
+	if l := listed(); l["Zd Guard One"] != "reserve" || l["Zd Guard Three"] != "main" {
+		t.Fatalf("after the swap Bob's guards are on %v", l)
+	}
+	ann.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard Five", "reserve"), nil) // a free agent has no exemption
+
+	// Once the season is under way nobody comes up from reserve, though a
+	// player can still go down; the commissioner can override.
+	today := time.Now().AddDate(0, 0, -1).Format(time.DateOnly)
+	ann.want(http.StatusCreated, "POST", "/api/admin/seasons", map[string]any{
+		"league_id": nbaLeague, "year": 2026, "starts_on": today, "ends_on": time.Now().AddDate(0, 1, 0).Format(time.DateOnly),
+	}, nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"set", reserve("Zd Guard Three"), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
+	bob.want(http.StatusNoContent, "POST", nbaRoster+"drop", pick("Zd Guard Three", ""), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
+	forced := reserve()
+	forced["franchise_id"], forced["force"] = franchise["Bob"], true
+	ann.want(http.StatusNoContent, "POST", nbaRoster+"set", forced, nil)
+	if l := listed(); l["Zd Guard One"] != "main" {
+		t.Fatalf("after the commissioner's override Bob's guard is on %q", l["Zd Guard One"])
+	}
+	bob.want(http.StatusNoContent, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil) // down is still allowed
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
 }

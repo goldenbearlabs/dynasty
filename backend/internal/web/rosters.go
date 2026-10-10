@@ -11,14 +11,16 @@ import (
 )
 
 // changeRoster adds, drops or moves a player on the signed-in franchise's
-// roster. A commissioner may act for another franchise and may force a
+// roster, or sets its whole reserve list. A commissioner may act for another franchise and may force a
 // change past the free agency rules and roster limits.
 func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	var body struct {
-		PlayerID    pgtype.UUID `json:"player_id"`
-		List        string      `json:"list"`
-		FranchiseID pgtype.UUID `json:"franchise_id"` // commissioner only
-		Force       bool        `json:"force"`        // commissioner only
+		ReplacementID pgtype.UUID   `json:"replacement_id"`
+		PlayerID      pgtype.UUID   `json:"player_id"`
+		List          string        `json:"list"`
+		Reserve       []pgtype.UUID `json:"reserve"`      // for "set": the whole reserve list
+		FranchiseID   pgtype.UUID   `json:"franchise_id"` // commissioner only
+		Force         bool          `json:"force"`        // commissioner only
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -66,8 +68,12 @@ func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Fran
 		err = s.Roster.Add(ctx, change)
 	case "drop":
 		err = s.Roster.Drop(ctx, change)
+	case "injury-swap":
+		err = s.Roster.InjurySwap(ctx, change, body.ReplacementID)
 	case "move":
 		err = s.Roster.Move(ctx, change)
+	case "set":
+		err = s.Roster.Set(ctx, change, body.Reserve)
 	default:
 		writeError(w, http.StatusNotFound, "not found")
 		return

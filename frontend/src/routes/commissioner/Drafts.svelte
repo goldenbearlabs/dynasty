@@ -12,7 +12,7 @@
 	let { dynasty, drafts }: { dynasty: Dynasty; drafts: DraftSummary[] } = $props();
 
 	// A startup draft is slow, so everyone can make every pick: hours a pick, not seconds.
-	const startupClock = 8 * 3600;
+	const startupClock = 4 * 3600;
 
 	let draft = $state<NewDraft>({
 		name: '',
@@ -29,12 +29,9 @@
 	const upcoming = $derived(nextDrafts(drafts));
 	const franchise = (id: string) => dynasty.franchises.find((f) => f.id === id)!;
 	const chosen = $derived(dynasty.leagues.filter((l) => draft.league_ids.includes(l.id)));
-	// How many players each franchise can draft across the chosen leagues. A
-	// startup draft fills the main rosters, starters and bench, and leaves
-	// the reserve lists for afterwards.
-	const capacity = $derived(
-		chosen.reduce((sum, l) => sum + l.settings.roster.main + (draft.kind === 'startup' ? 0 : l.settings.roster.reserve), 0)
-	);
+	// How many players each franchise can draft across the chosen leagues:
+	// every spot on its main rosters and reserve lists.
+	const capacity = $derived(chosen.reduce((sum, l) => sum + l.settings.roster.main + l.settings.roster.reserve, 0));
 
 	function toggleLeague(id: string) {
 		if (draft.kind === 'seasonal') {
@@ -166,7 +163,7 @@
 			{#if capacity > 0}
 				<span class="muted small-text hint">
 					{#if draft.kind === 'startup'}
-						{capacity} rounds fill every main roster, starters and bench, in {chosen.length === 1 ? 'this league' : 'these leagues'}. Reserve lists are not drafted.
+						{capacity} rounds fill every main roster and reserve list in {chosen.length === 1 ? 'this league' : 'these leagues'}. Each franchise sets its reserve list after the draft.
 					{:else}
 						Each franchise has {capacity} roster spots in this league.
 					{/if}

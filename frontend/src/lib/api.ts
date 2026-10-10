@@ -12,6 +12,8 @@ export type LeagueSettings = {
 		reserve_eligibility: 'prospects_only' | 'anyone' | 'prospects_or_ineligible';
 		/** Days a non-prospect sent to reserve must stay there; 0 for none. */
 		reserve_lock_days: number;
+		/** Nobody on reserve can be called up while the season is being played. */
+		reserve_lock_season: boolean;
 	};
 	lineup: {
 		conferences?: string[] | null;
@@ -98,6 +100,7 @@ export type Player = {
 	id: string;
 	competition: string;
 	status: 'prospect' | 'active' | 'inactive';
+	injury_designation: string;
 	full_name: string;
 	positions: string[];
 	birth_date: string | null;
@@ -126,7 +129,7 @@ export type StatSeason = { competition: string; year: number; label: string };
 
 export type PlayerPage = { players: Player[]; total: number; page: number; per_page: number };
 
-export type ResearchPlayer = Pick<Player, 'id' | 'competition' | 'full_name' | 'positions' | 'status' | 'headshot_url' | 'owner_name' | 'owner_slug'> & {
+export type ResearchPlayer = Pick<Player, 'injury_designation' | 'id' | 'competition' | 'full_name' | 'positions' | 'status' | 'headshot_url' | 'owner_name' | 'owner_slug'> & {
 	team: string;
 	season: string;
 	games: number;
@@ -225,7 +228,7 @@ export type ProfileGame = { id: string; competition: string; day: string; starts
 export type PlayerGameLog = { games: ProfileGame[]; total: number; page: number; per_page: number };
 export type PlayerProfile = {
  fantasy_production: { season_id: string; year: number; competition: string; franchise_name: string; franchise_slug: string; games: number; points: number }[];
- player: Pick<Player, 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
+ player: Pick<Player, 'injury_designation' | 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
  seasons: ProfileSeason[]; game_log: PlayerGameLog; timeline: PlayerTimeline;
  ownership: { league_id: string; competition: string; league_name: string; franchise_name: string; franchise_slug: string;
  franchise_id: string; list: string; acquired_via: string; acquired_at: string; reserved_at: string | null; slot: string }[];
@@ -253,12 +256,14 @@ export type PlayerFilter = {
 };
 
 export type RosterPlayer = {
+ injury_reserve_locked: boolean;
  nickname: string;
 	player_id: string;
 	list: List;
 	full_name: string;
 	positions: string[];
 	status: Player['status'];
+	injury_designation: string;
 	class: string;
 	note: string;
 	headshot_url: string;
@@ -594,6 +599,8 @@ export type DraftState = {
 	league_ids: string[];
 	picks: DraftPick[];
 	on_clock_pick_id: string | null;
+	/** Franchises with auto pick on: their picks are made for them a few seconds after they come up. */
+	auto_pick_franchise_ids: string[];
 };
 
 /** What the draft room's live connection sends. */
@@ -671,6 +678,7 @@ export type Waivers = {
 		full_name: string;
 		positions: string[];
 		status: Player['status'];
+	injury_designation: string;
 		note: string;
 		headshot_url: string;
 		team_abbrev: string;
@@ -691,7 +699,9 @@ export type Waivers = {
 };
 export type WaiverClaim = { player_id: string; drop_player_id?: string; bid: number; list?: 'main' | 'reserve' };
 
-export type RosterChange = { player_id: string; list?: List; franchise_id?: string; force?: boolean };
+export type RosterChange = { player_id: string; replacement_id?: string; list?: List; franchise_id?: string; force?: boolean };
+/** A franchise's whole reserve list; everyone else it has signed goes to the main roster. */
+export type RosterSplit = { reserve: string[]; franchise_id?: string; force?: boolean };
 
 // ---- transport ----
 
@@ -768,8 +778,10 @@ export const setTeamIdentity = (id: string, league: string, name: string, image_
 export const getPlayerNickname = (franchise: string, player: string) => request<{nickname: string}>('GET', `/franchises/${franchise}/players/${player}/nickname`);
 export const setPlayerNickname = (franchise: string, player: string, nickname: string) => request<void>('PUT', `/franchises/${franchise}/players/${player}/nickname`, {nickname});
 export const getFranchise = (slug: string) => request<FranchiseDetail>('GET', `/franchises/${slug}`);
-export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move', change: RosterChange) =>
+export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move' | 'injury-swap', change: RosterChange) =>
 	request<void>('POST', `/leagues/${leagueId}/roster/${action}`, change);
+export const setRoster = (leagueId: string, split: RosterSplit) =>
+	request<void>('POST', `/leagues/${leagueId}/roster/set`, split);
 export const getWaivers = (leagueId: string) => request<Waivers>('GET', `/leagues/${leagueId}/waivers`);
 export const claimWaiver = (leagueId: string, claim: WaiverClaim) =>
 	request<void>('POST', `/leagues/${leagueId}/waivers/claims`, claim);
@@ -795,7 +807,7 @@ export const getMergeSuggestions = () => request<MergeSuggestion[]>('GET', '/adm
 export const mergePlayers = (keep_id: string, duplicate_id: string) =>
 	request<void>('POST', '/admin/players/merge', { keep_id, duplicate_id });
 
-export type SyncJob = 'rosters' | 'prospects' | 'games' | 'seasons';
+export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'seasons';
 export const startSync = (competition: string, job: SyncJob) =>
 	request<void>('POST', `/admin/sync/${competition}/${job}`);
 export const getIngestRuns = () => request<IngestRun[]>('GET', '/admin/ingest-runs');
@@ -807,6 +819,7 @@ export const makePick = (id: string, pick: { player_id: string; pick_id?: string
 export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
+export const setAutoPick = (id: string, on: boolean) => request<void>('PUT', `/drafts/${id}/autopick`, { on });
 
 export const getRankings = () => request<RankingSummary[]>('GET', '/rankings');
 export const getRanking = (id: string) => request<Ranking>('GET', `/rankings/${id}`);

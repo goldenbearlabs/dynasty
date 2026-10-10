@@ -50,6 +50,10 @@
 				<input type="number" min="0" max="365" bind:value={settings.roster.reserve_lock_days} />
 			</label>
 		{/if}
+		<label class="row">
+			<input type="checkbox" bind:checked={settings.roster.reserve_lock_season} />
+			No call-ups from reserve during the season
+		</label>
 	</div>
 </fieldset>
 

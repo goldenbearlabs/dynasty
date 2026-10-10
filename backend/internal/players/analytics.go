@@ -382,7 +382,7 @@ func (s *Service) loadResearchData(ctx context.Context, f ResearchFilter) (resea
 				return researchDataset{}, err
 			}
 			for _, r := range records {
-				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, HeadshotUrl: r.HeadshotUrl, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
+				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, InjuryDesignation: r.InjuryDesignation, HeadshotUrl: r.HeadshotUrl, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
 			}
 		}
 	}

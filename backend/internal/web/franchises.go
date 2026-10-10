@@ -70,15 +70,20 @@ func (s *Server) getFranchise(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		seasonEnds, err := roster.SeasonEnds(r.Context(), s.Queries, league.ID)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
 		var entries []roster.Entry
 		for _, p := range players {
 			if p.LeagueID == league.ID {
 				player := rosterPlayer{ListFranchiseRosterRow: p}
-				if until := roster.LockedUntil(rules.Roster, p.ReservedAt); time.Now().Before(until) {
+				if until := roster.LockedUntil(rules.Roster, p.ReservedAt, seasonEnds); p.List == settings.ListReserve && time.Now().Before(until) {
 					player.LockedUntil = &until
 				}
 				lr.Players = append(lr.Players, player)
-				entries = append(entries, roster.Entry{PlayerID: p.PlayerID, List: p.List, Prospect: p.Status == "prospect", Rookie: p.Rookie})
+				entries = append(entries, roster.Entry{PlayerID: p.PlayerID, List: p.List, Prospect: p.Status == "prospect", Rookie: p.Rookie, Startup: p.Startup, InjuryReserveLocked: p.InjuryReserveLocked})
 			}
 		}
 		lr.Overage = roster.Overage(rules.Roster, entries)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math/rand/v2"
 	"slices"
 	"time"
 
@@ -20,6 +21,14 @@ import (
 	"crossover/internal/settings"
 )
 
+// autoPickDelay is how long a franchise with auto pick on is on the clock
+// before its pick is made, so the room can see whose turn it was.
+const autoPickDelay = 3 * time.Second
+
+// autoPickPool is how many of the best players left in each sport auto pick
+// chooses among when the franchise's queue has nobody it can take.
+const autoPickPool = 30
+
 type Service struct {
 	// ClockInterval is how often RunClock looks for expired pick clocks.
 	ClockInterval time.Duration
@@ -30,7 +39,7 @@ type Service struct {
 }
 
 func NewService(pool *pgxpool.Pool, hub *hub.Hub, log *slog.Logger) *Service {
-	return &Service{ClockInterval: 2 * time.Second, pool: pool, hub: hub, log: log}
+	return &Service{ClockInterval: time.Second, pool: pool, hub: hub, log: log}
 }
 
 // State is everything the draft room shows.
@@ -39,6 +48,8 @@ type State struct {
 	LeagueIDs []pgtype.UUID          `json:"league_ids"`
 	Picks     []db.ListDraftPicksRow `json:"picks"`
 	OnClock   pgtype.UUID            `json:"on_clock_pick_id"` // null when nobody is on the clock
+	// AutoPick lists the franchises that have auto pick turned on.
+	AutoPick []pgtype.UUID `json:"auto_pick_franchise_ids"`
 }
 
 func (s *Service) State(ctx context.Context, draftID pgtype.UUID) (State, error) {
@@ -59,7 +70,12 @@ func loadState(ctx context.Context, q *db.Queries, draftID pgtype.UUID) (State, 
 		return State{}, err
 	}
 
-	state := State{Draft: draft, Picks: picks, LeagueIDs: []pgtype.UUID{}}
+	auto, err := q.ListDraftAutopick(ctx, draftID)
+	if err != nil {
+		return State{}, err
+	}
+
+	state := State{Draft: draft, Picks: picks, LeagueIDs: []pgtype.UUID{}, AutoPick: auto}
 	for _, l := range leagues {
 		state.LeagueIDs = append(state.LeagueIDs, l.ID)
 	}
@@ -255,16 +271,19 @@ func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franch
 	if err != nil {
 		return err
 	}
-	// A startup draft fills the main rosters. A rookie draft is open to
-	// anyone unrostered, new to the pool or a free agent, and holds its
-	// picks as rights until they are signed.
-	list := settings.ListMain
-	if draft.Kind != "startup" {
-		list = settings.ListRights
+	// A rookie draft is open to anyone unrostered, new to the pool or a free
+	// agent, and holds its picks as rights until they are signed. A startup
+	// draft fills both lists.
+	startup := draft.Kind == "startup"
+	list := settings.ListRights
+	if startup {
+		if list, err = startupList(ctx, q, leagues[i], franchiseID, player.Status == "prospect"); err != nil {
+			return err
+		}
 	}
 
 	if err := roster.AddIn(ctx, q, roster.Change{
-		League: leagues[i], Franchise: franchise, PlayerID: playerID, List: list, Source: roster.Draft, PickID: pickID,
+		League: leagues[i], Franchise: franchise, PlayerID: playerID, List: list, Source: roster.Draft, PickID: pickID, Startup: startup,
 	}); err != nil {
 		return err
 	}
@@ -272,6 +291,29 @@ func makePick(ctx context.Context, q *db.Queries, draft db.Draft, pickID, franch
 		return err
 	}
 	return q.RemoveFromDraftQueues(ctx, db.RemoveFromDraftQueuesParams{DraftID: draft.ID, PlayerID: playerID})
+}
+
+// startupList is where a startup pick lands: a prospect on the reserve list
+// and anyone else on the main roster, or on the other list once his own is
+// full. The franchise sets its reserve list as it likes afterwards, until
+// the season starts.
+func startupList(ctx context.Context, q *db.Queries, league db.League, franchiseID pgtype.UUID, prospect bool) (string, error) {
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return "", err
+	}
+	rows, err := q.ListRosterEntries(ctx, db.ListRosterEntriesParams{LeagueID: league.ID, FranchiseID: franchiseID})
+	if err != nil {
+		return "", err
+	}
+	held := map[string]int{}
+	for _, r := range rows {
+		held[r.List]++
+	}
+	if prospect && held[settings.ListReserve] < rules.Roster.Reserve || held[settings.ListMain] >= rules.Roster.Main {
+		return settings.ListReserve, nil
+	}
+	return settings.ListMain, nil
 }
 
 // advance settles the draft after a change: it completes the draft when
@@ -289,8 +331,19 @@ func advance(ctx context.Context, q *db.Queries, draft db.Draft, restartClock bo
 	clock := draft.ClockExpiresAt
 	if restartClock {
 		clock = pgtype.Timestamptz{}
-		if draft.Status == "live" && draft.PickClockSeconds > 0 && onClock(picks) != nil {
-			clock = pgtype.Timestamptz{Time: time.Now().Add(time.Duration(draft.PickClockSeconds) * time.Second), Valid: true}
+		if pick := onClock(picks); draft.Status == "live" && pick != nil {
+			// A franchise with auto pick on gets a few seconds, clock or no clock.
+			auto, err := q.ListDraftAutopick(ctx, draft.ID)
+			if err != nil {
+				return err
+			}
+			wait := time.Duration(draft.PickClockSeconds) * time.Second
+			if slices.Contains(auto, pick.CurrentFranchiseID) {
+				wait = autoPickDelay
+			}
+			if wait > 0 {
+				clock = pgtype.Timestamptz{Time: time.Now().Add(wait), Valid: true}
+			}
 		}
 	}
 	return q.SetDraftStatus(ctx, db.SetDraftStatusParams{ID: draft.ID, Status: draft.Status, ClockExpiresAt: clock})
@@ -431,7 +484,8 @@ func (s *Service) RunClock(ctx context.Context) {
 }
 
 // expire handles a clock that ran out: the franchise's queue makes the pick
-// if it can, and otherwise the pick is skipped, to be made up later.
+// if it can. Failing that a franchise with auto pick on takes one of the
+// best players left, and anyone else's pick is skipped, to be made up later.
 func (s *Service) expire(ctx context.Context, draftID pgtype.UUID) error {
 	return s.change(ctx, draftID, false, func(q *db.Queries, draft db.Draft) error {
 		// Someone may have picked between the check and the lock.
@@ -451,6 +505,13 @@ func (s *Service) expire(ctx context.Context, draftID pgtype.UUID) error {
 		if err != nil {
 			return err
 		}
+		if auto, err := q.ListDraftAutopick(ctx, draftID); err != nil {
+			return err
+		} else if !picked && slices.Contains(auto, pick.CurrentFranchiseID) {
+			if picked, err = s.pickFromPool(ctx, q, draft, pick); err != nil {
+				return err
+			}
+		}
 		if !picked {
 			if err := q.SkipDraftPick(ctx, pick.ID); err != nil {
 				return err
@@ -467,10 +528,40 @@ func (s *Service) pickFromQueue(ctx context.Context, q *db.Queries, draft db.Dra
 	if err != nil {
 		return false, err
 	}
-	for _, queued := range queue {
+	players := make([]pgtype.UUID, len(queue))
+	for i, queued := range queue {
+		players[i] = queued.PlayerID
+	}
+	return pickFirst(ctx, q, draft, pick, players)
+}
+
+// pickFromPool drafts one of the best players left in the draft's sports,
+// chosen at random: the roster rules refuse a sport the franchise has no
+// room in, so the pick falls to one it does. It reports whether it found one.
+func (s *Service) pickFromPool(ctx context.Context, q *db.Queries, draft db.Draft, pick *db.ListDraftPicksRow) (bool, error) {
+	leagues, err := q.ListDraftLeagues(ctx, draft.ID)
+	if err != nil {
+		return false, err
+	}
+	var players []pgtype.UUID
+	for _, league := range leagues {
+		best, err := q.ListAutoPickCandidates(ctx, db.ListAutoPickCandidatesParams{Competition: league.Competition, PageSize: autoPickPool})
+		if err != nil {
+			return false, err
+		}
+		players = append(players, best...)
+	}
+	rand.Shuffle(len(players), func(i, j int) { players[i], players[j] = players[j], players[i] })
+	return pickFirst(ctx, q, draft, pick, players)
+}
+
+// pickFirst drafts the first of the players the roster rules allow and
+// reports whether there was one.
+func pickFirst(ctx context.Context, q *db.Queries, draft db.Draft, pick *db.ListDraftPicksRow, players []pgtype.UUID) (bool, error) {
+	for _, playerID := range players {
 		// Each attempt runs in a savepoint so a refused one leaves no trace.
 		err := q.Savepoint(ctx, func(q *db.Queries) error {
-			return makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, queued.PlayerID, true)
+			return makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, playerID, true)
 		})
 		var refused problem.Error
 		switch {
@@ -481,6 +572,31 @@ func (s *Service) pickFromQueue(ctx context.Context, q *db.Queries, draft db.Dra
 		}
 	}
 	return false, nil
+}
+
+// SetAutoPick turns a franchise's auto pick on or off for a draft. If the
+// franchise is on the clock, its clock starts again to match.
+func (s *Service) SetAutoPick(ctx context.Context, draftID, franchiseID pgtype.UUID, on bool) error {
+	return s.change(ctx, draftID, true, func(q *db.Queries, draft db.Draft) error {
+		if draft.Status == "complete" {
+			return problem.New("This draft is over.")
+		}
+		var err error
+		if on {
+			err = q.SetDraftAutopick(ctx, db.SetDraftAutopickParams{DraftID: draftID, FranchiseID: franchiseID})
+		} else {
+			err = q.ClearDraftAutopick(ctx, db.ClearDraftAutopickParams{DraftID: draftID, FranchiseID: franchiseID})
+		}
+		if err != nil {
+			return err
+		}
+		picks, err := q.ListDraftPicks(ctx, draftID)
+		if err != nil {
+			return err
+		}
+		pick := onClock(picks)
+		return advance(ctx, q, draft, pick != nil && pick.CurrentFranchiseID == franchiseID)
+	})
 }
 
 // ---- queues ----
