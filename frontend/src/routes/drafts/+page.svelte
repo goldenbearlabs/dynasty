@@ -37,7 +37,7 @@
  {#if data.me && data.dynasty}<Tabs {tabs} bind:value={() => tab, show} label="Drafts section" />{/if}
 
  {#if tab === 'rankings' && data.me && data.dynasty}
-  <Rankings dynasty={data.dynasty} drafts={rankingDrafts} />
+  <Rankings dynasty={data.dynasty} drafts={rankingDrafts} competitions={data.competitions} />
  {:else}
   {#if data.me && data.dynasty}
    <section class="card rankings-entry" aria-labelledby="rankings-heading">

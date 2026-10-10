@@ -246,6 +246,11 @@ export type PlayerFilter = {
 	competition?: string;
 	status?: string;
 	q?: string;
+	/** One of the sport's positions. */
+	position?: string;
+	/** Ages in whole years. Either one leaves out players whose birth date is not known. */
+	min_age?: number;
+	max_age?: number;
 	available_in?: string;
 	draft_id?: string;
 	/** "points" or "index" puts the season's highest scorers first; otherwise by name. */

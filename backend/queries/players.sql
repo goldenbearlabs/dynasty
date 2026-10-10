@@ -136,6 +136,9 @@ left join rostered         on rostered.competition = p.competition
 where (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
+  and (@position::text = '' or @position = any(p.positions))
+  and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))
+  and (sqlc.narg('max_age')::int is null or p.birth_date > current_date - make_interval(years => sqlc.narg('max_age') + 1))
   and (sqlc.narg('available_in')::uuid is null or (
         r.player_id is null
         and p.competition = (select l.competition from leagues l where l.id = sqlc.narg('available_in'))))
@@ -165,6 +168,9 @@ left join roster_entries r on r.player_id = p.id
 where (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
+  and (@position::text = '' or @position = any(p.positions))
+  and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))
+  and (sqlc.narg('max_age')::int is null or p.birth_date > current_date - make_interval(years => sqlc.narg('max_age') + 1))
   and (sqlc.narg('available_in')::uuid is null or (
         r.player_id is null
         and p.competition = (select l.competition from leagues l where l.id = sqlc.narg('available_in'))))

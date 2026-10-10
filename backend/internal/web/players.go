@@ -189,11 +189,20 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	draftID.Scan(query.Get("draft_id"))
 
 	seasonBack, _ := strconv.Atoi(query.Get("season_back"))
+	// An age filter leaves out anyone whose birth date is not known.
+	age := func(key string) pgtype.Int4 {
+		n, err := strconv.Atoi(query.Get(key))
+		return pgtype.Int4{Int32: int32(n), Valid: err == nil && n >= 0}
+	}
+	position, minAge, maxAge := query.Get("position"), age("min_age"), age("max_age")
 
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
 		Competition: competition,
 		Status:      status,
 		Search:      search,
+		Position:    position,
+		MinAge:      minAge,
+		MaxAge:      maxAge,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
 		SortBy:      query.Get("sort"),         // "points" or "index": highest first; otherwise by name
@@ -209,6 +218,9 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		Competition: competition,
 		Status:      status,
 		Search:      search,
+		Position:    position,
+		MinAge:      minAge,
+		MaxAge:      maxAge,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
 	})

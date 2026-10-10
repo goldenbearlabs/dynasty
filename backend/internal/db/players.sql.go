@@ -47,20 +47,26 @@ left join roster_entries r on r.player_id = p.id
 where ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::uuid is null or (
+  and ($4::text = '' or $4 = any(p.positions))
+  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
+  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
+  and ($7::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $4)))
-  and ($5::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $7)))
+  and ($8::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $5 and l.competition = p.competition)))
+                    where dl.draft_id = $8 and l.competition = p.competition)))
 `
 
 type CountPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
 	Search      string      `json:"search"`
+	Position    string      `json:"position"`
+	MinAge      pgtype.Int4 `json:"min_age"`
+	MaxAge      pgtype.Int4 `json:"max_age"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
 }
@@ -70,6 +76,9 @@ func (q *Queries) CountPlayers(ctx context.Context, arg CountPlayersParams) (int
 		arg.Competition,
 		arg.Status,
 		arg.Search,
+		arg.Position,
+		arg.MinAge,
+		arg.MaxAge,
 		arg.AvailableIn,
 		arg.DraftID,
 	)
@@ -689,7 +698,7 @@ with seasons as (
 ), reference as materialized (
   -- the season with exactly season_back newer ones in its sport
   select s.competition, s.year from seasons s
-  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $9::int
+  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $12::int
 ), scored as materialized (
   -- points are stored with each season line, under the rules of the league
   -- here that plays its sport
@@ -732,26 +741,32 @@ left join rostered         on rostered.competition = p.competition
 where ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::uuid is null or (
+  and ($4::text = '' or $4 = any(p.positions))
+  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
+  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
+  and ($7::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $4)))
-  and ($5::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $7)))
+  and ($8::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $5 and l.competition = p.competition)))
-order by case $6::text
+                    where dl.draft_id = $8 and l.competition = p.competition)))
+order by case $9::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
          p.full_name, p.id
-limit $8 offset $7
+limit $11 offset $10
 `
 
 type ListPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
 	Search      string      `json:"search"`
+	Position    string      `json:"position"`
+	MinAge      pgtype.Int4 `json:"min_age"`
+	MaxAge      pgtype.Int4 `json:"max_age"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
 	SortBy      string      `json:"sort_by"`
@@ -798,6 +813,9 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		arg.Competition,
 		arg.Status,
 		arg.Search,
+		arg.Position,
+		arg.MinAge,
+		arg.MaxAge,
 		arg.AvailableIn,
 		arg.DraftID,
 		arg.SortBy,

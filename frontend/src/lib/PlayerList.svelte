@@ -3,7 +3,7 @@
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
 	import { untrack, type Snippet } from 'svelte';
-	import { getPlayers, getStatSeasons, type Player, type PlayerPage, type StatSeason } from '#lib/api.ts';
+	import { getPlayers, getStatSeasons, type Competition, type Player, type PlayerPage, type StatSeason } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -13,6 +13,11 @@
 	type Props = {
 		/** Show one sport, or every sport when empty. */
 		competition?: string;
+		/**
+		 * Offer more filters, for these sports: position and an age range, and
+		 * when every sport is shown, a choice of one of them.
+		 */
+		competitions?: Competition[];
 		/** Offer an "available only" switch for this league. */
 		leagueId?: string;
 		/** Show only players this draft can still pick. */
@@ -38,7 +43,8 @@
 		selectedId?: string;
 	};
 	let {
-		competition = '',
+		competition: only = '',
+		competitions = [],
 		leagueId,
 		draftId,
 		action,
@@ -49,6 +55,14 @@
 		onselect,
 		selectedId
 	}: Props = $props();
+
+	// The sport shown: the one asked for, or the one picked from the filters.
+	let picked = $state('');
+	const competition = $derived(only || picked);
+	const positions = $derived(competitions.find((c) => c.key === competition)?.positions ?? []);
+	let position = $state('');
+	let minAge = $state<number | null>(null);
+	let maxAge = $state<number | null>(null);
 
 	let status = $state('');
 	let search = $state('');
@@ -98,6 +112,7 @@
 	$effect.pre(() => {
 		if (competition !== shown) {
 			shown = competition;
+			position = ''; // positions belong to a sport
 			page = 1;
 			seasonBack = 0;
 			if (!chose) order = usual();
@@ -113,6 +128,9 @@
 			competition,
 			status,
 			q: query,
+			position: position || undefined,
+			min_age: minAge ?? undefined,
+			max_age: maxAge ?? undefined,
 			page,
 			draft_id: draftId,
 			sort: ranked ? order : undefined,
@@ -169,6 +187,26 @@
 					{#each seasonChoices as label, back (back)}<option value={back}>{label}</option>{/each}
 				</select>
 			{/if}
+		{/if}
+		{#if competitions.length > 0}
+			{#if !only && competitions.length > 1}
+				<select aria-label="League" bind:value={picked}>
+					<option value="">All leagues</option>
+					{#each competitions as c (c.key)}<option value={c.key}>{c.name}</option>{/each}
+				</select>
+			{/if}
+			{#if positions.length > 0}
+				<select aria-label="Position" bind:value={position} onchange={() => (page = 1)}>
+					<option value="">Any position</option>
+					{#each positions as p (p)}<option value={p}>{p}</option>{/each}
+				</select>
+			{/if}
+			<span class="ages">
+				Age
+				<input type="number" min="0" max="60" placeholder="min" aria-label="Youngest age" bind:value={minAge} onchange={() => (page = 1)} />
+				–
+				<input type="number" min="0" max="60" placeholder="max" aria-label="Oldest age" bind:value={maxAge} onchange={() => (page = 1)} />
+			</span>
 		{/if}
 		{#if leagueId && !draftId}
 			<label class="check">
@@ -291,6 +329,16 @@
 		background: transparent;
 		padding-left: 0;
 		outline: none;
+	}
+	.ages {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		color: var(--ink-soft);
+		font-size: 0.85em;
+	}
+	.ages input {
+		width: 4.2rem;
 	}
 
 	.panel {

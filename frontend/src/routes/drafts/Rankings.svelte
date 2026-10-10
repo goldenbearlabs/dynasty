@@ -7,6 +7,7 @@
 		getRanking,
 		getRankings,
 		updateRanking,
+		type Competition,
 		type DraftSummary,
 		type Dynasty,
 		type Player,
@@ -20,7 +21,7 @@
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 
-	let { dynasty, drafts }: { dynasty: Dynasty; drafts: DraftSummary[] } = $props();
+	let { dynasty, drafts, competitions }: { dynasty: Dynasty; drafts: DraftSummary[]; competitions: Competition[] } = $props();
 
 	let rankings = $state<RankingSummary[]>([]);
 	let open = $state<Ranking>(); // the ranking being edited
@@ -169,6 +170,8 @@
 	</div>
 {:else}
 	{@const sport = open.league_id ? league(open.league_id).competition : ''}
+	{@const covered = sport ? [sport] : (linkedDraft?.competitions ?? dynasty.leagues.map((l) => l.competition))}
+	{@const pool = competitions.filter((c) => covered.includes(c.key))}
 	<div class="stack" data-sport={sport}>
 		<div class="row end head">
 			<button class="quiet" onclick={() => (open = undefined)}><Icon name="left" size={16} /> All rankings</button>
@@ -239,7 +242,7 @@
 			</section>
 
 			<section aria-label="Player pool">
-				<PlayerList competition={sport} leagueId={open.league_id ?? undefined} draftId={linkedDraft?.status !== 'complete' ? linkedDraft?.id : undefined} compact byPoints statColumns action={add} />
+				<PlayerList competition={sport} competitions={pool} leagueId={open.league_id ?? undefined} draftId={linkedDraft?.status !== 'complete' ? linkedDraft?.id : undefined} compact byPoints statColumns action={add} />
 			</section>
 		</div>
 	</div>
