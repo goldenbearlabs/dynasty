@@ -59,13 +59,30 @@ func TestRookieDraft(t *testing.T) {
 
 	// --- the coming rookie drafts exist from the start ------------------------
 	var drafts []struct {
-		ID, Kind string
-		Year     int
-		Picks    int
+		IsPlaceholder bool `json:"is_placeholder"`
+		ID, Kind      string
+		Year          int
+		Picks         int
 	}
 	ann.want(http.StatusOK, "GET", "/api/drafts", nil, &drafts)
 	if len(drafts) != 3 {
 		t.Fatalf("a new league has %d drafts on the books, want its next three", len(drafts))
+	}
+	for _, d := range drafts {
+		if !d.IsPlaceholder {
+			t.Fatalf("automatic future draft should be a placeholder: %+v", d)
+		}
+	}
+	ann.want(http.StatusNoContent, "POST", "/api/admin/drafts/"+drafts[0].ID+"/schedule", nil, nil)
+	ann.want(http.StatusOK, "GET", "/api/drafts", nil, &drafts)
+	scheduled := 0
+	for _, d := range drafts {
+		if !d.IsPlaceholder {
+			scheduled++
+		}
+	}
+	if scheduled != 1 {
+		t.Fatalf("scheduled drafts = %d; want 1", scheduled)
 	}
 	next := drafts[0]
 	for _, d := range drafts {

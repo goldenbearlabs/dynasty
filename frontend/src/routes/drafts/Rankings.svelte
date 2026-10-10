@@ -120,11 +120,11 @@
 				{/each}
 			</div>
 		{:else}
-			<Empty icon="queue" title="No rankings yet">Start one below for any league.</Empty>
+			<Empty icon="queue" title="No rankings yet">Create your first board below. Rank players in order, then import the board into My queue in the draft room.</Empty>
 		{/if}
 
 		<form class="card stack tight" onsubmit={create}>
-			<h3>New ranking</h3>
+			<h3>Create a draft board</h3>
 			<label class="field">Ranking for
 				<select bind:value={rankingType} onchange={() => { fresh.league_id = ''; fresh.draft_id = ''; if (rankingType === 'startup' && startupDrafts.length === 1) selectStartup(startupDrafts[0].id); }}>
 					<option value="league">League / rookie draft</option>

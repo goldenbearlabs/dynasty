@@ -1,6 +1,6 @@
 -- name: CreateDraft :one
-insert into drafts (dynasty_id, name, kind, year, pick_clock_seconds)
-values (@dynasty_id, @name, @kind, @year, @pick_clock_seconds)
+insert into drafts (dynasty_id, name, kind, year, pick_clock_seconds, is_placeholder)
+values (@dynasty_id, @name, @kind, @year, @pick_clock_seconds, @is_placeholder)
 returning *;
 
 -- name: AddDraftLeague :exec
@@ -164,3 +164,6 @@ where p.competition = @competition
   and not exists (select 1 from roster_entries r where r.player_id = p.id)
 order by scored.points desc, p.id
 limit @page_size;
+
+-- name: ScheduleDraft :exec
+update drafts set is_placeholder = false where id = @id;

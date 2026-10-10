@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/drafts", s.commissioner(s.createDraft))
 	mux.HandleFunc("PUT /api/admin/drafts/{id}", s.commissioner(s.setDraftClock))
 	mux.HandleFunc("DELETE /api/admin/drafts/{id}", s.commissioner(s.deleteDraft))
+	mux.HandleFunc("POST /api/admin/drafts/{id}/schedule", s.commissioner(s.scheduleDraft))
 	mux.HandleFunc("PUT /api/admin/drafts/{id}/picks", s.commissioner(s.setDraftPicks))
 	mux.HandleFunc("POST /api/admin/drafts/{id}/{action}", s.commissioner(s.controlDraft))
 	mux.HandleFunc("POST /api/admin/players", s.commissioner(s.addPlayers))

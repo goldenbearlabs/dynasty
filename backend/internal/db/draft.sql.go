@@ -64,9 +64,9 @@ func (q *Queries) ClearDraftQueue(ctx context.Context, arg ClearDraftQueueParams
 }
 
 const createDraft = `-- name: CreateDraft :one
-insert into drafts (dynasty_id, name, kind, year, pick_clock_seconds)
-values ($1, $2, $3, $4, $5)
-returning id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at
+insert into drafts (dynasty_id, name, kind, year, pick_clock_seconds, is_placeholder)
+values ($1, $2, $3, $4, $5, $6)
+returning id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at, is_placeholder
 `
 
 type CreateDraftParams struct {
@@ -75,6 +75,7 @@ type CreateDraftParams struct {
 	Kind             string      `json:"kind"`
 	Year             int32       `json:"year"`
 	PickClockSeconds int32       `json:"pick_clock_seconds"`
+	IsPlaceholder    bool        `json:"is_placeholder"`
 }
 
 func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (Draft, error) {
@@ -84,6 +85,7 @@ func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (Draft
 		arg.Kind,
 		arg.Year,
 		arg.PickClockSeconds,
+		arg.IsPlaceholder,
 	)
 	var i Draft
 	err := row.Scan(
@@ -97,6 +99,7 @@ func (q *Queries) CreateDraft(ctx context.Context, arg CreateDraftParams) (Draft
 		&i.ClockExpiresAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.IsPlaceholder,
 	)
 	return i, err
 }
@@ -125,7 +128,7 @@ func (q *Queries) DeleteDraftPick(ctx context.Context, arg DeleteDraftPickParams
 }
 
 const getDraft = `-- name: GetDraft :one
-select id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at from drafts where id = $1
+select id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at, is_placeholder from drafts where id = $1
 `
 
 func (q *Queries) GetDraft(ctx context.Context, id pgtype.UUID) (Draft, error) {
@@ -142,6 +145,7 @@ func (q *Queries) GetDraft(ctx context.Context, id pgtype.UUID) (Draft, error) {
 		&i.ClockExpiresAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.IsPlaceholder,
 	)
 	return i, err
 }
@@ -482,7 +486,7 @@ func (q *Queries) ListDraftQueue(ctx context.Context, arg ListDraftQueueParams) 
 }
 
 const listDrafts = `-- name: ListDrafts :many
-select d.id, d.dynasty_id, d.name, d.kind, d.year, d.status, d.pick_clock_seconds, d.clock_expires_at, d.created_at, d.completed_at,
+select d.id, d.dynasty_id, d.name, d.kind, d.year, d.status, d.pick_clock_seconds, d.clock_expires_at, d.created_at, d.completed_at, d.is_placeholder,
        (select coalesce(array_agg(l.competition), '{}')::text[]
         from draft_leagues dl join leagues l on l.id = dl.league_id
         where dl.draft_id = d.id) as competitions,
@@ -504,6 +508,7 @@ type ListDraftsRow struct {
 	ClockExpiresAt   pgtype.Timestamptz `json:"clock_expires_at"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	IsPlaceholder    bool               `json:"is_placeholder"`
 	Competitions     []string           `json:"competitions"`
 	Picks            int64              `json:"picks"`
 	PicksMade        int64              `json:"picks_made"`
@@ -529,6 +534,7 @@ func (q *Queries) ListDrafts(ctx context.Context, dynastyID pgtype.UUID) ([]List
 			&i.ClockExpiresAt,
 			&i.CreatedAt,
 			&i.CompletedAt,
+			&i.IsPlaceholder,
 			&i.Competitions,
 			&i.Picks,
 			&i.PicksMade,
@@ -568,7 +574,7 @@ func (q *Queries) ListExpiredDrafts(ctx context.Context) ([]pgtype.UUID, error) 
 }
 
 const lockDraft = `-- name: LockDraft :one
-select id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at from drafts where id = $1 for update
+select id, dynasty_id, name, kind, year, status, pick_clock_seconds, clock_expires_at, created_at, completed_at, is_placeholder from drafts where id = $1 for update
 `
 
 // Serializes everything that changes one draft.
@@ -586,6 +592,7 @@ func (q *Queries) LockDraft(ctx context.Context, id pgtype.UUID) (Draft, error) 
 		&i.ClockExpiresAt,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.IsPlaceholder,
 	)
 	return i, err
 }
@@ -648,6 +655,15 @@ type RemoveFromDraftQueuesParams struct {
 // A drafted player leaves everyone's queue.
 func (q *Queries) RemoveFromDraftQueues(ctx context.Context, arg RemoveFromDraftQueuesParams) error {
 	_, err := q.db.Exec(ctx, removeFromDraftQueues, arg.DraftID, arg.PlayerID)
+	return err
+}
+
+const scheduleDraft = `-- name: ScheduleDraft :exec
+update drafts set is_placeholder = false where id = $1
+`
+
+func (q *Queries) ScheduleDraft(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, scheduleDraft, id)
 	return err
 }
 

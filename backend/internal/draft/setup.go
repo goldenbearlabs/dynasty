@@ -27,6 +27,7 @@ import (
 
 // NewDraft is what the commissioner chooses when creating a draft.
 type NewDraft struct {
+	isPlaceholder    bool          // internal: picks exist for trading, but draft is not announced
 	Name             string        `json:"name"`
 	Kind             string        `json:"kind"` // startup | seasonal
 	Year             int           `json:"year"`
@@ -103,7 +104,7 @@ func (s *Service) Create(ctx context.Context, dynastyID pgtype.UUID, in NewDraft
 		}
 
 		draft, err = q.CreateDraft(ctx, db.CreateDraftParams{
-			DynastyID: dynastyID, Name: name, Kind: in.Kind, Year: int32(in.Year), PickClockSeconds: int32(in.PickClockSeconds),
+			IsPlaceholder: in.isPlaceholder, DynastyID: dynastyID, Name: name, Kind: in.Kind, Year: int32(in.Year), PickClockSeconds: int32(in.PickClockSeconds),
 		})
 		if err != nil {
 			return err
@@ -266,6 +267,7 @@ func (s *Service) CreateFuture(ctx context.Context, dynastyID pgtype.UUID) (int,
 				continue
 			}
 			if _, err := s.Create(ctx, dynastyID, NewDraft{
+				isPlaceholder:    true,
 				Name:             fmt.Sprintf("%d %s Draft", year, league.Name),
 				Kind:             "seasonal",
 				Year:             year,
@@ -290,4 +292,19 @@ func inTrade(err error) error {
 		return problem.New("A pick in this draft is part of a trade. Settle or cancel that trade first.")
 	}
 	return err
+}
+
+// Schedule makes an automatically generated draft visible to managers.
+func (s *Service) Schedule(ctx context.Context, id pgtype.UUID) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := db.New(tx)
+		draft, err := q.LockDraft(ctx, id)
+		if err != nil {
+			return err
+		}
+		if draft.Status != "scheduled" {
+			return problem.New("Only a draft that has not started can be scheduled.")
+		}
+		return q.ScheduleDraft(ctx, id)
+	})
 }

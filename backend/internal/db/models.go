@@ -30,6 +30,7 @@ type Draft struct {
 	ClockExpiresAt   pgtype.Timestamptz `json:"clock_expires_at"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	IsPlaceholder    bool               `json:"is_placeholder"`
 }
 
 type DraftAutopick struct {

@@ -220,3 +220,12 @@ func (s *Server) controlDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	s.done(w, r, action(r.Context(), id))
 }
+
+func (s *Server) scheduleDraft(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.done(w, r, s.Drafts.Schedule(r.Context(), id))
+}

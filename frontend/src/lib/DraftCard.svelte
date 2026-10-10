@@ -18,7 +18,7 @@
 		<span class="row sports">
 			{#each draft.competitions as sport (sport)}<SportBadge {sport} solid />{/each}
 		</span>
-		<span class="pill {status[draft.status].tone}">{status[draft.status].label}</span>
+		<span class="pill {status[draft.status].tone}">{draft.is_placeholder && draft.status === 'scheduled' ? 'Future picks' : status[draft.status].label}</span>
 	</div>
 	<strong class="name">{draft.name}</strong>
 	<span class="muted small-text">

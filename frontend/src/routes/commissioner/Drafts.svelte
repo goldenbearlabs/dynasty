@@ -2,7 +2,7 @@
 	// Create a draft. Its pick order is then arranged in the draft room.
 	import { untrack } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { createDraft, createFutureDrafts, nextDrafts, type DraftSummary, type Dynasty, type NewDraft } from '#lib/api.ts';
+	import { createDraft, createFutureDrafts, scheduleDraft, nextDrafts, type DraftSummary, type Dynasty, type NewDraft } from '#lib/api.ts';
 	import DraftCard from '#lib/DraftCard.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -61,6 +61,10 @@
 		[order[i], order[i + by]] = [order[i + by], order[i]];
 	}
 
+	async function schedule(d: DraftSummary) {
+		try { await scheduleDraft(d.id); await invalidateAll(); toast.good(`${d.name} is now listed on Drafts.`); }
+		catch (e) { toast.error(e); }
+	}
 	async function createFuture() {
 		try {
 			const { created } = await createFutureDrafts();
@@ -98,11 +102,11 @@
 
 	{#if upcoming.length > 0}
 		<div class="list">
-			{#each upcoming as d (d.id)}<DraftCard draft={d} />{/each}
+			{#each upcoming as d (d.id)}<div class="stack tight"><DraftCard draft={d} />{#if d.is_placeholder && d.status === 'scheduled'}<button class="small" onclick={() => schedule(d)}>Schedule draft</button>{/if}</div>{/each}
 		</div>
 		{#if drafts.length > upcoming.length}
 			<p class="muted small-text">
-				Showing the next draft for each league. <a href="/drafts">See all {drafts.length} drafts</a>, including later years and finished ones.
+				Showing the next draft for each league. Future picks remain available for trading. Schedule a draft when you’re ready to list it for managers.
 			</p>
 		{/if}
 	{/if}

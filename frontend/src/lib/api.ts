@@ -563,6 +563,7 @@ export type TradeRuling = 'approve' | 'veto' | 'reverse';
 export type DraftStatus = 'scheduled' | 'live' | 'paused' | 'complete';
 
 export type Draft = {
+ is_placeholder: boolean;
 	id: string;
 	name: string;
 	kind: 'startup' | 'seasonal';
@@ -874,3 +875,5 @@ export const advancePlayoffs = () => request<void>('POST', '/admin/playoffs/adva
 export const getReviewQueue = () => request<ReviewItem[]>('GET', '/admin/review-queue');
 export const carryOver = (leagueId: string, player_id: string) =>
 	request<void>('POST', `/admin/leagues/${leagueId}/carry-over`, { player_id });
+
+export const scheduleDraft = (id: string) => request<void>('POST', `/admin/drafts/${id}/schedule`);
