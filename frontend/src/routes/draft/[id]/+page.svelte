@@ -243,11 +243,15 @@
 	async function saveQueue(playerIds: string[]) {
 		if (savingQueue) return;
 		savingQueue = true;
+		// Shown in its new order at once, so a dragged player does not jump back while it saves.
+		const queued = new Map(queue.map((q) => [q.player_id, q]));
+		queue = playerIds.flatMap((playerId) => queued.get(playerId) ?? []);
 		try {
 			await setQueue(id, playerIds);
 			queue = await getQueue(id);
 		} catch (e) {
 			toast.error(e);
+			queue = await getQueue(id).catch(() => queue);
 		} finally {
 			savingQueue = false;
 		}

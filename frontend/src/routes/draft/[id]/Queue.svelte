@@ -6,6 +6,7 @@
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import { reorder } from '#lib/ui/reorder.ts';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 
 	type Props = {
@@ -20,9 +21,9 @@
 
 	const ids = $derived(queue.map((p) => p.player_id));
 
-	function move(i: number, by: number) {
+	function move(i: number, to: number) {
 		const next = [...ids];
-		[next[i], next[i + by]] = [next[i + by], next[i]];
+		next.splice(to, 0, ...next.splice(i, 1));
 		onchange(next);
 	}
 </script>
@@ -33,9 +34,10 @@
 		you.
 	</Empty>
 {:else}
-	<ol>
+	<ol use:reorder={{ onmove: move, disabled: disabled || !editable }}>
 		{#each queue as player, i (player.player_id)}
 			<li>
+				{#if editable}<span data-grip title="Drag to reorder"><Icon name="grip" size={14} /></span>{/if}
 				<span class="n">{i + 1}</span>
 				<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 				<div class="who">
@@ -54,13 +56,13 @@
 							class="quiet small"
 							aria-label="Move up"
 							disabled={disabled || i === 0}
-							onclick={() => move(i, -1)}><Icon name="up" size={12} /></button
+							onclick={() => move(i, i - 1)}><Icon name="up" size={12} /></button
 						>
 						<button
 							class="quiet small"
 							aria-label="Move down"
 							disabled={disabled || i === queue.length - 1}
-							onclick={() => move(i, 1)}
+							onclick={() => move(i, i + 1)}
 						>
 							<Icon name="down" size={15} />
 						</button>

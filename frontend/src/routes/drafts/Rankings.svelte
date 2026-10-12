@@ -18,6 +18,7 @@
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import { reorder } from '#lib/ui/reorder.ts';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 
@@ -86,10 +87,12 @@
 	}
 	const ids = $derived(open?.players.map((p) => p.player_id) ?? []);
 	function move(i: number, to: number) {
-		if (to < 0 || to >= ids.length) return;
-		const next = [...ids];
+		if (!open || busy || to < 0 || to >= ids.length) return;
+		// Shown in its new place at once, so a dropped player does not jump back while it saves.
+		const next = [...open.players];
 		next.splice(to, 0, ...next.splice(i, 1));
-		save({ player_ids: next });
+		open.players = next;
+		save({ player_ids: next.map((p) => p.player_id) });
 	}
 	async function remove() {
 		if (!open || !confirm(`Delete "${open.name}"?`)) return;
@@ -200,9 +203,10 @@
 				{#if open.players.length === 0}
 					<p class="muted small-text none">Add players from the pool. The order here is the order they go into your queue.</p>
 				{:else}
-					<ol>
+					<ol use:reorder={{ onmove: move, disabled: busy }}>
 						{#each open.players as player, i (player.player_id)}
 							<li class:taken={player.owner_name !== ''}>
+								<span data-grip title="Drag to reorder"><Icon name="grip" size={16} /></span>
 								<span class="n">{i + 1}</span>
 								<Headshot name={player.full_name} src={player.headshot_url} size={28} />
 								<div class="who">
