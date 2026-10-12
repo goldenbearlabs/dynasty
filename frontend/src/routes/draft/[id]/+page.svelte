@@ -253,6 +253,11 @@
 		}
 	}
 
+	function clearQueue() {
+		const n = queue.length;
+		if (confirm(`Remove ${n === 1 ? 'the player' : `all ${n} players`} from your queue?`)) saveQueue([]);
+	}
+
 	const control = (action: DraftAction) => controlDraft(id, action).catch(toast.error);
 
 	function finish() {
@@ -511,6 +516,11 @@
 				{#if me}<section class="queue-pane" aria-label="My draft queue">
 						<div class="section-heading">
 							<h2>My queue <span class="muted">{queue.length}</span></h2>
+							{#if queue.length > 0 && draft.status !== 'complete'}<button
+									class="quiet small clear-queue"
+									disabled={savingQueue}
+									onclick={clearQueue}>Clear</button
+								>{/if}
 							{#if importable.length > 0 && draft.status !== 'complete'}
 								<select
 									class="import"
@@ -728,6 +738,10 @@
 		max-width: 11rem;
 		padding: 0.2rem 0.4rem;
 		font-size: 0.75rem;
+	}
+	.clear-queue {
+		margin-left: auto;
+		flex: none;
 	}
 	.hint {
 		font-size: 0.65rem;
