@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
  import PlayerSearch from '#lib/PlayerSearch.svelte';
  import { onMount, untrack } from 'svelte';
@@ -14,6 +15,7 @@
  import ResearchChart from '#lib/research/ResearchChart.svelte';
  import LeagueOverview from '#lib/research/LeagueOverview.svelte';
  import { basics, advanced, formatValue, type Column } from '#lib/research/columns.ts';
+ import { age } from '#lib/ui/time.ts';
  import type { PageProps } from './$types';
 
  let { data }: PageProps = $props();
@@ -32,6 +34,8 @@
  let owner = $state('');
  let minGames = $state<number | undefined>();
  let maxGames = $state<number | undefined>();
+ let minAge = $state<number | undefined>();
+ let maxAge = $state<number | undefined>();
  let minRate = $state<number | undefined>();
  let maxRate = $state<number | undefined>();
  let minIndex = $state<number | undefined>();
@@ -89,7 +93,7 @@
  const metricLabel = (key: string) => chartMetrics.find((c) => c.key === key)?.label ?? key;
  const qualifiedCount = $derived(result?.benchmarks.filter((b) => !b.position).reduce((n,b) => n+b.players,0) ?? 0);
  const pages = $derived(result ? Math.max(1,Math.ceil(result.total/result.per_page)) : 1);
- const activeFilters = $derived([competition,status,query,selectedPositions.length>0,team,owner,minGames!==undefined,maxGames!==undefined,minRate!==undefined,maxRate!==undefined,minIndex!==undefined,maxIndex!==undefined,minPAR!==undefined,statKey,qualifiedOnly,missingOnly,aboveReplacement].filter(Boolean).length);
+ const activeFilters = $derived([competition,status,query,selectedPositions.length>0,team,owner,minGames!==undefined,maxGames!==undefined,minAge!=null,maxAge!=null,minRate!==undefined,maxRate!==undefined,minIndex!==undefined,maxIndex!==undefined,minPAR!==undefined,statKey,qualifiedOnly,missingOnly,aboveReplacement].filter(Boolean).length);
  const poolCount = $derived(pools.length || result?.analysis.length || 0);
  function addPool() {
   if (pools.length >= 24 || pools.some((p) => p.competition === addCompetition && p.season === addSeason)) return;
@@ -99,7 +103,7 @@
  function removePool(index: number) { pools = pools.filter((_,i) => i !== index); competition = ''; team = ''; selectedPositions = []; }
  function clearFilters() {
   competition = ''; status = ''; search = ''; query = ''; selectedPositions = []; team = ''; owner = '';
-  minGames = undefined; maxGames = undefined; minRate = undefined; maxRate = undefined;
+  minGames = undefined; maxGames = undefined; minAge = undefined; maxAge = undefined; minRate = undefined; maxRate = undefined;
   minIndex = undefined; maxIndex = undefined; minPAR = undefined; statKey = ''; minStat = undefined; maxStat = undefined;
   qualifiedOnly = false; missingOnly = false; aboveReplacement = false;
  }
@@ -122,14 +126,14 @@
  });
  let previousFilters = '';
  $effect.pre(() => {
-  const key = JSON.stringify([pools,competition,status,query,selectedPositions,team,owner,minGames,maxGames,minRate,maxRate,minIndex,maxIndex,minPAR,statKey,minStat,maxStat,qualifiedOnly,missingOnly,aboveReplacement,benchmarkGames,pitcherWorkloadPercent,replacementRank,sort,ascending,rawMode]);
+  const key = JSON.stringify([pools,competition,status,query,selectedPositions,team,owner,minGames,maxGames,minAge,maxAge,minRate,maxRate,minIndex,maxIndex,minPAR,statKey,minStat,maxStat,qualifiedOnly,missingOnly,aboveReplacement,benchmarkGames,pitcherWorkloadPercent,replacementRank,sort,ascending,rawMode]);
   if (key !== previousFilters) { previousFilters = key; page = 1; }
  });
  $effect(() => {
   void retry;
   let active = true; loading = true; error = '';
   getResearch({ pools:pools.length ? JSON.stringify(pools) : undefined, competition, status, q:query, sort, page,
-   position:selectedPositions.join(','), team, owner, min_games:minGames, max_games:maxGames, min_rate:minRate, max_rate:maxRate,
+   position:selectedPositions.join(','), team, owner, min_games:minGames, max_games:maxGames, min_age:minAge, max_age:maxAge, min_rate:minRate, max_rate:maxRate,
    min_index:minIndex, max_index:maxIndex, min_par:minPAR, stat_key:statKey, min_stat:minStat, max_stat:maxStat,
    qualified_only:String(qualifiedOnly), missing_only:String(missingOnly), above_replacement:String(aboveReplacement),
    benchmark_games:benchmarkGames ?? 5, pitcher_workload_percent:pitcherWorkloadPercent ?? 25, replacement_rank:replacementRank ?? 0, ascending:String(ascending),
@@ -180,9 +184,11 @@
     <label class="control"><span>Roster</span><select bind:value={owner}><option value="">Any owner</option><option value="available">Available players</option><option value="rostered">Rostered players</option>{#each data.dynasty?.franchises ?? [] as f (f.id)}<option value={f.slug}>{f.name}</option>{/each}</select></label>
     <label class="control numeric"><span>Min games</span><input type="number" min="0" max="10000" placeholder="Any" bind:value={minGames} /></label>
    </div>
-   <details class="more-filters"><summary>More filters <span class="muted">· team, status, production ranges &amp; raw stats</span></summary><div class="expanded-filters">
+   <details class="more-filters"><summary>More filters <span class="muted">· team, status, age, production ranges &amp; raw stats</span></summary><div class="expanded-filters">
     <label class="control"><span>Team (season)</span><select bind:value={team}><option value="">Any team</option>{#each result?.teams ?? [] as t (t)}<option value={t}>{t}</option>{/each}</select></label>
     <label class="control"><span>Current player status</span><select bind:value={status}><option value="">Any status</option><option value="active">Active</option><option value="prospect">Prospect</option><option value="inactive">Inactive</option></select></label>
+    <label class="control"><span>Min age</span><input type="number" min="0" max="150" placeholder="No minimum" bind:value={minAge} /></label>
+    <label class="control"><span>Max age</span><input type="number" min="0" max="150" placeholder="No limit" bind:value={maxAge} /></label>
     <label class="control"><span>Max games</span><input type="number" min="0" max="10000" placeholder="No limit" bind:value={maxGames} /></label>
     <label class="control"><span>Min FP/game</span><input type="number" step="0.1" placeholder="No minimum" bind:value={minRate} /></label>
     <label class="control"><span>Max FP/game</span><input type="number" step="0.1" placeholder="No limit" bind:value={maxRate} /></label>
@@ -217,7 +223,7 @@
     <ResearchChart points={result.chart} kind={chartKind} aggregation={chartAggregation} bins={Math.max(2,Math.min(40,chartBins ?? 15))} title={chartTitle} xLabel={metricLabel(chartX)} yLabel={metricLabel(chartY)} {loading} />
    </section>
   {:else}
-   <div class="spread table-toolbar"><div class="row"><h2>{result.total.toLocaleString()} player-seasons</h2><span class="muted small-text">{loading ? 'Updating…' : `Sorted by ${sort==='name' ? 'player name' : metricLabel(sort)} ${ascending ? '↑' : '↓'} · Hover to learn, click to sort.`}</span></div><label class="control"><span>Table view</span><select aria-label="Table view" bind:value={view}><option value="overview">Player overview</option><option value="advanced">Advanced metrics</option><option value="raw">Raw stats</option><option value="all">All columns</option></select></label></div>
+   <div class="spread table-toolbar"><div class="row"><h2>{result.total.toLocaleString()} player-seasons</h2><span class="muted small-text">{loading ? 'Updating…' : `Sorted by ${sort==='name' ? 'player name' : sort==='age' ? 'age' : metricLabel(sort)} ${ascending ? '↑' : '↓'} · Hover to learn, click to sort.`}</span></div><label class="control"><span>Table view</span><select aria-label="Table view" bind:value={view}><option value="overview">Player overview</option><option value="advanced">Advanced metrics</option><option value="raw">Raw stats</option><option value="all">All columns</option></select></label></div>
    <div class="row presets"><span class="muted small-text">Quick looks</span><button class="small quiet" onclick={() => quickPreset('top')}>Top producers</button><button class="small quiet" onclick={() => quickPreset('free')}>Available above replacement</button><button class="small quiet" onclick={() => quickPreset('durable')}>Most games coverage</button>{#if view==='raw' || view==='all'}<label class="row small-text"><span>Raw stats</span><select aria-label="Raw stat units" bind:value={rawMode}><option value="totals">Season totals</option><option value="per_game">Per game</option></select></label>{/if}</div>
    {#if result.players.length===0}<Empty icon="search" title="No player-seasons match">Clear a filter, lower a minimum, or add another league-season dataset.</Empty>
    {:else}<div class="panel scroll research-table" class:loading aria-busy={loading}><table><thead><tr>
@@ -225,6 +231,7 @@
     <ColumnHeader label="League / season" help="The competition where these season stats were recorded. League+ and replacement benchmarks are calculated separately for each league-season." active={sort==='competition'} {ascending} onsort={() => sortBy('competition')} />
     <ColumnHeader label="Position" help="Current eligible positions from the player feed. Historical position changes are not archived." />
     <ColumnHeader label="Team" help="Teams listed in this imported season. Players who changed teams have their totals combined. This may differ from their current team." active={sort==='team'} {ascending} onsort={() => sortBy('team')} />
+    <ColumnHeader label="Age" help="Current age in whole years, from the player’s birth date, rather than their age during this season. A dash means the birth date is unknown." active={sort==='age'} {ascending} numeric onsort={() => sortBy('age')} />
     {#each basics as c (c.key)}<ColumnHeader label={c.label} help={c.help} active={sort===c.key} {ascending} numeric onsort={() => sortBy(c.key)} />{/each}
     {#each metricColumns as c (c.key)}<ColumnHeader label={c.label} help={c.help} active={sort===c.key} {ascending} numeric onsort={() => sortBy(c.key)} />{/each}
     {#if view==='advanced' || view==='all'}<ColumnHeader label="Compared at" help="Position used for Position+ and replacement value. With multiple eligible positions, the most favorable replacement advantage is used. Position filters restrict comparison to the selected eligible positions." />{/if}
@@ -232,9 +239,9 @@
     <ColumnHeader label="Roster owner" help="Current fantasy owner in the competition, rather than historical ownership in this season." active={sort==='owner'} {ascending} onsort={() => sortBy('owner')} />
    </tr></thead><tbody>
     {#each result.players as player (player.row_key)}<tr class:selected={selectedId===player.id}>
-     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><InjuryBadge designation={player.injury_designation} /><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
+     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><WatchStar playerID={player.id} playerName={player.full_name} /><InjuryBadge designation={player.injury_designation} /><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
      <td><div class="row tight"><SportBadge sport={player.competition} /><strong>{player.season || 'No season'}</strong></div>{#if player.scoring_source==='defaults'}<small class="muted">Sport default scoring</small>{/if}</td>
-     <td>{player.positions.join('/') || '—'}</td><td class="muted">{player.team || '—'}</td>
+     <td>{player.positions.join('/') || '—'}</td><td class="muted">{player.team || '—'}</td><td class="num">{age(player.birth_date) || '—'}</td>
      <td class="num">{player.season ? formatValue(player.games) : '—'}</td><td class="num">{player.has_scoring_stats ? formatValue(player.points) : '—'}</td><td class="num">{player.has_scoring_stats && player.games>0 ? formatValue(player.points_per_game) : '—'}</td>
      {#each metricColumns as c (c.key)}<td class="num" class:highlight={c.key==='league_index'} class:positive={['points_above_replacement','par_per_game','win_share_added'].includes(c.key) && Number(player[c.key as keyof ResearchPlayer])>0} class:negative={['points_above_replacement','par_per_game','win_share_added'].includes(c.key) && Number(player[c.key as keyof ResearchPlayer])<0}>{formatValue(player[c.key as keyof ResearchPlayer])}</td>{/each}
      {#if view==='advanced' || view==='all'}<td title="Replacement {formatValue(player.replacement_rate)} FP/game at rank {player.replacement_rank ?? '—'}">{player.metric_position || '—'}</td>{/if}

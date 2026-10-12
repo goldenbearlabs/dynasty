@@ -20,6 +20,7 @@
 	let slots = $state<PickSlot[]>([]);
 	let dirty = $state(false);
 	let saving = $state(false);
+	let individual = $state(false); // the table of every pick is built when it is opened
 	let teams = $state<string[]>([]);
 	let order = $state<'snake' | 'linear'>('snake');
 	const automatic = $derived(roundTeams(slots) !== null);
@@ -115,10 +116,10 @@
 		<p class="muted small-text">This draft has custom picks. Use individual edits below; automatic ordering requires one pick per team in each round.</p>
 	{/if}
 
-	<details class="individual" open={!automatic}>
+	<details class="individual" open={!automatic} ontoggle={(e) => (individual = e.currentTarget.open)}>
 		<summary>Advanced: edit individual picks</summary>
 		<p class="muted small-text">Reassign traded picks, add or remove picks, or customize individual rounds. “Originally” identifies the team whose pick it was.</p>
-	<fieldset disabled={saving}>
+	{#if !automatic || individual}<fieldset disabled={saving}>
 	<div class="card flush scroll">
 		<table>
 			<thead><tr><th class="num">Pick</th><th>Round</th><th>Belongs to</th><th>Originally</th><th></th></tr></thead>
@@ -160,7 +161,7 @@
 	</div>
 
 	<div><button disabled={!franchises.length} onclick={add}><Icon name="plus" size={16} /> Add a pick</button></div>
-	</fieldset>
+	</fieldset>{/if}
 	</details>
 </div>
 

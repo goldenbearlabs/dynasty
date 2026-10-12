@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A franchise across every sport. The organization view says where each
 	// team stands at a glance; picking a league opens that team: its lineup,
@@ -392,7 +393,7 @@
 										<div class="player">
 											<Headshot name={player.full_name} src={player.headshot_url} />
 											<div>
-												<strong>{player.full_name}</strong>
+												<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
 												<div class="muted small-text">{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}</div>
 											</div>
 										</div>
@@ -413,6 +414,7 @@
 
 			<section class="stack tight">
 				<h2>Lineup</h2>
+				{#if mine}<a class="small-text" href="/watchlist?competition={league.competition}">View your {league.name} watchlist →</a>{/if}
 				{#key league.id + team.id}
 					<LineupEditor {league} franchise={team} {canEdit} commissioner={data.me?.is_commissioner === true} />
 				{/key}
@@ -466,7 +468,7 @@
 													<Headshot name={player.full_name} src={player.headshot_url} />
 													<div>
 														<div class="row who">
-															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
+															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
 															<InjuryBadge designation={player.injury_designation} />
 														{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}

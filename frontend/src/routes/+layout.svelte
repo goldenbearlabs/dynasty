@@ -7,6 +7,8 @@
 
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
+	import { watchlist } from '#lib/watchlist.svelte.ts';
 	import { logOut } from '#lib/api.ts';
 	import favicon from '#lib/assets/favicon.svg';
 	import Crest from '#lib/ui/Crest.svelte';
@@ -16,6 +18,7 @@
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
+	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
 
 	type Link = { href: string; label: string; icon: IconName; count?: number };
 
@@ -32,6 +35,7 @@
 		{ href: '/league', label: 'League', icon: 'home' },
 		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
+		...(data.me ? [{ href: '/watchlist', label: 'Watchlist', icon: 'star' } as Link] : []),
 		{ href: '/research', label: 'Research', icon: 'search' },
 		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
 		{ href: '/drafts', label: 'Drafts', icon: 'draft' },

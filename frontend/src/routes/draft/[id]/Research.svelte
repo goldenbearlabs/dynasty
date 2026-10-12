@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
 	import {
 		getPlayerResearch,
 		getPlayerSeasons,
@@ -112,7 +113,7 @@
 				<Headshot name={player.full_name} src={player.headshot_url} size={48} />
 				<div>
 					<SportBadge sport={player.competition} />
-					<h3>{player.full_name}</h3>
+					<div class="row"><h3>{player.full_name}</h3><WatchStar playerID={player.id} playerName={player.full_name} /></div>
 					<p>{player.positions.join('/')} · {player.team_name || 'No current team'}</p>
 				</div>
 			</header>

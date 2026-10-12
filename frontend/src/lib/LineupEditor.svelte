@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
 	// Set who starts for one franchise in one league. A daily league moves a
 	// day at a time; a weekly one shows the whole week as a grid of games,
 	// where a slot that counts only some games lets the manager pick which.
@@ -223,7 +224,7 @@
 									<div class="player">
 										<Headshot name={player.full_name} src={player.headshot_url} size={30} />
 										<div>
-											<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
+											<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 											{#if player.locked}<span class="pill"><Icon name="lock" size={11} /> Locked</span>{/if}
 											<div class="muted small-text">
 												{player.positions.join('/')} · {player.team_abbrev}

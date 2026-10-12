@@ -129,7 +129,7 @@ export type StatSeason = { competition: string; year: number; label: string };
 
 export type PlayerPage = { players: Player[]; total: number; page: number; per_page: number };
 
-export type ResearchPlayer = Pick<Player, 'injury_designation' | 'id' | 'competition' | 'full_name' | 'positions' | 'status' | 'headshot_url' | 'owner_name' | 'owner_slug'> & {
+export type ResearchPlayer = Pick<Player, 'injury_designation' | 'id' | 'competition' | 'full_name' | 'positions' | 'status' | 'headshot_url' | 'birth_date' | 'owner_name' | 'owner_slug'> & {
 	team: string;
 	season: string;
 	games: number;
@@ -738,7 +738,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 function query(params: Record<string, string | number | undefined>): string {
 	const search = new URLSearchParams();
 	for (const [key, value] of Object.entries(params)) {
-		if (value !== undefined && value !== '') search.set(key, String(value));
+		// A cleared number input is bound as null.
+		if (value != null && value !== '') search.set(key, String(value));
 	}
 	return search.size ? `?${search}` : '';
 }
@@ -882,3 +883,15 @@ export const carryOver = (leagueId: string, player_id: string) =>
 	request<void>('POST', `/admin/leagues/${leagueId}/carry-over`, { player_id });
 
 export const scheduleDraft = (id: string) => request<void>('POST', `/admin/drafts/${id}/schedule`);
+
+// Private, account-backed player watchlist.
+export type WatchlistEntry = {
+ player_id: string; full_name: string; competition: string; positions: string[];
+ headshot_url: string; team_name: string; status: string; owner_name: string; owner_slug: string;
+ category: string; notes: string;
+};
+export const getWatchlist = () => request<WatchlistEntry[]>('GET', '/watchlist');
+export const addWatchlistPlayer = (id: string) => request<void>('PUT', `/watchlist/players/${id}`);
+export const removeWatchlistPlayer = (id: string) => request<void>('DELETE', `/watchlist/players/${id}`);
+export const editWatchlistPlayer = (id: string, category: string, notes: string) => request<void>('PATCH', `/watchlist/players/${id}`, { category, notes });
+export const orderWatchlist = (player_ids: string[]) => request<void>('PUT', '/watchlist/order', { player_ids });

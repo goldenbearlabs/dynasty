@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
  import { goto } from '$app/navigation';
  import { getPlayers, type Competition, type Player } from '#lib/api.ts';
  import Headshot from '#lib/ui/Headshot.svelte';
@@ -25,8 +26,8 @@
   <label><span class="sr-only">Search sport</span><select bind:value={competition}><option value="">All sports</option>{#each competitions as c}<option value={c.key}>{c.name}</option>{/each}</select></label>
  </form>
  <div aria-live="polite" class="small-text muted">{#if loading}Searching…{:else if error}<span role="alert">{error}</span> <button class="small" onclick={() => retry++}>Retry</button>{:else if query.trim()}{total ? `${total.toLocaleString()} matches${total > 8 ? ' · Showing the first 8; narrow your search for more' : ''}` : 'No matches. Try a last name or another sport.'}{/if}</div>
- {#if players.length}<div class="results">{#each players as p (p.id)}<a href="/player/{p.id}" class="result"><Headshot name={p.full_name} src={p.headshot_url} size={34} /><div><strong>{p.full_name}</strong><span class="muted small-text">{p.competition.toUpperCase()} · {p.positions?.join(' / ')} · {p.team_abbrev || p.status}{p.owner_name ? ` · ${p.owner_name}` : ''}</span></div><span aria-hidden="true">→</span></a>{/each}</div>{/if}
+ {#if players.length}<div class="results">{#each players as p (p.id)}<div class="result"><a href="/player/{p.id}" class="result-link"><Headshot name={p.full_name} src={p.headshot_url} size={34} /><div><strong>{p.full_name}</strong><span class="muted small-text">{p.competition.toUpperCase()} · {p.positions?.join(' / ')} · {p.team_abbrev || p.status}{p.owner_name ? ` · ${p.owner_name}` : ''}</span></div><span aria-hidden="true">→</span></a><WatchStar playerID={p.id} playerName={p.full_name} /></div>{/each}</div>{/if}
 </section>
 <style>
- .search-card{padding:1.2rem;border:1px solid var(--rule);border-radius:12px;background:var(--surface);display:grid;gap:.7rem}h2{font-size:1.1rem}p{margin-top:.3rem}form{display:flex;gap:.6rem}.query{flex:1;min-width:0}input{width:100%}.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}.result{display:flex;align-items:center;gap:.7rem;padding:.65rem;border:1px solid var(--rule);border-radius:8px;text-decoration:none}.result:hover{background:var(--brand-soft)}.result div{flex:1}.result span.muted{display:block}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}@media(max-width:600px){.results{grid-template-columns:1fr}form{flex-direction:column}}
+ .search-card{padding:1.2rem;border:1px solid var(--rule);border-radius:12px;background:var(--surface);display:grid;gap:.7rem}h2{font-size:1.1rem}p{margin-top:.3rem}form{display:flex;gap:.6rem}.query{flex:1;min-width:0}input{width:100%}.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}.result{display:flex;align-items:center;gap:.7rem;padding:.65rem;border:1px solid var(--rule);border-radius:8px;text-decoration:none}.result-link{display:flex;align-items:center;gap:.7rem;flex:1;min-width:0;text-decoration:none}.result:hover{background:var(--brand-soft)}.result div{flex:1}.result span.muted{display:block}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}@media(max-width:600px){.results{grid-template-columns:1fr}form{flex-direction:column}}
 </style>

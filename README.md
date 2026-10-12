@@ -281,3 +281,12 @@ docker compose exec db psql -U crossover -c 'select calls, round(total_exec_time
 Session, private manager/admin routes, writes and live streams are not cached.
 Keys include a database namespace, generation, route/query or dataset selection,
 and a cache format version (`v1`); bump the version if cached JSON semantics change.
+
+Each signed-in manager has a private **Watchlist** saved to their organization.
+Use the star beside a player in search, player lists, research, profiles,
+rosters, lineups or draft research/queues to add or remove them. Any player
+can be watched, including free agents, other teams' players and your own.
+The Watchlist page supports a saved priority order, custom groups and scouting
+notes, with filters for sport, group and ownership. A sport's team page links
+to its filtered watchlist. Watching a player does not change their roster or
+draft status. Saved entries follow the canonical player when duplicates merge.

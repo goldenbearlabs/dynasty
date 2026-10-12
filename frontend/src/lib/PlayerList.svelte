@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
@@ -252,6 +253,7 @@
 														aria-pressed={selectedId === player.id}
 														onclick={() => onselect(player)}>{player.full_name}</button
 													>{:else}<a href="/player/{player.id}"><strong>{player.full_name}</strong></a>{/if}
+												<WatchStar playerID={player.id} playerName={player.full_name} />
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />

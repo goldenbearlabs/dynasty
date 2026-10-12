@@ -1,4 +1,5 @@
 <script lang="ts">
+ import WatchStar from "#lib/WatchStar.svelte";
 	// A manager's ranked wish list. If their clock runs out, the first
 	// player on it who is still available is drafted for them.
 	import type { QueuedPlayer } from '#lib/api.ts';
@@ -41,6 +42,7 @@
 					{#if onselect}<button class="name" onclick={() => onselect(player.player_id)}
 							>{player.full_name}</button
 						>{:else}<strong>{player.full_name}</strong>{/if}
+					<WatchStar playerID={player.player_id} playerName={player.full_name} />
 					<span class="muted small-text row">
 						<SportBadge sport={player.competition} />
 						{player.positions.join('/')}

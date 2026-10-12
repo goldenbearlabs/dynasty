@@ -93,6 +93,20 @@ func (s *Server) listResearch(w http.ResponseWriter, r *http.Request) {
 		}
 		*field.value = &value
 	}
+	for _, field := range []struct {
+		key   string
+		value **int
+	}{{"min_age", &f.MinAge}, {"max_age", &f.MaxAge}} {
+		if query.Get(field.key) == "" {
+			continue
+		}
+		value, err := integer(field.key, 0, 150)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		*field.value = &value
+	}
 	if raw := query.Get("pools"); raw != "" {
 		if len(raw) > 8192 || json.Unmarshal([]byte(raw), &f.Pools) != nil {
 			s.fail(w, r, problem.New("Research pools must be a list of league and season pairs."))

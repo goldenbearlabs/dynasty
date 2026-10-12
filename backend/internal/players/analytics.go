@@ -39,6 +39,7 @@ type ResearchFilter struct {
 	QualifiedOnly, MissingOnly, IncludeChart                                 bool
 	StatKey, ChartX, ChartY, ChartGroup                                      string
 	MinStat, MaxStat                                                         *float64
+	MinAge, MaxAge                                                           *int // whole years; either leaves out unknown birth dates
 	Competition, Season, Status, Search, Position, Team, Owner, Sort         string
 	MinGames, BenchmarkGames, ReplacementRank, Page, PerPage                 int
 	MinRate, MinIndex                                                        float64
@@ -382,7 +383,7 @@ func (s *Service) loadResearchData(ctx context.Context, f ResearchFilter) (resea
 				return researchDataset{}, err
 			}
 			for _, r := range records {
-				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, InjuryDesignation: r.InjuryDesignation, HeadshotUrl: r.HeadshotUrl, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
+				rows = append(rows, db.ListResearchPlayersRow{ID: r.ID, Competition: r.Competition, FullName: r.FullName, Positions: r.Positions, Status: r.Status, InjuryDesignation: r.InjuryDesignation, HeadshotUrl: r.HeadshotUrl, BirthDate: r.BirthDate, Team: r.Team, OwnerName: r.OwnerName, OwnerSlug: r.OwnerSlug, Season: r.Season, Games: r.Games, Stats: r.Stats})
 			}
 		}
 	}
@@ -810,6 +811,12 @@ func analyze(rows []db.ListResearchPlayersRow, rules map[string]analyticRules, f
 				continue
 			}
 		}
+		if f.MinAge != nil || f.MaxAge != nil {
+			age, ok := wholeYears(p.BirthDate, time.Now())
+			if !ok || f.MinAge != nil && age < *f.MinAge || f.MaxAge != nil && age > *f.MaxAge {
+				continue
+			}
+		}
 		if f.Status != "" && p.Status != f.Status || f.Search != "" && !strings.Contains(strings.ToLower(p.FullName), strings.ToLower(f.Search)) {
 			continue
 		}
@@ -949,12 +956,28 @@ func metricValue(p AnalyticsPlayer, key string) *float64 {
 		if p.Season != "" {
 			return ptr(float64(p.Games))
 		}
+	case "age":
+		if p.BirthDate.Valid {
+			return ptr(time.Since(p.BirthDate.Time).Hours() / (365.25 * 24))
+		}
 	default:
 		if v, ok := p.values[key]; ok {
 			return ptr(v)
 		}
 	}
 	return nil
+}
+
+// wholeYears is a player's age on a day, counted in birthdays passed.
+func wholeYears(birth pgtype.Date, on time.Time) (int, bool) {
+	if !birth.Valid {
+		return 0, false
+	}
+	age := on.Year() - birth.Time.Year()
+	if on.Month() < birth.Time.Month() || on.Month() == birth.Time.Month() && on.Day() < birth.Time.Day() {
+		age--
+	}
+	return age, true
 }
 
 func cohortKey(competition, season string) string { return competition + "|" + season }

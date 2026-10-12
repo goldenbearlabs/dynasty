@@ -271,6 +271,10 @@
 		}
 	}
 
+	// The pick order editor has a row of controls for every pick, so it is
+	// only built once it is opened. It then stays, to keep unsaved edits.
+	let orderOpened = $state(false);
+
 	let clockSeconds = $state<number>();
 	const saveClock = () =>
 		setDraftClock(id, clockSeconds ?? 0)
@@ -378,8 +382,12 @@
 									onclick={saveClock}>Set</button
 								></label
 							>{/if}
-						{#if draft.status === 'scheduled'}<details class="order-editor">
-								<summary>Edit pick order</summary><PickOrder draftId={id} {picks} {franchises} />
+						{#if draft.status === 'scheduled'}<details
+								class="order-editor"
+								ontoggle={(e) => (orderOpened ||= e.currentTarget.open)}
+							>
+								<summary>Edit pick order</summary>
+								{#if orderOpened}<PickOrder draftId={id} {picks} {franchises} />{/if}
 							</details>{/if}
 					</div>
 				</details>

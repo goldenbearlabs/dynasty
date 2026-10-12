@@ -83,7 +83,7 @@ with latest as (
   from stats left join leagues l on l.competition = stats.competition
   group by stats.player_id, stats.competition
 ), pool as (
-  select p.id, p.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
+  select p.id, p.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url, p.birth_date,
          coalesce(totals.season_team, t.abbrev, '')::text as team,
          coalesce(f.name, '')::text as owner_name, coalesce(f.slug, '')::text as owner_slug,
          coalesce(totals.season, '')::text as season,
@@ -104,7 +104,7 @@ with latest as (
     and ($9::uuid is null or (
       r.player_id is null and p.competition = (select competition from leagues where id = $9)))
 )
-select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, pool.injury_designation, pool.headshot_url, pool.team, pool.owner_name, pool.owner_slug, pool.season, pool.games, pool.stats, pool.points, pool.points_per_game from pool
+select pool.id, pool.competition, pool.full_name, pool.positions, pool.status, pool.injury_designation, pool.headshot_url, pool.birth_date, pool.team, pool.owner_name, pool.owner_slug, pool.season, pool.games, pool.stats, pool.points, pool.points_per_game from pool
 order by
   case when $1::text = 'name' then full_name end asc,
   case when $1 = 'points' and season <> '' then points
@@ -135,6 +135,7 @@ type ListResearchPlayersRow struct {
 	Status            string          `json:"status"`
 	InjuryDesignation string          `json:"injury_designation"`
 	HeadshotUrl       string          `json:"headshot_url"`
+	BirthDate         pgtype.Date     `json:"birth_date"`
 	Team              string          `json:"team"`
 	OwnerName         string          `json:"owner_name"`
 	OwnerSlug         string          `json:"owner_slug"`
@@ -174,6 +175,7 @@ func (q *Queries) ListResearchPlayers(ctx context.Context, arg ListResearchPlaye
 			&i.Status,
 			&i.InjuryDesignation,
 			&i.HeadshotUrl,
+			&i.BirthDate,
 			&i.Team,
 			&i.OwnerName,
 			&i.OwnerSlug,
@@ -211,7 +213,7 @@ with selected as (
 ), stats as (
  select player_id,jsonb_object_agg(key,value) as stats from stat_values group by player_id
 )
-select p.id, totals.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url,
+select p.id, totals.competition, p.full_name, p.positions, p.status, p.injury_designation, p.headshot_url, p.birth_date,
        coalesce(totals.team,'')::text as team,
        coalesce(f.name,'')::text as owner_name, coalesce(f.slug,'')::text as owner_slug,
        totals.season, totals.games, coalesce(stats.stats,'{}'::jsonb) as stats,
@@ -237,6 +239,7 @@ type ListResearchSeasonPoolRow struct {
 	Status            string          `json:"status"`
 	InjuryDesignation string          `json:"injury_designation"`
 	HeadshotUrl       string          `json:"headshot_url"`
+	BirthDate         pgtype.Date     `json:"birth_date"`
 	Team              string          `json:"team"`
 	OwnerName         string          `json:"owner_name"`
 	OwnerSlug         string          `json:"owner_slug"`
@@ -266,6 +269,7 @@ func (q *Queries) ListResearchSeasonPool(ctx context.Context, arg ListResearchSe
 			&i.Status,
 			&i.InjuryDesignation,
 			&i.HeadshotUrl,
+			&i.BirthDate,
 			&i.Team,
 			&i.OwnerName,
 			&i.OwnerSlug,
