@@ -13,6 +13,9 @@ make api    # API on http://localhost:8090 (applies migrations on start)
 make web    # frontend dev server on http://localhost:5173
 ```
 
+If port 5433 is already in use, put `DB_PORT=5434` in an ignored
+`.env.local` file. The `db`, `api`, and `test` Make targets will all use it.
+
 Open http://localhost:5173. With no dynasty yet, the landing page offers to set
 one up: name it, pick sports and rules, create your account, list the managers.
 Whoever does this becomes the commissioner. The commissioner page then has an

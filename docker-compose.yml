@@ -62,7 +62,7 @@ services:
       POSTGRES_DB: crossover
       POSTGRES_USER: crossover
       POSTGRES_PASSWORD: ${DB_PASSWORD:-crossover}
-    ports: ["127.0.0.1:5433:5432"] # 5433 on the host; reachable only from this machine
+    ports: ["127.0.0.1:${DB_PORT:-5433}:5432"] # host port is configurable; reachable only from this machine
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
