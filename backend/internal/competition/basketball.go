@@ -89,6 +89,7 @@ func cbb(client *ingest.Client) Competition {
 		Scoreboard:       "groups=50&limit=500", // every Division I game, not only the featured ones
 		ConferenceGroups: collegeConferenceIDs(),
 		SeasonGroups:     basketballSeasonGroups, SeasonStarts: time.November, SeasonSpansYears: true,
+		RosterSeasonStarts: time.July, RosterAdditions: collegeRosterAdditions,
 	})
 	return Competition{
 		Key: "cbb", Name: "College Basketball", Conferences: collegeConferenceCatalog,

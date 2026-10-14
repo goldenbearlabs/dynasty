@@ -194,6 +194,16 @@ and may be held on reserve under the default **Prospects or outside starting
 conferences** reserve rule. Conference eligibility is also enforced by lineup
 validation and scoring, including lineups saved before a rule change.
 
+College roster imports explicitly select the season ending the following year
+from July onward (for example, `season=2027` for fall 2026), and supplement
+ESPN's team listing with teams in its conference membership feed. Verified
+players still omitted by ESPN can be added in
+`backend/internal/competition/college_rosters.go`, with their ESPN athlete id,
+school roster URL, team and season. These additions only apply to that season;
+ESPN's own player details take precedence once it lists them. The prospect job
+continues to import future recruiting classes; current freshmen come from the
+season-specific roster job.
+
 Replacement demand treats basketball position aliases and baseball outfield
 positions as shared pools. Above-replacement season totals are raw fantasy
 points under that league’s rules and are not comparable across sports.
