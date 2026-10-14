@@ -33,7 +33,7 @@ select @ranking_id, p.id, @rank
 from players p
 join rankings r on r.id = @ranking_id
 left join leagues l on l.id = r.league_id
-where p.id = @player_id and (
+where p.pool_eligible and p.id = @player_id and (
  p.competition = l.competition or (r.league_id is null and exists (
   select 1 from draft_leagues dl join leagues covered on covered.id = dl.league_id
   where dl.draft_id = r.draft_id and covered.competition = p.competition
@@ -51,7 +51,7 @@ join players p on p.id = rp.player_id
 left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries re on re.player_id = p.id and (re.league_id = r.league_id or (r.league_id is null and re.league_id in (select league_id from draft_leagues where draft_id = r.draft_id)))
 left join franchises f on f.id = re.franchise_id
-where rp.ranking_id = @ranking_id
+where p.pool_eligible and rp.ranking_id = @ranking_id
 order by rp.rank;
 
 -- name: DraftCoversLeague :one

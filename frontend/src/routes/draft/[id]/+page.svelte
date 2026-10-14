@@ -11,11 +11,13 @@
 		getRankings,
 		importRanking,
 		makePick,
+		overridePick,
 		passPick,
 		setDraftClock,
 		setAutoPick,
 		setQueue,
 		type DraftAction,
+		type DraftPick,
 		type Player,
 		type QueuedPlayer,
 		type RankedPlayer,
@@ -149,6 +151,21 @@
 	const autoIds = $derived(room?.state?.auto_pick_franchise_ids ?? []);
 	const myAuto = $derived(!!me && autoIds.includes(me.id));
 	const toggleAuto = () => setAutoPick(id, !myAuto).catch(toast.error);
+	// A commissioner can turn it on or off for anyone, say for a manager who has stepped away.
+	const toggleAutoFor = (franchiseId: string) =>
+		setAutoPick(id, !autoIds.includes(franchiseId), franchiseId).catch(toast.error);
+
+	// A commissioner can change a pick already made: pick it on the board,
+	// then draft its replacement from the player research.
+	let changingId = $state<string>();
+	const changing = $derived(
+		draft?.status === 'live' || draft?.status === 'paused'
+			? picks.find((p) => p.id === changingId && p.player_id)
+			: undefined
+	);
+	function startChange(pick: DraftPick) {
+		changingId = changingId === pick.id ? undefined : pick.id;
+	}
 
 	async function pass() {
 		if (!onClock || !confirm(`Pass pick #${onClock.position}? It cannot be made later.`)) return;
@@ -160,14 +177,22 @@
 	}
 
 	async function pick(player: Player) {
-		if (!target || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
+		const into = changing ?? target;
+		if (!into || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
 			return;
-		const pickId = target.id;
-		const ownerName = pickingFor?.name ?? 'You';
+		const ownerName = changing
+			? (franchise(changing.current_franchise_id)?.name ?? 'Their')
+			: (pickingFor?.name ?? 'You');
 		picking = true;
 		try {
-			await makePick(id, { player_id: player.id, pick_id: pickId });
-			toast.good(`${ownerName} drafted ${player.full_name}.`);
+			if (changing) {
+				await overridePick(id, changing.id, player.id);
+				toast.good(`Pick #${changing.position} changed to ${player.full_name}.`);
+				changingId = undefined;
+			} else {
+				await makePick(id, { player_id: player.id, pick_id: into.id });
+				toast.good(`${ownerName} drafted ${player.full_name}.`);
+			}
 			await invalidateAll();
 		} catch (e) {
 			toast.error(e);
@@ -359,6 +384,12 @@
 							onclick={toggleAuto}>Auto pick {myAuto ? 'on' : 'off'}</button
 						>{/if}
 				</div>{/if}
+			{#if commissioner && draft.status === 'live'}<button class="small" onclick={() => control('pause')}
+					><Icon name="pause" size={14} />Pause</button
+				>{:else if commissioner && draft.status === 'paused'}<button
+					class="small primary"
+					onclick={() => control('resume')}><Icon name="play" size={14} />Resume</button
+				>{/if}
 			{#if commissioner}
 				<details class="admin">
 					<summary>Manage draft</summary>
@@ -366,14 +397,7 @@
 						{#if draft.status === 'scheduled'}<button
 								class="small primary"
 								onclick={() => control('start')}><Icon name="play" size={14} />Start draft</button
-							><button class="small quiet danger" onclick={remove}>Delete</button>
-						{:else if draft.status === 'live'}<button class="small" onclick={() => control('pause')}
-								><Icon name="pause" size={14} />Pause</button
-							>
-						{:else if draft.status === 'paused'}<button
-								class="small primary"
-								onclick={() => control('resume')}><Icon name="play" size={14} />Resume</button
-							>{/if}
+							><button class="small quiet danger" onclick={remove}>Delete</button>{/if}
 						{#if draft.status === 'live' || draft.status === 'paused'}<button
 								class="small"
 								onclick={() => control('undo')}
@@ -391,6 +415,19 @@
 									onclick={saveClock}>Set</button
 								></label
 							>{/if}
+						{#if draft.status !== 'complete'}<div class="auto-set">
+								<span class="muted small-text">Auto pick</span>
+								{#each franchises as f (f.id)}<button
+										class="small auto-toggle"
+										class:on={autoIds.includes(f.id)}
+										aria-pressed={autoIds.includes(f.id)}
+										title={`Turn auto pick ${autoIds.includes(f.id) ? 'off' : 'on'} for ${f.name}`}
+										onclick={() => toggleAutoFor(f.id)}>{f.name}</button
+									>{/each}
+							</div>{/if}
+						{#if draft.status === 'live' || draft.status === 'paused'}<p class="muted small-text">
+								To change a pick already made, hover it on the board and click Change.
+							</p>{/if}
 						{#if draft.status === 'scheduled'}<details
 								class="order-editor"
 								ontoggle={(e) => (orderOpened ||= e.currentTarget.open)}
@@ -405,6 +442,11 @@
 		{#if me && !rookie && draft.status === 'complete'}<p class="makeup">
 				<span class="pill gold">Next</span> Set your roster: choose who is on your reserve list in each league,
 				on <a href="/franchise/{me.slug}">your team page</a>, before the season starts.
+			</p>{/if}
+		{#if changing}<p class="makeup changing">
+				<span class="pill gold">Changing</span> Pick #{changing.position}, {changing.player_name} for
+				{franchise(changing.current_franchise_id)?.name}. Select a player and click Replace to take him instead.
+				<button class="small quiet" onclick={() => (changingId = undefined)}>Cancel</button>
 			</p>{/if}
 		{#if myMakeUp && !myTurn && draft.status === 'live'}<p class="makeup">
 				<span class="pill gold">Skipped</span> Pick #{myMakeUp.position} is owed to you. Select a player
@@ -439,7 +481,9 @@
 						myId={me?.id}
 						{autoIds}
 						showSport={sports.length > 1}
+						changingId={changing?.id}
 						onselect={research}
+						onchange={commissioner && (draft.status === 'live' || draft.status === 'paused') ? startChange : undefined}
 					/>
 				</section>
 				<Splitter
@@ -576,6 +620,13 @@
 {#snippet researchAction(player: Player)}
 	{@const taken = !!player.owner_slug || made.some((p) => p.player_id === player.id)}
 	{#if taken}<span class="pill">{player.owner_name || 'Already drafted'}</span>
+	{:else if changing}
+		<p class="target-note">
+			Replacing {changing.player_name} · R{changing.round} · #{changing.position}
+		</p>
+		<button class="small primary" disabled={picking || !room?.connected} onclick={() => pick(player)}
+			>{picking ? 'Replacing…' : 'Replace'}</button
+		>
 	{:else if me && draft?.status !== 'complete'}
 		{#if target}<p class="target-note">
 				{pickingFor ? `Picking for ${pickingFor.name}` : myTurn ? 'Your pick' : 'Make-up pick'} · R{target.round}
@@ -828,6 +879,19 @@
 		background: var(--gold-soft);
 		border-color: var(--gold);
 		color: var(--gold);
+	}
+	.auto-set {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
+		width: 100%;
+	}
+	.changing {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
 	}
 	.makeup {
 		font-size: 0.78rem;

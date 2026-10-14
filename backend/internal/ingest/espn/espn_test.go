@@ -160,6 +160,27 @@ func TestDraft(t *testing.T) {
 	}
 }
 
+func TestDraftPicksOnlyNeverReadsCollegeBoard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/draft/rounds"):
+			fmt.Fprint(w, `{"items":[{"picks":[{"overall":1,"athlete":{"$ref":"http://espn.test/athletes/1"}}]}]}`)
+		case strings.HasSuffix(r.URL.Path, "/draft/athletes/1"):
+			fmt.Fprint(w, `{"fullName":"Drafted Pro","athlete":{"$ref":"http://espn.test/athletes/100"},"position":{"abbreviation":"QB"}}`)
+		default:
+			t.Errorf("professional prospects must not request a college draft board: %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	draft := NewDraft(ingest.NewClient(0), Draft{Path: "football/leagues/nfl", Provider: "espn_football", Month: time.April, Classes: 1, PicksOnly: true})
+	draft.Base = server.URL
+	players, err := draft.Prospects(context.Background())
+	if err != nil || len(players) != 1 || players[0].ProviderID != "100" || !strings.Contains(players[0].Note, "draft, pick 1") {
+		t.Fatalf("professional picks = %+v, err=%v", players, err)
+	}
+}
+
 func TestGamesAndBoxScore(t *testing.T) {
 	const scoreboard = `{"events":[
 	  {"id":"401","season":{"type":2},"date":"2026-10-04T17:00Z","status":{"type":{"state":"post","shortDetail":"Final/OT"}},

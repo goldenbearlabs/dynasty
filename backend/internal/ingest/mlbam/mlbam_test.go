@@ -85,7 +85,9 @@ func TestSource(t *testing.T) {
 
 func TestProspects(t *testing.T) {
 	const draft = `{"drafts":{"rounds":[{"picks":[
-	  {"pickRound":"1","person":{"id":800604,"fullName":"Roch Cholowsky","birthDate":"2005-04-07","primaryPosition":{"abbreviation":"SS"}},"school":{"name":"UCLA"}},
+	  {"pickRound":"1","signingBonus":"10350000","person":{"id":800604,"fullName":"Roch Cholowsky","birthDate":"2005-04-07","primaryPosition":{"abbreviation":"SS"}},"school":{"name":"UCLA"}},
+	  {"pickRound":"2","person":{"id":800605,"fullName":"Unsigned College Player"}},
+	  {"pickRound":"3","signingBonus":"0","person":{"id":800606,"fullName":"Returning College Player"}},
 	  {"pickRound":"1"}
 	]}]}}`
 	years := 0

@@ -200,22 +200,23 @@ func (q *Queries) InsertDraftPick(ctx context.Context, arg InsertDraftPickParams
 
 const insertDraftQueue = `-- name: InsertDraftQueue :exec
 insert into draft_queue (draft_id, franchise_id, player_id, rank)
-values ($1, $2, $3, $4)
+select $1, $2, p.id, $3
+from players p where p.id = $4 and p.pool_eligible
 `
 
 type InsertDraftQueueParams struct {
 	DraftID     pgtype.UUID `json:"draft_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`
-	PlayerID    pgtype.UUID `json:"player_id"`
 	Rank        int32       `json:"rank"`
+	PlayerID    pgtype.UUID `json:"player_id"`
 }
 
 func (q *Queries) InsertDraftQueue(ctx context.Context, arg InsertDraftQueueParams) error {
 	_, err := q.db.Exec(ctx, insertDraftQueue,
 		arg.DraftID,
 		arg.FranchiseID,
-		arg.PlayerID,
 		arg.Rank,
+		arg.PlayerID,
 	)
 	return err
 }
@@ -270,7 +271,7 @@ join (select ps.player_id, sum(ps.points) as points
       where ps.competition = $1 and ps.league = '' and ps.points is not null
         and ps.year = (select max(s.year) from stat_seasons s where s.competition = $1)
       group by ps.player_id) scored on scored.player_id = p.id
-where p.competition = $1
+where p.pool_eligible and p.competition = $1
   and not exists (select 1 from roster_entries r where r.player_id = p.id)
 order by scored.points desc, p.id
 limit $2
@@ -436,7 +437,7 @@ select q.player_id, q.rank, p.full_name, p.positions, p.competition, p.status, p
 from draft_queue q
 join players p on p.id = q.player_id
 left join pro_teams t on t.id = p.pro_team_id
-where q.draft_id = $1 and q.franchise_id = $2
+where p.pool_eligible and q.draft_id = $1 and q.franchise_id = $2
 order by q.rank
 `
 
@@ -601,7 +602,7 @@ const makeDraftPick = `-- name: MakeDraftPick :exec
 update draft_picks set
   player_id   = $1,
   league_id   = $2,
-  picked_at   = now(),
+  picked_at   = coalesce(picked_at, now()), -- a changed pick keeps its time
   auto_picked = $3
 where id = $4
 `

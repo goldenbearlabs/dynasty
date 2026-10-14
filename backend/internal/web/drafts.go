@@ -175,6 +175,27 @@ func (s *Server) setDraftPicks(w http.ResponseWriter, r *http.Request) {
 	s.done(w, r, s.Drafts.SetPicks(r.Context(), id, slots))
 }
 
+// overridePick replaces the player taken with a pick already made.
+func (s *Server) overridePick(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PlayerID pgtype.UUID `json:"player_id"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	pickID, err := pathID(r, "pick")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.done(w, r, s.Drafts.Override(r.Context(), id, pickID, body.PlayerID))
+}
+
 func (s *Server) setDraftClock(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		PickClockSeconds int `json:"pick_clock_seconds"`

@@ -189,6 +189,7 @@ type Player struct {
 	CareerCheckedAt   pgtype.Timestamptz `json:"career_checked_at"`
 	InjuryDesignation string             `json:"injury_designation"`
 	InjuryCheckedAt   pgtype.Timestamptz `json:"injury_checked_at"`
+	PoolEligible      bool               `json:"pool_eligible"`
 }
 
 type PlayerExternalID struct {
@@ -361,4 +362,13 @@ type WaiverOrder struct {
 	LeagueID    pgtype.UUID `json:"league_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`
 	Position    int32       `json:"position"`
+}
+
+type WatchlistEntry struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	Priority    int64              `json:"priority"`
+	Category    string             `json:"category"`
+	Notes       string             `json:"notes"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

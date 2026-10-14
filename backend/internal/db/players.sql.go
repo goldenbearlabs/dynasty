@@ -44,7 +44,7 @@ const countPlayers = `-- name: CountPlayers :one
 select count(*)
 from players p
 left join roster_entries r on r.player_id = p.id
-where ($1::text = '' or p.competition = $1)
+where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
   and ($4::text = '' or $4 = any(p.positions))
@@ -274,7 +274,7 @@ func (q *Queries) GetLeagueByCompetition(ctx context.Context, arg GetLeagueByCom
 }
 
 const getPlayer = `-- name: GetPlayer :one
-select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at, injury_designation, injury_checked_at from players where id = $1
+select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at, injury_designation, injury_checked_at, pool_eligible from players where id = $1
 `
 
 func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error) {
@@ -296,6 +296,7 @@ func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error)
 		&i.CareerCheckedAt,
 		&i.InjuryDesignation,
 		&i.InjuryCheckedAt,
+		&i.PoolEligible,
 	)
 	return i, err
 }
@@ -738,7 +739,7 @@ left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
 left join rostered         on rostered.competition = p.competition
-where ($1::text = '' or p.competition = $1)
+where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
   and ($4::text = '' or $4 = any(p.positions))
@@ -1043,7 +1044,8 @@ func (q *Queries) SetInjuryDesignation(ctx context.Context, arg SetInjuryDesigna
 
 const updatePlayer = `-- name: UpdatePlayer :one
 update players set
-  eligible_since = case when competition <> $1 then now() else eligible_since end,
+  eligible_since = case when competition <> $1 or not pool_eligible then now() else eligible_since end,
+  pool_eligible  = true,
   competition    = $1,
   status         = 'active',
   full_name      = $2,
@@ -1088,6 +1090,8 @@ func (q *Queries) UpdatePlayer(ctx context.Context, arg UpdatePlayerParams) (str
 
 const updateProspect = `-- name: UpdateProspect :exec
 update players set
+  eligible_since = case when not pool_eligible then now() else eligible_since end,
+  pool_eligible = true,
   full_name    = $1,
   positions    = $2,
   birth_date   = coalesce($3, birth_date),

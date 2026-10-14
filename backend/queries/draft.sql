@@ -91,7 +91,7 @@ delete from draft_picks where id = @id and draft_id = @draft_id;
 update draft_picks set
   player_id   = @player_id,
   league_id   = @league_id,
-  picked_at   = now(),
+  picked_at   = coalesce(picked_at, now()), -- a changed pick keeps its time
   auto_picked = @auto_picked
 where id = @id;
 
@@ -125,7 +125,7 @@ select q.player_id, q.rank, p.full_name, p.positions, p.competition, p.status, p
 from draft_queue q
 join players p on p.id = q.player_id
 left join pro_teams t on t.id = p.pro_team_id
-where q.draft_id = @draft_id and q.franchise_id = @franchise_id
+where p.pool_eligible and q.draft_id = @draft_id and q.franchise_id = @franchise_id
 order by q.rank;
 
 -- name: ClearDraftQueue :exec
@@ -133,7 +133,8 @@ delete from draft_queue where draft_id = @draft_id and franchise_id = @franchise
 
 -- name: InsertDraftQueue :exec
 insert into draft_queue (draft_id, franchise_id, player_id, rank)
-values (@draft_id, @franchise_id, @player_id, @rank);
+select @draft_id, @franchise_id, p.id, @rank
+from players p where p.id = @player_id and p.pool_eligible;
 
 -- name: RemoveFromDraftQueues :exec
 -- A drafted player leaves everyone's queue.
@@ -160,7 +161,7 @@ join (select ps.player_id, sum(ps.points) as points
       where ps.competition = @competition and ps.league = '' and ps.points is not null
         and ps.year = (select max(s.year) from stat_seasons s where s.competition = @competition)
       group by ps.player_id) scored on scored.player_id = p.id
-where p.competition = @competition
+where p.pool_eligible and p.competition = @competition
   and not exists (select 1 from roster_entries r where r.player_id = p.id)
 order by scored.points desc, p.id
 limit @page_size;

@@ -639,6 +639,9 @@ type Draft struct {
 	Provider string     // the league's athlete id space
 	Month    time.Month // when the draft is held
 	Classes  int        // how many past drafts' picks are listed
+	// PicksOnly excludes the next draft board, which still contains college
+	// players. Completed professional draft picks remain eligible.
+	PicksOnly bool
 	// Positions, when set, keeps only prospects at these positions.
 	Positions []string
 	client    *ingest.Client
@@ -682,6 +685,9 @@ func (d *Draft) Prospects(ctx context.Context) ([]ingest.Player, error) {
 		}
 	}
 
+	if d.PicksOnly {
+		return players, nil
+	}
 	var board struct {
 		Items []ref `json:"items"`
 	}

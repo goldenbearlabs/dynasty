@@ -301,8 +301,9 @@ func (s *Source) draftPicks(ctx context.Context) ([]ingest.Player, error) {
 			Drafts struct {
 				Rounds []struct {
 					Picks []struct {
-						PickRound string `json:"pickRound"`
-						Person    struct {
+						PickRound    string `json:"pickRound"`
+						SigningBonus string `json:"signingBonus"`
+						Person       struct {
 							ID              int    `json:"id"`
 							FullName        string `json:"fullName"`
 							BirthDate       string `json:"birthDate"`
@@ -322,7 +323,8 @@ func (s *Source) draftPicks(ctx context.Context) ([]ingest.Player, error) {
 		}
 		for _, round := range res.Drafts.Rounds {
 			for _, pick := range round.Picks {
-				if pick.Person.ID == 0 { // a passed pick
+				bonus, _ := strconv.ParseFloat(pick.SigningBonus, 64)
+				if pick.Person.ID == 0 || bonus <= 0 { // passed or not confirmed signed
 					continue
 				}
 				p := ingest.Player{

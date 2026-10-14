@@ -826,7 +826,9 @@ export const makePick = (id: string, pick: { player_id: string; pick_id?: string
 export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
-export const setAutoPick = (id: string, on: boolean) => request<void>('PUT', `/drafts/${id}/autopick`, { on });
+/** franchise_id lets a commissioner set it for another franchise; without it, it is the signed-in one. */
+export const setAutoPick = (id: string, on: boolean, franchise_id?: string) =>
+	request<void>('PUT', `/drafts/${id}/autopick`, { on, franchise_id });
 
 export const getRankings = () => request<RankingSummary[]>('GET', '/rankings');
 export const getRanking = (id: string) => request<Ranking>('GET', `/rankings/${id}`);
@@ -838,6 +840,9 @@ export const importRanking = (draftId: string, ranking_id: string) =>
 
 export const createDraft = (draft: NewDraft) => request<Draft>('POST', '/admin/drafts', draft);
 export const setDraftPicks = (id: string, slots: PickSlot[]) => request<void>('PUT', `/admin/drafts/${id}/picks`, slots);
+/** Replaces the player taken with a pick already made. */
+export const overridePick = (id: string, pickId: string, player_id: string) =>
+	request<void>('PUT', `/admin/drafts/${id}/picks/${pickId}`, { player_id });
 export const setDraftClock = (id: string, pick_clock_seconds: number) =>
 	request<void>('PUT', `/admin/drafts/${id}`, { pick_clock_seconds });
 export const deleteDraft = (id: string) => request<void>('DELETE', `/admin/drafts/${id}`);

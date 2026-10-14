@@ -228,24 +228,61 @@ func (s *Service) Undo(ctx context.Context, draftID pgtype.UUID) error {
 		if err != nil {
 			return err
 		}
-		if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{
-			LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID, PlayerID: pick.PlayerID,
-		}); err != nil {
-			return err
-		}
-		if err := lineup.Bench(ctx, q, pick.LeagueID, pick.CurrentFranchiseID, pick.PlayerID); err != nil {
+		if err := unpick(ctx, q, draft, pick); err != nil {
 			return err
 		}
 		if err := q.ClearDraftPick(ctx, pick.ID); err != nil {
 			return err
 		}
-		if err := q.InsertTransaction(ctx, db.InsertTransactionParams{
-			DynastyID: draft.DynastyID, LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID,
-			Kind: "undo_pick", PlayerID: pick.PlayerID, DraftPickID: pick.ID, Detail: json.RawMessage(`{}`),
-		}); err != nil {
+		return advance(ctx, q, draft, true)
+	})
+}
+
+// Override replaces the player taken with a pick already made. The pick
+// keeps its place in the order and its time, and whoever is up keeps
+// their clock.
+func (s *Service) Override(ctx context.Context, draftID, pickID, playerID pgtype.UUID) error {
+	return s.change(ctx, draftID, false, func(q *db.Queries, draft db.Draft) error {
+		if draft.Status != "live" && draft.Status != "paused" {
+			return problem.New("Only a pick in a draft in progress can be changed.")
+		}
+		pick, err := q.GetDraftPick(ctx, pickID)
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && pick.DraftID != draftID {
+			return problem.New("That pick is not in this draft.")
+		}
+		if err != nil {
 			return err
 		}
-		return advance(ctx, q, draft, true)
+		switch {
+		case !pick.PlayerID.Valid:
+			return problem.New("That pick has not been made yet.")
+		case pick.PlayerID == playerID:
+			return problem.New("That player is already the pick.")
+		}
+		if err := unpick(ctx, q, draft, pick); err != nil {
+			return err
+		}
+		if err := makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, playerID, false); err != nil {
+			return err
+		}
+		return advance(ctx, q, draft, false)
+	})
+}
+
+// unpick takes a made pick's player back off the franchise's roster and
+// records it, in the caller's transaction. The pick itself is left as it is.
+func unpick(ctx context.Context, q *db.Queries, draft db.Draft, pick db.DraftPick) error {
+	if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{
+		LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID, PlayerID: pick.PlayerID,
+	}); err != nil {
+		return err
+	}
+	if err := lineup.Bench(ctx, q, pick.LeagueID, pick.CurrentFranchiseID, pick.PlayerID); err != nil {
+		return err
+	}
+	return q.InsertTransaction(ctx, db.InsertTransactionParams{
+		DynastyID: draft.DynastyID, LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID,
+		Kind: "undo_pick", PlayerID: pick.PlayerID, DraftPickID: pick.ID, Detail: json.RawMessage(`{}`),
 	})
 }
 

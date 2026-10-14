@@ -204,6 +204,16 @@ ESPN's own player details take precedence once it lists them. The prospect job
 continues to import future recruiting classes; current freshmen come from the
 season-specific roster job.
 
+NFL and WNBA prospect imports include completed professional draft picks,
+not the next draft's college rankings. MLB prospects must have a confirmed
+draft signing bonus or appear in professional minor-league player lists;
+unsigned selections who remain in college are excluded. Previously imported
+players outside these professional prospect pools are hidden from player
+search, rankings and draft queues and cannot be acquired or drafted. Their
+records and historical picks are retained. When an eligible prospect feed or
+professional roster later admits them, they enter the pool as new arrivals
+for the normal rookie-draft and free-agency rules.
+
 Replacement demand treats basketball position aliases and baseball outfield
 positions as shared pools. Above-replacement season totals are raw fantasy
 points under that league’s rules and are not comparable across sports.

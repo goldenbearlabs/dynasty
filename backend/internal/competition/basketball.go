@@ -161,9 +161,10 @@ func wnba(client *ingest.Client) Competition {
 		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
 		Season: [2]string{"05-08", "09-25"},
 		Source: source, Games: source, Seasons: source,
-		// Recent picks who are not on a roster, and the next class once ESPN ranks it.
+		// Recent professional picks, including players not yet on a roster.
 		Prospects: espn.NewDraft(client, espn.Draft{
 			Path: "basketball/leagues/wnba", Provider: womensBasketballProvider, Month: time.April, Classes: 2,
+			PicksOnly: true,
 		}),
 	}
 }

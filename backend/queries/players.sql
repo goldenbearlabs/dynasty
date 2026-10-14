@@ -28,7 +28,8 @@ returning player_id;
 -- Returns the competition the player was in before, so a move (a college
 -- player reaching the NBA) can be acted on.
 update players set
-  eligible_since = case when competition <> @competition then now() else eligible_since end,
+  eligible_since = case when competition <> @competition or not pool_eligible then now() else eligible_since end,
+  pool_eligible  = true,
   competition    = @competition,
   status         = 'active',
   full_name      = @full_name,
@@ -133,7 +134,7 @@ left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
 left join rostered         on rostered.competition = p.competition
-where (@competition::text = '' or p.competition = @competition)
+where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
   and (@position::text = '' or @position = any(p.positions))
@@ -165,7 +166,7 @@ order by competition, year desc;
 select count(*)
 from players p
 left join roster_entries r on r.player_id = p.id
-where (@competition::text = '' or p.competition = @competition)
+where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
   and (@position::text = '' or @position = any(p.positions))
@@ -200,6 +201,8 @@ returning player_id;
 -- Only touches rows that are still prospects: a prospect feed must never
 -- overwrite a player who has since arrived.
 update players set
+  eligible_since = case when not pool_eligible then now() else eligible_since end,
+  pool_eligible = true,
   full_name    = @full_name,
   positions    = @positions,
   birth_date   = coalesce(@birth_date, birth_date),

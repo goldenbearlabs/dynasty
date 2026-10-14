@@ -79,6 +79,9 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 		if player.Competition != c.League.Competition {
 			return nil, problem.New("%s does not play in this league's competition.", player.FullName)
 		}
+		if !player.PoolEligible {
+			return nil, problem.New("%s has not entered this league's professional player pool yet.", player.FullName)
+		}
 		injuryLocked, err := q.HasInjuryReserveLock(ctx, db.HasInjuryReserveLockParams{LeagueID: c.League.ID, PlayerID: c.PlayerID, Day: sportsday.Date(sportsday.Today())})
 		if err != nil {
 			return nil, err

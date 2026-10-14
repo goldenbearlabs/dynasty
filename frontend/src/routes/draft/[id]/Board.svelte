@@ -10,7 +10,9 @@
 		myId,
 		autoIds,
 		showSport,
-		onselect
+		changingId,
+		onselect,
+		onchange
 	}: {
 		picks: DraftPick[];
 		franchises: Franchise[];
@@ -19,7 +21,11 @@
 		/** Franchises with auto pick on. */
 		autoIds: string[];
 		showSport: boolean;
+		/** The made pick the commissioner is changing. */
+		changingId?: string;
 		onselect?: (id: string) => void;
+		/** Given only to a commissioner: offers to change a made pick. */
+		onchange?: (pick: DraftPick) => void;
 	} = $props();
 	const name = (id: string) => franchises.find((f) => f.id === id)?.name ?? 'Unknown team';
 	const rounds = $derived(
@@ -81,6 +87,7 @@
 							class:clock={pick.id === onClockId}
 							class:mine={pick.current_franchise_id === myId}
 							class:made={!!pick.player_id}
+							class:changing={pick.id === changingId}
 							class:auto={!pick.player_id && !pick.passed_at && autoIds.includes(pick.current_franchise_id)}
 						>
 							<div class="cell">
@@ -103,7 +110,11 @@
 										>{pick.player_positions.join('/')}{#if showSport}
 											· {pick.competition.toUpperCase()}{/if}{#if pick.auto_picked}
 											· Auto{/if}</span
-									>
+									>{#if onchange}<button
+											class="change"
+											title={`Change pick #${pick.position}`}
+											onclick={() => onchange(pick)}>Change</button
+										>{/if}
 								{:else}<span class="pending"
 										>{pick.id === onClockId
 											? 'On the clock'
@@ -260,6 +271,34 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.change {
+		justify-self: start;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-size: 0.58rem;
+		color: var(--ink-soft);
+		text-decoration: underline;
+		visibility: hidden;
+	}
+	td:hover .change,
+	td.changing .change,
+	.change:focus-visible {
+		visibility: visible;
+	}
+	.change:hover {
+		color: var(--brand);
+	}
+	td.changing,
+	tbody tr:hover td.changing {
+		background: var(--gold-soft);
+		box-shadow: inset 0 0 0 2px var(--gold);
+	}
+	@media (hover: none) {
+		.change {
+			visibility: visible;
+		}
 	}
 	.pending {
 		font-size: 0.68rem;

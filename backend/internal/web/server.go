@@ -149,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/drafts/{id}", s.commissioner(s.deleteDraft))
 	mux.HandleFunc("POST /api/admin/drafts/{id}/schedule", s.commissioner(s.scheduleDraft))
 	mux.HandleFunc("PUT /api/admin/drafts/{id}/picks", s.commissioner(s.setDraftPicks))
+	mux.HandleFunc("PUT /api/admin/drafts/{id}/picks/{pick}", s.commissioner(s.overridePick))
 	mux.HandleFunc("POST /api/admin/drafts/{id}/{action}", s.commissioner(s.controlDraft))
 	mux.HandleFunc("POST /api/admin/players", s.commissioner(s.addPlayers))
 	mux.HandleFunc("GET /api/admin/players/merge-suggestions", s.commissioner(s.listMergeSuggestions))

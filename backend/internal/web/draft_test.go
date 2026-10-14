@@ -280,6 +280,23 @@ func TestDraftFlow(t *testing.T) {
 		t.Error("an undone pick's player did not return to the pool")
 	}
 
+	// The commissioner changes Cy's auto pick: the new player takes its
+	// place and time, the old one returns to the pool, and the clock is
+	// left alone.
+	changeURL := adminURL + "/picks/" + state.Picks[2].ID
+	cy.want(http.StatusForbidden, "PUT", changeURL, drafted("Zd Guard Four"), nil)
+	ann.want(http.StatusUnprocessableEntity, "PUT", changeURL, drafted("Zd Guard One"), nil) // already Bob's
+	ann.want(http.StatusUnprocessableEntity, "PUT", adminURL+"/picks/"+state.Picks[3].ID, drafted("Zd Guard Four"), nil) // not made yet
+	ann.want(http.StatusNoContent, "PUT", changeURL, drafted("Zd Guard Four"), nil)
+	if m := live.next(); m.Type != "update" || len(m.Picks) != 1 || m.Picks[0].PlayerName != "Zd Guard Four" ||
+		m.Picks[0].AutoPicked || *m.OnClock != state.Picks[3].ID {
+		t.Fatalf("after changing pick 3 = %+v", m)
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Guard+Two&draft_id="+created.ID, nil, &page)
+	if page.Total != 1 {
+		t.Error("a replaced pick's player did not return to the pool")
+	}
+
 	// --- finishing -------------------------------------------------------
 	// Undo put pick 4 back on the clock. Cy turns auto pick on with nobody
 	// queued: the room sees it, and a few seconds later he is given one of
@@ -341,8 +358,8 @@ func TestDraftFlow(t *testing.T) {
 	for _, a := range activity {
 		kinds[a.Kind]++
 	}
-	if kinds["pick"] != 8 || kinds["undo_pick"] != 2 {
-		t.Errorf("activity kinds = %v, want 8 picks and 2 undos", kinds)
+	if kinds["pick"] != 9 || kinds["undo_pick"] != 3 {
+		t.Errorf("activity kinds = %v, want 9 picks and 3 undos (two undone, one changed)", kinds)
 	}
 
 	// --- setting the reserve list ----------------------------------------
