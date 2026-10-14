@@ -479,6 +479,8 @@
 								/>{/if}
 							<PlayerList
 								competition={sport}
+								competitions={data.competitions.filter((c) => sports.includes(c.key))}
+								noLeaguePicker
 								draftId={id}
 								{version}
 								compact
@@ -509,7 +511,7 @@
 				onreset={() => resize('side', usual.side)}
 			/>
 			<aside class="team-workspace" bind:this={teamPane}>
-				<Teams {franchises} myId={me?.id} {revision} onselect={research} />
+				<Teams {franchises} leagues={data.dynasty?.leagues ?? []} myId={me?.id} {revision} onselect={research} />
 				{#if me}<Splitter
 						orientation="horizontal"
 						label="Resize my queue"

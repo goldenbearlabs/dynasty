@@ -19,6 +19,8 @@
 		 * when every sport is shown, a choice of one of them.
 		 */
 		competitions?: Competition[];
+		/** Leave the choice of sport to the caller, e.g. to its own tabs. */
+		noLeaguePicker?: boolean;
 		/** Offer an "available only" switch for this league. */
 		leagueId?: string;
 		/** Show only players this draft can still pick. */
@@ -46,6 +48,7 @@
 	let {
 		competition: only = '',
 		competitions = [],
+		noLeaguePicker = false,
 		leagueId,
 		draftId,
 		action,
@@ -60,7 +63,12 @@
 	// The sport shown: the one asked for, or the one picked from the filters.
 	let picked = $state('');
 	const competition = $derived(only || picked);
-	const positions = $derived(competitions.find((c) => c.key === competition)?.positions ?? []);
+	// One sport offers its own positions; several sports offer all of theirs.
+	const positions = $derived(
+		competition
+			? (competitions.find((c) => c.key === competition)?.positions ?? [])
+			: [...new Set(competitions.flatMap((c) => c.positions))].sort()
+	);
 	let position = $state('');
 	let minAge = $state<number | null>(null);
 	let maxAge = $state<number | null>(null);
@@ -190,7 +198,7 @@
 			{/if}
 		{/if}
 		{#if competitions.length > 0}
-			{#if !only && competitions.length > 1}
+			{#if !only && !noLeaguePicker && competitions.length > 1}
 				<select aria-label="League" bind:value={picked}>
 					<option value="">All leagues</option>
 					{#each competitions as c (c.key)}<option value={c.key}>{c.name}</option>{/each}

@@ -320,5 +320,13 @@
  .guide { margin-top: 1rem; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.6; }
  .history { max-width: 58rem; }
  .history-heading { padding: 0.8rem; border-bottom: 1px solid var(--rule); }
- @media (max-width:640px) { .pool-builder .control { flex: 1; } .more-filters summary .muted { display: none; } .filters .control { flex: 1; } }
+ @media (max-width:640px) {
+  .pool-builder .control { flex: 1; } .more-filters summary .muted { display: none; } .filters .control { flex: 1; }
+  /* The pinned player column gives way to the figures: no photo, and a name that wraps. */
+  .identity { min-width: 0; padding: 0.45rem 0.5rem; white-space: normal; }
+  .player { width: 7.5rem; }
+  .player :global(.headshot) { display: none; }
+  .player-name { white-space: normal; font-size: 0.8rem; line-height: 1.2; }
+  .preview-link { display: block; padding: 0.15rem 0; }
+ }
 </style>
