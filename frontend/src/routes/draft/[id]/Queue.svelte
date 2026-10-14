@@ -41,16 +41,16 @@
 				<span class="n">{i + 1}</span>
 				<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 				<div class="who">
-					{#if onselect}<button class="name" onclick={() => onselect(player.player_id)}
+					{#if onselect}<button class="name" title={player.full_name} onclick={() => onselect(player.player_id)}
 							>{player.full_name}</button
-						>{:else}<strong>{player.full_name}</strong>{/if}
-					<WatchStar playerID={player.player_id} playerName={player.full_name} />
-					<span class="muted small-text row">
+						>{:else}<strong class="name" title={player.full_name}>{player.full_name}</strong>{/if}
+					<span class="muted metadata">
 						<SportBadge sport={player.competition} />
 						{player.positions.join('/')}
 						{player.team_abbrev}
 					</span>
 				</div>
+				<WatchStar playerID={player.player_id} playerName={player.full_name} />
 				{#if editable}<span class="moves">
 						<button
 							class="quiet small"
@@ -89,8 +89,8 @@
 	li {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
-		padding: 0.4rem 0.25rem;
+		gap: 0.25rem;
+		padding: 0.125rem 0.25rem;
 		font-size: 0.72rem;
 		border-bottom: 1px solid var(--rule);
 	}
@@ -99,31 +99,49 @@
 	}
 	.n {
 		width: 1.3rem;
-		font: 700 0.8rem var(--mono);
+		flex: none;
+		font: 700 0.7rem var(--mono);
 		color: var(--ink-faint);
 	}
 	.who {
 		display: grid;
 		flex: 1;
-		line-height: 1.3;
+		line-height: 1.15;
 		min-width: 0;
 	}
-	.who .row {
-		gap: 0.4rem;
+	.metadata {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.65rem;
+		white-space: nowrap;
+	}
+	.metadata :global(.badge) {
+		padding: 0.1rem 0.2rem;
+		font-size: 0.6rem;
 	}
 	.moves {
+		display: flex;
+		flex: none;
 		white-space: nowrap;
 	}
 	.moves button {
-		padding: 0.15rem;
+		width: 24px;
+		height: 24px;
+		padding: 0;
 	}
 	.name {
 		padding: 0;
 		border: 0;
 		background: transparent;
 		font-size: 0.72rem;
+		line-height: 1.2;
 		text-align: left;
-		white-space: normal;
+		display: block;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		justify-content: start;
 	}
 	.name:hover {
