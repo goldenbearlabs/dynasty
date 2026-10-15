@@ -1,6 +1,4 @@
 <script lang="ts">
- import WatchStar from "#lib/WatchStar.svelte";
- import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A franchise across every sport. The organization view says where each
 	// team stands at a glance; picking a league opens that team: its lineup,
 	// its matchup, the standings, and its roster and reserve list.
@@ -13,21 +11,25 @@
 		getLineup,
 		getMatchups,
 		getStandings,
+		rookieRounds,
+		type HeldPick,
 		type LeagueRoster,
 		type List,
 		type Matchups as MatchupPeriod,
 		type RosterPlayer,
 		type Standings
 	} from '#lib/api.ts';
-	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
- import PlayerNickname from '#lib/PlayerNickname.svelte';
- import { teamIdentity } from '#lib/identity.ts';
- import LineupEditor from '#lib/LineupEditor.svelte';
+	import { teamIdentity } from '#lib/identity.ts';
+	import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
+	import PlayerNickname from '#lib/PlayerNickname.svelte';
+	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
+	import WatchStar from '#lib/WatchStar.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	import Meter from '#lib/ui/Meter.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
@@ -42,7 +44,8 @@
 	const canEdit = $derived(mine || data.me?.is_commissioner === true);
 	const leagues = $derived(data.dynasty?.leagues ?? []);
 	const franchises = $derived(data.dynasty?.franchises ?? []);
-	const nameOf = (id: string | null, leagueID?: string) => teamIdentity(franchises.find((f) => f.id === id),data.dynasty?.team_identities,leagueID).name;
+	const nameOf = (id: string | null, leagueId?: string) =>
+		teamIdentity(franchises.find((f) => f.id === id), data.dynasty?.team_identities, leagueId).name;
 
 	// ---- which view: the organization, or one league ----
 	let view = $state(untrack(() => page.url.searchParams.get('view') ?? ''));
@@ -121,7 +124,7 @@
 			matchup: matchup && {
 				id: matchup.id,
 				bye: matchup.away_franchise_id === null,
-				opponent: nameOf(home ? matchup.away_franchise_id : matchup.home_franchise_id,leagueId),
+				opponent: nameOf(home ? matchup.away_franchise_id : matchup.home_franchise_id, leagueId),
 				ours: home ? matchup.home_points : matchup.away_points,
 				theirs: home ? matchup.away_points : matchup.home_points,
 				final: matchup.final
@@ -129,10 +132,11 @@
 		};
 	};
 	// In-season leagues first, then those about to start, then the rest.
+	const phases: Phase['key'][] = ['in', 'upcoming', 'over', 'none'];
 	const cards = $derived(
 		data.rosters
 			.map((roster) => ({ roster, ...standing(roster.league_id) }))
-			.toSorted((a, b) => ['in', 'upcoming', 'over', 'none'].indexOf(a.phase.key) - ['in', 'upcoming', 'over', 'none'].indexOf(b.phase.key))
+			.toSorted((a, b) => phases.indexOf(a.phase.key) - phases.indexOf(b.phase.key))
 	);
 	const active = $derived(cards.filter((c) => c.phase.key === 'in').length);
 
@@ -158,12 +162,42 @@
 			.filter((d): d is string => d !== null)
 			.sort()[0];
 
-	const pickSports = $derived(
-		[...new Set(data.picks.map(p => [...p.competitions].sort().join(',')))].sort().map(key => {
-			const picks = data.picks.filter(p => [...p.competitions].sort().join(',') === key);
-			return { key, sports: key ? key.split(',') : [], count: picks.length, years: [...new Set(picks.map(p => p.year))].sort((a,b) => a-b).map(year => ({year, picks: picks.filter(p => p.year === year).toSorted((a,b) => a.round-b.round || a.draft_name.localeCompare(b.draft_name))})) };
-		})
-	);
+	// ---- draft picks: a grid for each rookie draft, years down and rounds across ----
+	const draftKey = (competitions: string[]) => competitions.toSorted().join(',');
+	const pickGrids = $derived.by(() => {
+		const byDraft = new Map<string, HeldPick[]>();
+		for (const p of data.picks) byDraft.set(draftKey(p.competitions), [...(byDraft.get(draftKey(p.competitions)) ?? []), p]);
+		return [...byDraft]
+			.map(([key, picks]) => {
+				const sports = key ? key.split(',') : [];
+				const covered = leagues.filter((l) => sports.includes(l.competition));
+				// Every round and year shows, even one whose picks were all traded away.
+				const rounds = Math.max(...picks.map((p) => p.round), ...covered.map((l) => rookieRounds(l.settings)));
+				const years = new Set(picks.map((p) => p.year));
+				for (const d of data.drafts) {
+					if (d.kind === 'seasonal' && d.status !== 'complete' && draftKey(d.competitions) === key) years.add(d.year);
+				}
+				return {
+					key,
+					sports,
+					name: covered.length === 1 ? covered[0].name : 'Shared draft',
+					order: Math.min(...covered.map((l) => leagues.indexOf(l))),
+					rounds: Array.from({ length: rounds }, (_, i) => i + 1),
+					years: [...years]
+						.sort((a, b) => a - b)
+						.map((year) => ({
+							year,
+							cells: Array.from({ length: rounds }, (_, i) => picks.filter((p) => p.year === year && p.round === i + 1))
+						}))
+				};
+			})
+			.toSorted((a, b) => a.order - b.order);
+	});
+	// Where the picks in one cell came from, for its popup.
+	const origins = (held: HeldPick[]) =>
+		held.length === 0
+			? 'Traded away'
+			: held.map((p) => (p.original_franchise_id === team.id ? 'Own pick' : `From ${nameOf(p.original_franchise_id)}`)).join(' · ');
 
 	// ---- one league ----
 	const roster = $derived(data.rosters.find((r) => r.league_id === league?.id));
@@ -187,20 +221,25 @@
 		{ key: 'reserve', title: 'Reserve list', other: 'main', move: 'To main' }
 	];
 
-	let injuryReplacement = $state<Record<string,string>>({});
+	// A main-roster player out injured can swap with a reserve for the rest of the season.
+	let injuryReplacement = $state<Record<string, string>>({});
 	let swapping = $state(false);
-	const injuryEligible = (player: RosterPlayer) => ['IR','OUT','IL7','IL10','IL15','IL60'].includes(player.injury_designation);
+	const injuryEligible = (player: RosterPlayer) => ['IR', 'OUT', 'IL7', 'IL10', 'IL15', 'IL60'].includes(player.injury_designation);
 	async function injurySwap(r: LeagueRoster, player: RosterPlayer) {
-		const replacement = r.players.find(p => p.player_id === injuryReplacement[player.player_id]);
+		const replacement = r.players.find((p) => p.player_id === injuryReplacement[player.player_id]);
 		if (!replacement || swapping) return;
 		if (!confirm(`Move ${player.full_name} to reserve for the rest of this season and call up ${replacement.full_name}? ${player.full_name} cannot return to the main roster this season, even after recovering.`)) return;
 		swapping = true;
 		try {
-			await changeRoster(r.league_id,'injury-swap',{player_id:player.player_id,replacement_id:replacement.player_id,franchise_id:team.id});
+			await changeRoster(r.league_id, 'injury-swap', { player_id: player.player_id, replacement_id: replacement.player_id, franchise_id: team.id });
 			await invalidateAll();
 			delete injuryReplacement[player.player_id];
 			toast.good(`Called up ${replacement.full_name}. ${player.full_name} is on reserve for the rest of the season.`);
-		} catch(e) { toast.error(e); } finally { swapping = false; }
+		} catch (e) {
+			toast.error(e);
+		} finally {
+			swapping = false;
+		}
 	}
 
 	// A commissioner editing someone else's roster is overriding the rules.
@@ -243,13 +282,15 @@
 	<header class="head">
 		<Crest name={league ? roster?.team_name || team.name : team.name} src={league ? roster?.image_url || team.image_url : team.image_url} size={56} />
 		<div class="grow">
-			<div class="team-title"><h1>{league ? roster?.team_name || team.name : team.name}</h1> {#if canEdit}{#key team.id}<TeamIdentityEditor franchise={team} {leagues} identities={data.dynasty?.team_identities ?? []} />{/key}{/if}</div>
- {#if league}<p class="muted small-text">{team.name} · {league.name}</p>{/if}
-			<div class="row muted">
-				Managed by {team.manager_name}
+			<div class="title">
+				<h1>{league ? roster?.team_name || team.name : team.name}</h1>
+				{#if canEdit}{#key team.id}<TeamIdentityEditor franchise={team} {leagues} identities={data.dynasty?.team_identities ?? []} />{/key}{/if}
+			</div>
+			<p class="row muted small-text meta">
+				<span>{#if league && roster?.team_name && roster.team_name !== team.name}{team.name} · {/if}Managed by {team.manager_name}</span>
 				{#if mine}<span class="pill brand">You</span>{/if}
 				{#if team.is_commissioner}<span class="pill gold">Commissioner</span>{/if}
-			</div>
+			</p>
 		</div>
 		{#if data.me && !mine}
 			<a class="button primary" href="/trades/new?with={team.slug}"><Icon name="trade" size={16} /> Propose a trade</a>
@@ -266,86 +307,95 @@
 
 	{#if !league}
 		<!-- ---- the organization ---- -->
-		<p class="muted">
+		<section class="panel">
+			<h2 class="bar">
+				Leagues
+				{#if cards.length}<span class="muted small-text count">{active} of {cards.length} in season</span>{/if}
+			</h2>
 			{#if cards.length === 0}
-				This franchise is not in any league yet.
+				<p class="muted small-text pad">This franchise is not in any league yet.</p>
 			{:else}
-				{active} of {cards.length} {cards.length === 1 ? 'league' : 'leagues'} in season.
-				{#if mine}Open a league to set its lineup.{/if}
-			{/if}
-		</p>
-
-		<div class="cards">
-			{#each cards as c (c.roster.league_id)}
-				<button class="card league" data-sport={c.roster.competition} class:quiet={c.phase.key !== 'in'} onclick={() => show(c.roster.competition)}>
-					<span class="spread">
-						<span class="row"><Crest name={c.roster.team_name} src={c.roster.image_url} size={34} /><SportBadge sport={c.roster.competition} solid /> <strong class="name">{c.roster.team_name}</strong></span>
-						<span class="pill" class:good={c.phase.key === 'in'}>{c.phase.label}</span>
-					</span>
-
-					{#if c.phase.key === 'in' || c.phase.key === 'over'}
-						<span class="facts">
-							{#if c.headToHead}
-								<span><small>Record</small><strong>{c.record || '0-0'}</strong></span>
-							{/if}
-							<span><small>Place</small><strong>{c.rank > 0 ? `${ordinal(c.rank)} of ${c.of}` : '—'}</strong></span>
-							<span><small>Season points</small><strong>{c.row ? points(c.row.points) : '—'}</strong></span>
-						</span>
-					{/if}
-
-					{#if c.phase.key === 'in' && c.matchup}
-						<span class="versus">
-							{#if c.matchup.bye}
-								<span class="muted">No matchup this round</span>
-							{:else}
-								<span class="muted small-text">{c.matchup.final ? 'Final' : 'This matchup'}</span>
-								<span class="score" class:ahead={c.matchup.ours > c.matchup.theirs}>
-									<strong>{points(c.matchup.ours)}</strong> – {points(c.matchup.theirs)}
-									<span class="muted">vs {c.matchup.opponent}</span>
+				<ul class="leagues">
+					{#each cards as c (c.roster.league_id)}
+						{@const signing = on(c.roster, 'rights').length}
+						{@const due = deadline(c.roster)}
+						<li data-sport={c.roster.competition} class:quiet={c.phase.key !== 'in'}>
+							<button onclick={() => show(c.roster.competition)}>
+								<SportBadge sport={c.roster.competition} solid />
+								<span class="team">
+									<strong>{c.roster.team_name}</strong>
+									<span class="muted small-text">
+										{#if c.phase.key === 'in' && c.matchup && !c.matchup.bye}
+											{c.matchup.final ? 'Final vs' : 'vs'}
+											{c.matchup.opponent}
+											<span class="score" class:ahead={c.matchup.ours > c.matchup.theirs}>{points(c.matchup.ours)}–{points(c.matchup.theirs)}</span>
+										{:else}
+											{c.phase.label}
+										{/if}
+									</span>
 								</span>
-							{/if}
-						</span>
-					{/if}
-
-					<span class="row foot">
-						<span class="muted small-text">
-							{on(c.roster, 'main').length}/{c.roster.limits.main} main · {on(c.roster, 'reserve').length}/{c.roster.limits.reserve} reserve
-						</span>
-						{#if c.roster.overage > 0}<span class="pill bad">Over the limit by {c.roster.overage}</span>{/if}
-						{#if on(c.roster, 'rights').length > 0}
-							{@const due = deadline(c.roster)}
-							<span class="pill gold">
-								{on(c.roster, 'rights').length} {on(c.roster, 'rights').length === 1 ? 'pick' : 'picks'} to sign{due ? ` · ${timeLeft(due)} left` : ''}
-							</span>
-						{/if}
-						{#if mine && c.phase.key === 'in' && openSlots[c.roster.league_id] > 0}
-							<span class="pill gold">{openSlots[c.roster.league_id]} open lineup {openSlots[c.roster.league_id] === 1 ? 'slot' : 'slots'}</span>
-						{/if}
-					</span>
-				</button>
-			{/each}
-		</div>
+								<span class="flags">
+									{#if c.roster.overage > 0}<span class="pill bad">{c.roster.overage} over</span>{/if}
+									{#if signing > 0}<span class="pill gold">{signing} to sign{due ? ` · ${timeLeft(due)}` : ''}</span>{/if}
+									{#if mine && c.phase.key === 'in' && openSlots[c.roster.league_id] > 0}
+										<span class="pill gold">{openSlots[c.roster.league_id]} open {openSlots[c.roster.league_id] === 1 ? 'slot' : 'slots'}</span>
+									{/if}
+								</span>
+								<span class="stats">
+									{#if c.phase.key === 'in' || c.phase.key === 'over'}
+										{#if c.headToHead}<span><small>Record</small>{c.record || '0-0'}</span>{/if}
+										<span><small>Place</small>{c.rank > 0 ? `${ordinal(c.rank)}/${c.of}` : '—'}</span>
+										<span><small>Points</small>{c.row ? points(c.row.points) : '—'}</span>
+									{/if}
+									<span><small>Roster</small>{on(c.roster, 'main').length}/{c.roster.limits.main} · {on(c.roster, 'reserve').length}/{c.roster.limits.reserve}</span>
+								</span>
+								<Icon name="right" size={16} />
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
 		<section class="panel" id="picks">
-			<h2 class="bar"><span class="pill gold">Picks</span> Draft picks</h2>
-			{#if data.picks.length === 0}
-				<p class="muted small-text pad">No picks in upcoming drafts.</p>
+			<h2 class="bar">
+				Draft picks
+				{#if mine && data.picks.length}<a class="small-text count" href="/trades/new">Trade picks</a>{/if}
+			</h2>
+			{#if pickGrids.length === 0}
+				<p class="muted small-text pad">No picks in upcoming rookie drafts.</p>
 			{:else}
-				<div class="picks-intro muted small-text"><span>{data.picks.length} picks · Tradable until each draft starts.</span>{#if mine}<a href="/trades/new">Trade picks</a>{/if}</div>
-				<div class="pick-sports">
-				{#each pickSports as group (group.key)}
-					<section class="pick-sport">
-						<h3 class="sport-heading">{#each group.sports as sport}<SportBadge {sport} solid />{:else}<span>Shared draft</span>{/each}<span class="muted small-text">{group.count} {group.count === 1 ? 'pick' : 'picks'}</span></h3>
-						{#each group.years as year (year.year)}
-							<div class="pick-year"><h4>{year.year}</h4><ul class="picks">
-							{#each year.picks as pick (pick.id)}
-								<li><strong>Round {pick.round}</strong><span class="pick-detail"><span>{pick.draft_name}</span>{#if pick.original_franchise_id !== team.id}<span class="muted">via {nameOf(pick.original_franchise_id)}</span>{/if}</span></li>
-							{/each}
-							</ul></div>
-						{/each}
-					</section>
-				{/each}
+				<div class="pick-grids">
+					{#each pickGrids as grid (grid.key)}
+						<table class="pick-grid" aria-label="{grid.name} picks held">
+							<thead>
+								<tr>
+									<th scope="col" class="draft">{#each grid.sports as sport (sport)}<SportBadge {sport} />{/each}</th>
+									{#each grid.rounds as round (round)}<th scope="col">R{round}</th>{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each grid.years as { year, cells } (year)}
+									<tr>
+										<th scope="row">{year}</th>
+										{#each cells as held, i (i)}
+											<td>
+												<button
+													class="held"
+													class:none={held.length === 0}
+													class:acquired={held.some((p) => p.original_franchise_id !== team.id)}
+													aria-label="{year} round {i + 1}: {held.length} {held.length === 1 ? 'pick' : 'picks'}. {origins(held)}"
+													>{held.length}<span class="tip" role="tooltip">{origins(held)}</span></button
+												>
+											</td>
+										{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/each}
 				</div>
+				<p class="muted small-text pad legend">Picks held in each round. <span class="acquired-key">Blue</span> includes a pick from another team; hover for where each came from.</p>
 			{/if}
 		</section>
 	{:else if roster && now}
@@ -470,15 +520,15 @@
 														<div class="row who">
 															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
 															<InjuryBadge designation={player.injury_designation} />
-														{#if player.class}<span class="pill">{player.class}</span>{/if}
+																{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}
 															{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 															{#if player.injury_reserve_locked}<span class="pill gold">Injury swap · Reserve for season</span>{/if}
-														{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
+																{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
 															{#if player.list !== list.key}<span class="pill brand">Moved</span>{/if}
 														</div>
 														<PlayerNickname franchiseID={team.id} playerID={player.player_id} playerName={player.full_name} initialNickname={player.nickname} editable={canEdit} />
- <div class="muted small-text">
+															<div class="muted small-text">
 															{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}
 														</div>
 													</div>
@@ -491,15 +541,17 @@
 													{:else}
 														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>
 														<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Drop</button>
-													{#if list.key === 'main' && injuryEligible(player)}
-														<div class="injury-swap-controls">
-															<select aria-label="Reserve replacement for {player.full_name}" bind:value={injuryReplacement[player.player_id]} disabled={swapping}>
-																<option value="">Call up from reserve…</option>
-																{#each on(roster,'reserve').filter(p => !p.injury_reserve_locked) as replacement (replacement.player_id)}<option value={replacement.player_id}>{replacement.full_name}</option>{/each}
-															</select>
-															<button class="small" disabled={swapping || !injuryReplacement[player.player_id]} onclick={() => injurySwap(roster,player)}>Season injury swap</button>
-														</div>
-													{/if}
+														{#if list.key === 'main' && injuryEligible(player)}
+															<div class="injury-swap">
+																<select aria-label="Reserve replacement for {player.full_name}" bind:value={injuryReplacement[player.player_id]} disabled={swapping}>
+																	<option value="">Call up from reserve…</option>
+																	{#each on(roster, 'reserve').filter((p) => !p.injury_reserve_locked) as replacement (replacement.player_id)}
+																		<option value={replacement.player_id}>{replacement.full_name}</option>
+																	{/each}
+																</select>
+																<button class="small" disabled={swapping || !injuryReplacement[player.player_id]} onclick={() => injurySwap(roster, player)}>Season injury swap</button>
+															</div>
+														{/if}
 													{/if}
 												</td>
 											{/if}
@@ -526,7 +578,7 @@
 								{#each now.table.rows as row, i (row.franchise_id)}
 									<tr class:me={row.franchise_id === team.id}>
 										<td class="rank">{i + 1}</td>
-										<td>{nameOf(row.franchise_id,league.id)}</td>
+										<td>{nameOf(row.franchise_id, league.id)}</td>
 										{#if now.headToHead}<td class="num">{row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ''}</td>{/if}
 										<td class="num">{points(row.points)}</td>
 									</tr>
@@ -550,81 +602,225 @@
 </div>
 
 <style>
- .injury-swap-controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}.injury-swap-controls select{max-width:15rem;font-size:.8rem}
 	.head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 1rem;
 	}
-	.head .row {
+	.grow {
+		flex: 1;
+		min-width: 0;
+	}
+	.title {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.title h1 {
+		overflow-wrap: anywhere;
+	}
+	.meta {
 		gap: 0.4rem 0.6rem;
 		margin-top: 0.3rem;
 	}
-	.grow {
-		flex: 1;
-	}
-
-	/* ---- the organization ---- */
-	.cards {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
-		gap: 0.8rem;
-	}
-	.league {
-		display: grid;
-		gap: 0.7rem;
-		align-content: start;
-		justify-content: stretch;
-		justify-items: stretch;
-		text-align: left;
-		white-space: normal;
-		font-weight: 400;
-		border-top: 3px solid var(--sport);
-	}
-	.league.quiet {
-		border-top-color: var(--rule-strong);
-	}
-	.league .row {
-		gap: 0.5rem;
-	}
-	.name {
-		font: 700 1.05rem/1.2 var(--display);
-	}
-	.facts {
+	.bar {
 		display: flex;
-		gap: 1.4rem;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 1rem;
+		font-size: 1rem;
+		border-bottom: 1px solid var(--rule);
 	}
-	.facts span,
-	.fact {
-		display: grid;
-		gap: 0.1rem;
+	.count {
+		margin-left: auto;
+		font-weight: 400;
+	}
+	.pad {
+		padding: 0.65rem 1rem;
 	}
 	small {
-		font: 600 0.66rem/1.2 var(--mono);
+		font: 600 0.62rem/1.2 var(--mono);
 		letter-spacing: 0.07em;
 		text-transform: uppercase;
 		color: var(--ink-faint);
 	}
-	.facts strong,
-	.fact strong {
-		font: 700 1.05rem/1.2 var(--display);
-	}
-	.versus {
-		display: grid;
-		gap: 0.1rem;
-		padding-top: 0.6rem;
-		border-top: 1px solid var(--rule);
-	}
-	.score strong {
-		font-size: 1.05rem;
-	}
-	.ahead,
-	.score.ahead strong {
+	.ahead {
 		color: var(--good);
 	}
-	.foot {
+
+	/* ---- the organization: one row per league ---- */
+	.leagues {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.leagues li + li {
+		border-top: 1px solid var(--rule);
+	}
+	.leagues button {
+		display: grid;
+		grid-template-columns: 3.4rem minmax(9rem, 1fr) auto 17rem 1rem;
+		align-items: center;
+		gap: 0.4rem 1.25rem;
+		width: 100%;
+		padding: 0.7rem 1rem;
+		border: 0;
+		border-left: 3px solid var(--sport);
+		border-radius: 0;
+		background: transparent;
+		text-align: left;
+		font-weight: 400;
+		white-space: normal;
+	}
+	.leagues .quiet button {
+		border-left-color: transparent;
+	}
+	.leagues button:hover {
+		background: var(--surface-2);
+	}
+	.leagues button > :global(.badge) {
+		justify-self: start;
+	}
+	.leagues button > :global(svg) {
+		color: var(--ink-faint);
+	}
+	.team {
+		display: grid;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+	.team strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.score {
+		font-family: var(--mono);
+	}
+	.stats {
+		display: flex;
+		justify-content: end;
+		gap: 1.25rem;
+		font: 650 0.85rem var(--mono);
+	}
+	.stats span {
+		display: grid;
+		justify-items: end;
+		gap: 0.15rem;
+	}
+	.flags {
+		display: flex;
 		flex-wrap: wrap;
+		justify-content: end;
+		gap: 0.3rem;
+	}
+	@media (max-width: 720px) {
+		.leagues button {
+			grid-template-columns: 3.4rem minmax(0, 1fr) 1rem;
+		}
+		.stats,
+		.flags {
+			grid-column: 2;
+			justify-content: start;
+		}
+		.stats span {
+			justify-items: start;
+		}
+		.flags:empty {
+			display: none;
+		}
+		.leagues button > :global(svg) {
+			grid-row: 1;
+			grid-column: 3;
+		}
+	}
+
+	/* ---- draft picks: years down, rounds across, a count in each ---- */
+	.pick-grids {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem 2rem;
+		padding: 0.9rem 1rem 0.2rem;
+	}
+	.pick-grid {
+		width: auto;
+		border-collapse: collapse;
+	}
+	.pick-grid th,
+	.pick-grid td {
+		padding: 0;
+		border: 0;
+		background: none;
+		text-align: center;
+	}
+	.pick-grid thead th {
+		padding-bottom: 0.3rem;
+		font: 600 0.62rem var(--mono);
+		color: var(--ink-faint);
+	}
+	.pick-grid .draft {
+		text-align: left;
+	}
+	.pick-grid tbody th {
+		padding-right: 0.6rem;
+		font: 600 0.72rem var(--mono);
+		color: var(--ink-soft);
+		text-align: left;
+	}
+	.held {
+		position: relative;
+		width: 2rem;
+		height: 1.7rem;
+		margin: 1px;
+		padding: 0;
+		border: 1px solid var(--rule);
+		border-radius: 4px;
+		background: var(--surface-2);
+		font: 650 0.8rem var(--mono);
+	}
+	.held.none {
+		color: var(--ink-faint);
+		background: transparent;
+		border-style: dashed;
+	}
+	.held.acquired {
+		color: var(--brand);
+		background: var(--brand-soft);
+		border-color: var(--brand);
+	}
+	.tip {
+		position: absolute;
+		bottom: calc(100% + 6px);
+		left: 50%;
+		z-index: 5;
+		width: max-content;
+		max-width: 14rem;
+		padding: 0.3rem 0.5rem;
+		border-radius: 5px;
+		background: var(--ink);
+		color: var(--surface);
+		font: 500 0.72rem/1.3 var(--body);
+		white-space: normal;
+		pointer-events: none;
+		opacity: 0;
+		transform: translate(-50%, 3px);
+		transition:
+			opacity 120ms,
+			transform 120ms;
+	}
+	.held:hover .tip,
+	.held:focus-visible .tip {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+	.legend {
+		padding-top: 0.4rem;
+		font-size: 0.75rem;
+	}
+	.acquired-key {
+		color: var(--brand);
+		font-weight: 650;
 	}
 
 	/* ---- one league ---- */
@@ -638,6 +834,13 @@
 		border-block: 1px solid var(--rule);
 		border-top: 3px solid var(--sport);
 	}
+	.fact {
+		display: grid;
+		gap: 0.1rem;
+	}
+	.fact strong {
+		font: 700 1.05rem/1.2 var(--display);
+	}
 	.matchup {
 		margin-left: auto;
 		color: var(--ink);
@@ -645,6 +848,14 @@
 	}
 	.matchup:hover {
 		text-decoration: none;
+	}
+	.signing {
+		border-top: 3px solid var(--gold);
+	}
+	.left {
+		margin-left: auto;
+		font: 650 0.85rem var(--mono);
+		color: var(--gold);
 	}
 	.fold > summary {
 		display: flex;
@@ -658,16 +869,13 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 1.2rem;
-		padding: 0.4rem 1rem 0.9rem;
 		max-width: 34rem;
+		padding: 0.4rem 1rem 0.9rem;
 	}
 	.listhead {
 		padding: 0.4rem 1rem;
 		background: var(--surface-2);
 		border-block: 1px solid var(--rule);
-	}
-	.pad {
-		padding: 0.65rem 1rem;
 	}
 	td:first-child {
 		padding-left: 1rem;
@@ -680,19 +888,21 @@
 	.who {
 		gap: 0.25rem 0.45rem;
 	}
+	.injury-swap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
+	.injury-swap select {
+		max-width: 15rem;
+		font-size: 0.8rem;
+	}
 	.columns {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
 		gap: 1rem;
 		align-items: start;
-	}
-	.bar {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.6rem 1rem;
-		font-size: 1rem;
-		border-bottom: 1px solid var(--rule);
 	}
 	.standings .rank {
 		width: 2.2rem;
@@ -703,18 +913,4 @@
 		background: var(--brand-soft);
 		font-weight: 650;
 	}
-	.signing {
-		border-top: 3px solid var(--gold);
-	}
-	.left {
-		margin-left: auto;
-		font: 650 0.85rem var(--mono);
-		color: var(--gold);
-	}
- .team-title{display:flex;align-items:center;gap:.6rem}.team-title h1{overflow-wrap:anywhere}.grow{min-width:0}
- .picks-intro{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;padding:.65rem 1rem}
- .pick-sports{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:.75rem;padding:0 1rem 1rem;align-items:start}
- .pick-sport{border:1px solid var(--rule);border-radius:8px;overflow:hidden}.sport-heading{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.6rem .75rem;background:var(--surface-2)}.sport-heading > .muted{margin-left:auto;font-weight:400}
- .pick-year{display:grid;grid-template-columns:3rem minmax(0,1fr);gap:.5rem;padding:.5rem .75rem;border-top:1px solid var(--rule)}.pick-year h4{font:650 .8rem var(--mono);padding-top:.25rem;color:var(--ink-faint)}
- .picks{list-style:none;margin:0;padding:0}.picks li{display:grid;grid-template-columns:4.5rem minmax(0,1fr);gap:.5rem;padding:.25rem 0;font-size:.8rem;align-items:baseline}.pick-detail{display:grid;gap:.1rem;overflow-wrap:anywhere}
 </style>

@@ -127,7 +127,7 @@ select exists (
 
 -- name: ListRosterGames :many
 -- A franchise's main roster in one league with each player's games in a
--- span of days and the fantasy points he scored in each. A player with no
+-- span of days, the fantasy points he scored in each and his stat line. A player with no
 -- game in the span appears once, with no game.
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(n.nickname, '')::text as nickname,
@@ -135,8 +135,8 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
-       coalesce((select sl.points from stat_lines sl
-                 where sl.game_id = g.id and sl.player_id = p.id), 0)::float8 as points
+       coalesce(sl.points, 0)::float8 as points,
+       coalesce(sl.stats, '{}')::jsonb as stats
 from roster_entries re
 join players p on p.id = re.player_id
 join leagues l on l.id = re.league_id
@@ -146,6 +146,7 @@ left join games g on g.competition = l.competition
                  and p.pro_team_id in (g.home_team_id, g.away_team_id)
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
+left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
 left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = @league_id and re.franchise_id = @franchise_id and re.list = 'main'
 order by p.full_name, p.id, g.starts_at;

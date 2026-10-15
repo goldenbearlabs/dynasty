@@ -483,6 +483,8 @@ export type LineupGame = {
 	points: number;
 	/** False for a game left out by a slot that counts only some games a week. */
 	counts: boolean;
+	/** His stat line by the competition's stat keys; empty until he plays. */
+	stats: Record<string, number>;
 };
 
 export type LineupPlayer = {

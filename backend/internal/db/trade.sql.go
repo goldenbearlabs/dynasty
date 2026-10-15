@@ -134,7 +134,8 @@ select k.id, k.round, k.position, k.original_franchise_id,
         where dl.draft_id = d.id) as competitions
 from draft_picks k
 join drafts d on d.id = k.draft_id
-where k.current_franchise_id = $1 and k.player_id is null and d.status <> 'complete'
+where k.current_franchise_id = $1 and k.player_id is null
+  and d.status <> 'complete' and d.kind <> 'startup'
 order by d.year, d.name, k.position
 `
 
@@ -150,7 +151,8 @@ type ListFranchisePicksRow struct {
 	Competitions        []string    `json:"competitions"`
 }
 
-// Unused picks a franchise holds, soonest draft first.
+// Unused picks a franchise holds in rookie drafts, soonest draft first.
+// Startup picks are left out: they are made once and cannot be traded.
 func (q *Queries) ListFranchisePicks(ctx context.Context, franchiseID pgtype.UUID) ([]ListFranchisePicksRow, error) {
 	rows, err := q.db.Query(ctx, listFranchisePicks, franchiseID)
 	if err != nil {
