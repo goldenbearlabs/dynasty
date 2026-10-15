@@ -2,6 +2,8 @@
 	import { tick } from 'svelte';
 	import type { DraftPick, Franchise } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import PresenceDot from '#lib/ui/PresenceDot.svelte';
+	import { layoutDraftBoard } from '#lib/draftBoard.ts';
 
 	let {
 		picks,
@@ -9,6 +11,7 @@
 		onClockId,
 		myId,
 		autoIds,
+		onlineIds = [],
 		showSport,
 		changingId,
 		onselect,
@@ -20,6 +23,8 @@
 		myId?: string;
 		/** Franchises with auto pick on. */
 		autoIds: string[];
+		/** Managers currently connected to this draft room. */
+		onlineIds?: string[];
 		showSport: boolean;
 		/** The made pick the commissioner is changing. */
 		changingId?: string;
@@ -28,13 +33,8 @@
 		onchange?: (pick: DraftPick) => void;
 	} = $props();
 	const name = (id: string) => franchises.find((f) => f.id === id)?.name ?? 'Unknown team';
-	const rounds = $derived(
-		Map.groupBy(
-			picks.toSorted((a, b) => a.position - b.position),
-			(p) => p.round
-		)
-	);
-	const columns = $derived(Math.max(1, ...Array.from(rounds.values(), (r) => r.length)));
+	const layout = $derived(layoutDraftBoard(picks));
+	const columns = $derived(Math.max(1, layout.columns.length));
 	const mine = $derived(
 		picks
 			.toSorted((a, b) => a.position - b.position)
@@ -66,6 +66,7 @@
 	<div class="legend">
 		<span class="key mine-key"></span>Your picks <span class="key clock-key"></span>On clock
 		<span class="key auto-key"></span>Auto pick on
+		<PresenceDot active />In draft room
 	</div>
 	<div class="row">
 		<button class="quiet small" disabled={!onClockId} onclick={() => jump(onClockId)}
@@ -77,11 +78,23 @@
 </div>
 <div class="board" bind:this={board} role="region" aria-label="Draft board by round">
 	<table style:--columns={columns}>
+		<thead>
+			<tr>
+				<th scope="col" class="corner">Rd</th>
+				{#each layout.columns as column (column.key)}
+					<th scope="col" class="team-heading" title={name(column.franchiseId)}>
+						<span class="team-name"><PresenceDot active={onlineIds.includes(column.franchiseId)} /><span>{name(column.franchiseId)}</span></span>
+						<span class="manager">{franchises.find((f) => f.id === column.franchiseId)?.manager_name ?? ''}</span>
+					</th>
+				{/each}
+			</tr>
+		</thead>
 		<tbody>
-			{#each rounds as [round, roundPicks] (round)}
+			{#each layout.rounds as { round, picks: roundPicks } (round)}
 				<tr
 					><th scope="row">R{round}</th>
-					{#each roundPicks as pick (pick.id)}
+					{#each roundPicks as pick, column (layout.columns[column].key)}
+						{#if pick}
 						<td
 							data-pick={pick.id}
 							class:clock={pick.id === onClockId}
@@ -133,6 +146,7 @@
 									>{/if}
 							</div>
 						</td>
+						{:else}<td class="empty-slot" aria-label="No pick in this round"></td>{/if}
 					{/each}
 				</tr>
 			{/each}
@@ -192,6 +206,40 @@
 		border-right: 1px solid var(--rule);
 		text-align: center;
 		letter-spacing: 0;
+	}
+	thead th {
+		top: 0;
+		left: auto;
+		z-index: 2;
+		width: auto;
+		border-bottom: 1px solid var(--rule-strong);
+	}
+	thead .corner {
+		left: 0;
+		width: 32px;
+		z-index: 3;
+	}
+	.team-heading {
+		padding: 0.4rem;
+	}
+	.team-name {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.3rem;
+		font-size: 0.65rem;
+	}
+	.team-name > span,
+	.manager {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.manager {
+		display: block;
+		font-size: 0.58rem;
+		font-weight: 400;
+		color: var(--ink-soft);
 	}
 	td {
 		padding: 0;

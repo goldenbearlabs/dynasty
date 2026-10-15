@@ -42,6 +42,13 @@ logs show up to ten imported final box scores using the current league's
 scoring rules. Commissioner controls and the pre-draft pick-order editor are
 under "Manage draft".
 
+The board keeps fixed team columns, so snake rounds alternate left-to-right
+and right-to-left. Traded picks stay in their original team's column and
+show their current owner. A green dot beside a team name means its manager
+has a connected draft-room tab; it does not indicate keyboard activity.
+Presence is transient and counts multiple tabs correctly, with disconnected
+connections removed within about 40 seconds. It never changes draft data.
+
 To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.

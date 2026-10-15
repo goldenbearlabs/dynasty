@@ -94,6 +94,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/drafts", s.listDrafts)
 	mux.HandleFunc("GET /api/drafts/{id}", s.getDraft)
 	mux.HandleFunc("GET /api/drafts/{id}/ws", s.watchDraft)
+	presence := newDraftPresence()
+	mux.HandleFunc("GET /api/drafts/{id}/presence/ws", s.member(func(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+		s.watchDraftPresence(w, r, me, presence)
+	}))
 
 	mux.HandleFunc("GET /api/session", s.getSession)
 	mux.HandleFunc("POST /api/auth/login", s.login)

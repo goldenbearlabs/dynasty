@@ -44,7 +44,7 @@
 	const id = $derived(page.params.id!);
 	let room = $state<DraftRoom>();
 	$effect(() => {
-		const opened = new DraftRoom(id);
+		const opened = new DraftRoom(id, !!data.me);
 		room = opened;
 		return () => opened.close();
 	});
@@ -477,6 +477,7 @@
 					<Board
 						{picks}
 						{franchises}
+						onlineIds={room?.onlineIds ?? []}
 						onClockId={room?.state?.on_clock_pick_id ?? null}
 						myId={me?.id}
 						{autoIds}

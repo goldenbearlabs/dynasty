@@ -8,9 +8,20 @@ import { LiveSocket } from '#lib/socket.svelte.ts';
 export class DraftRoom {
 	state = $state<DraftState>();
 	#socket: LiveSocket<DraftMessage>;
+	#presence?: LiveSocket<{ online_franchise_ids: string[] }>;
+	#onlineIds = $state<string[]>([]);
 
-	constructor(id: string) {
+	constructor(id: string, trackPresence = false) {
 		this.#socket = new LiveSocket(`/drafts/${id}/ws`, (message) => this.#apply(message));
+		if (trackPresence) {
+			this.#presence = new LiveSocket(`/drafts/${id}/presence/ws`, (message) => {
+				this.#onlineIds = message.online_franchise_ids;
+			});
+		}
+	}
+
+	get onlineIds() {
+		return this.#presence?.connected ? this.#onlineIds : [];
 	}
 
 	get connected() {
@@ -34,5 +45,6 @@ export class DraftRoom {
 
 	close() {
 		this.#socket.close();
+		this.#presence?.close();
 	}
 }
