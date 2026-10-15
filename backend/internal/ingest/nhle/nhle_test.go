@@ -249,6 +249,8 @@ func TestSeasonStats(t *testing.T) {
 	mux.HandleFunc("/skater/summary", report(`{"playerId":1,"teamAbbrevs":"EDM","gamesPlayed":82,"goals":48,"assists":90,"shots":306,"ppGoals":13,"penaltyMinutes":44,"plusMinus":17}`))
 	mux.HandleFunc("/skater/realtime", report(`{"playerId":1,"hits":71,"blockedShots":33}`))
 	mux.HandleFunc("/goalie/summary", report(`{"playerId":2,"teamAbbrevs":"TOR","gamesPlayed":26,"wins":10,"saves":632,"goalsAgainst":76}`))
+	mux.HandleFunc("/skater/bios", report(`{"playerId":1,"skaterFullName":"Connor McDavid","positionCode":"C","birthDate":"1997-01-13"}`))
+	mux.HandleFunc("/goalie/bios", report(`{"playerId":2,"goalieFullName":"Joseph Woll","birthDate":"1998-07-12"}`))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 

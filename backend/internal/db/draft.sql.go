@@ -25,6 +25,23 @@ func (q *Queries) AddDraftLeague(ctx context.Context, arg AddDraftLeagueParams) 
 	return err
 }
 
+const addDraftReaction = `-- name: AddDraftReaction :exec
+insert into draft_pick_reactions (pick_id, franchise_id, emoji)
+values ($1, $2, $3)
+on conflict do nothing
+`
+
+type AddDraftReactionParams struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) AddDraftReaction(ctx context.Context, arg AddDraftReactionParams) error {
+	_, err := q.db.Exec(ctx, addDraftReaction, arg.PickID, arg.FranchiseID, arg.Emoji)
+	return err
+}
+
 const clearDraftAutopick = `-- name: ClearDraftAutopick :exec
 delete from draft_autopick where draft_id = $1 and franchise_id = $2
 `
@@ -60,6 +77,16 @@ type ClearDraftQueueParams struct {
 
 func (q *Queries) ClearDraftQueue(ctx context.Context, arg ClearDraftQueueParams) error {
 	_, err := q.db.Exec(ctx, clearDraftQueue, arg.DraftID, arg.FranchiseID)
+	return err
+}
+
+const clearDraftReactions = `-- name: ClearDraftReactions :exec
+delete from draft_pick_reactions where pick_id = $1
+`
+
+// A pick that is undone or changed starts over without reactions.
+func (q *Queries) ClearDraftReactions(ctx context.Context, pickID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearDraftReactions, pickID)
 	return err
 }
 
@@ -486,6 +513,40 @@ func (q *Queries) ListDraftQueue(ctx context.Context, arg ListDraftQueueParams) 
 	return items, nil
 }
 
+const listDraftReactions = `-- name: ListDraftReactions :many
+select r.pick_id, r.franchise_id, r.emoji
+from draft_pick_reactions r
+join draft_picks k on k.id = r.pick_id
+where k.draft_id = $1
+order by r.created_at, r.franchise_id
+`
+
+type ListDraftReactionsRow struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) ListDraftReactions(ctx context.Context, draftID pgtype.UUID) ([]ListDraftReactionsRow, error) {
+	rows, err := q.db.Query(ctx, listDraftReactions, draftID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDraftReactionsRow{}
+	for rows.Next() {
+		var i ListDraftReactionsRow
+		if err := rows.Scan(&i.PickID, &i.FranchiseID, &i.Emoji); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDrafts = `-- name: ListDrafts :many
 select d.id, d.dynasty_id, d.name, d.kind, d.year, d.status, d.pick_clock_seconds, d.clock_expires_at, d.created_at, d.completed_at, d.is_placeholder,
        (select coalesce(array_agg(l.competition), '{}')::text[]
@@ -642,6 +703,25 @@ update draft_picks set passed_at = now() where id = $1
 func (q *Queries) PassDraftPick(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, passDraftPick, id)
 	return err
+}
+
+const removeDraftReaction = `-- name: RemoveDraftReaction :execrows
+delete from draft_pick_reactions
+where pick_id = $1 and franchise_id = $2 and emoji = $3
+`
+
+type RemoveDraftReactionParams struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) RemoveDraftReaction(ctx context.Context, arg RemoveDraftReactionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeDraftReaction, arg.PickID, arg.FranchiseID, arg.Emoji)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeFromDraftQueues = `-- name: RemoveFromDraftQueues :exec

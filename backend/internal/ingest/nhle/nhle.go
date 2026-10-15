@@ -539,6 +539,18 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 			"saves": g.Saves, "goals_against": g.GoalsAgainst, "goalie_wins": g.Wins, "shutouts": g.Shutouts,
 		}))
 	}
+	if len(lines) > 0 {
+		players, err := s.seasonPlayers(ctx, year)
+		if err != nil {
+			return nil, err
+		}
+		for i := range lines {
+			if p, ok := players[lines[i].ProviderID]; ok {
+				p.Note = fmt.Sprintf("NHL history: %s (%s)", lines[i].Label, lines[i].Team)
+				lines[i].Player = &p
+			}
+		}
+	}
 	return lines, nil
 }
 

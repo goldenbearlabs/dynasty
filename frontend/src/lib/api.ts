@@ -607,7 +607,11 @@ export type DraftState = {
 	on_clock_pick_id: string | null;
 	/** Franchises with auto pick on: their picks are made for them a few seconds after they come up. */
 	auto_pick_franchise_ids: string[];
+	/** Managers' emoji on made picks, oldest first. */
+	reactions: PickReaction[];
 };
+
+export type PickReaction = { pick_id: string; franchise_id: string; emoji: string };
 
 /** What the draft room's live connection sends. */
 export type DraftMessage = DraftState & { type: 'state' | 'update' };
@@ -824,6 +828,9 @@ export const getDraft = (id: string) => request<DraftState>('GET', `/drafts/${id
 export const makePick = (id: string, pick: { player_id: string; pick_id?: string }) =>
 	request<void>('POST', `/drafts/${id}/pick`, pick);
 export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
+/** Adds the signed-in franchise's emoji to a made pick, or takes it back if it is there. */
+export const reactToPick = (id: string, pickId: string, emoji: string) =>
+	request<void>('POST', `/drafts/${id}/picks/${pickId}/react`, { emoji });
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
 /** franchise_id lets a commissioner set it for another franchise; without it, it is the signed-in one. */

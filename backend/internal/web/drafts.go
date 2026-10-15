@@ -87,6 +87,36 @@ func (s *Server) passPick(w http.ResponseWriter, r *http.Request, me db.Franchis
 	s.done(w, r, s.Drafts.Pass(r.Context(), id, me))
 }
 
+// reactToPick toggles one of the signed-in franchise's emoji on a made pick.
+func (s *Server) reactToPick(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	var body struct {
+		Emoji string `json:"emoji"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	pickID, err := pathID(r, "pick")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d, err := s.Queries.GetDraft(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if d.DynastyID != me.DynastyID {
+		writeError(w, http.StatusForbidden, "This draft belongs to another dynasty.")
+		return
+	}
+	s.done(w, r, s.Drafts.React(r.Context(), id, pickID, me.ID, body.Emoji))
+}
+
 func (s *Server) getQueue(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	id, err := pathID(r, "id")
 	if err != nil {

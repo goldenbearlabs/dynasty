@@ -24,6 +24,18 @@ insert into player_external_ids (provider, provider_id, player_id)
 select @provider, @provider_id, id from new_player
 returning player_id;
 
+-- name: InsertHistoricalPlayer :one
+-- An established player absent from current rosters remains draftable.
+-- Do not infer current team membership or prospect status from past games.
+with new_player as (
+  insert into players (competition, status, full_name, positions, birth_date, note, headshot_url)
+  values (@competition, 'inactive', @full_name, @positions, @birth_date, @note, @headshot_url)
+  returning id
+)
+insert into player_external_ids (provider, provider_id, player_id)
+select @provider, @provider_id, id from new_player
+returning player_id;
+
 -- name: UpdatePlayer :one
 -- Returns the competition the player was in before, so a move (a college
 -- player reaching the NBA) can be acted on.

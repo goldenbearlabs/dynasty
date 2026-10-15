@@ -58,6 +58,13 @@ type DraftPick struct {
 	PassedAt            pgtype.Timestamptz `json:"passed_at"`
 }
 
+type DraftPickReaction struct {
+	PickID      pgtype.UUID        `json:"pick_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Emoji       string             `json:"emoji"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type DraftQueue struct {
 	DraftID     pgtype.UUID `json:"draft_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`

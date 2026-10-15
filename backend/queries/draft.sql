@@ -168,3 +168,23 @@ limit @page_size;
 
 -- name: ScheduleDraft :exec
 update drafts set is_placeholder = false where id = @id;
+
+-- name: ListDraftReactions :many
+select r.pick_id, r.franchise_id, r.emoji
+from draft_pick_reactions r
+join draft_picks k on k.id = r.pick_id
+where k.draft_id = @draft_id
+order by r.created_at, r.franchise_id;
+
+-- name: AddDraftReaction :exec
+insert into draft_pick_reactions (pick_id, franchise_id, emoji)
+values (@pick_id, @franchise_id, @emoji)
+on conflict do nothing;
+
+-- name: RemoveDraftReaction :execrows
+delete from draft_pick_reactions
+where pick_id = @pick_id and franchise_id = @franchise_id and emoji = @emoji;
+
+-- name: ClearDraftReactions :exec
+-- A pick that is undone or changed starts over without reactions.
+delete from draft_pick_reactions where pick_id = @pick_id;

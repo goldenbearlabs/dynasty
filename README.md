@@ -221,6 +221,15 @@ records and historical picks are retained. When an eligible prospect feed or
 professional roster later admits them, they enter the pool as new arrivals
 for the normal rookie-draft and free-agency rules.
 
+NHL season-history syncs also discover players from this season and the two
+preceding seasons, using official season totals and biography reports.
+Injured and unsigned veterans missing from current rosters are added as
+inactive, draftable players without inventing a current team. Existing
+rostered players and their ids are left alone. When players are recovered,
+that run revisits the configured older history to fill their missing stats.
+After deploying this patch, run the NHL season-history job in Data feeds
+to recover missing players immediately; the nightly history sync also does it.
+
 Replacement demand treats basketball position aliases and baseball outfield
 positions as shared pools. Above-replacement season totals are raw fantasy
 points under that league’s rules and are not comparable across sports.

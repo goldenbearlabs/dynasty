@@ -13,6 +13,7 @@
 		makePick,
 		overridePick,
 		passPick,
+		reactToPick,
 		setDraftClock,
 		setAutoPick,
 		setQueue,
@@ -481,6 +482,8 @@
 						onClockId={room?.state?.on_clock_pick_id ?? null}
 						myId={me?.id}
 						{autoIds}
+						reactions={room?.state?.reactions ?? []}
+						onreact={me ? (pickId, emoji) => reactToPick(id, pickId, emoji).catch(toast.error) : undefined}
 						showSport={sports.length > 1}
 						changingId={changing?.id}
 						onselect={research}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import type { DraftPick, Franchise } from '#lib/api.ts';
+	import type { DraftPick, Franchise, PickReaction } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import PresenceDot from '#lib/ui/PresenceDot.svelte';
 	import { layoutDraftBoard } from '#lib/draftBoard.ts';
@@ -12,6 +12,8 @@
 		myId,
 		autoIds,
 		onlineIds = [],
+		reactions = [],
+		onreact,
 		showSport,
 		changingId,
 		onselect,
@@ -25,6 +27,10 @@
 		autoIds: string[];
 		/** Managers currently connected to this draft room. */
 		onlineIds?: string[];
+		/** Managers' emoji on made picks. */
+		reactions?: PickReaction[];
+		/** Given to a signed-in manager: adds or takes back their emoji on a pick. */
+		onreact?: (pickId: string, emoji: string) => void;
 		showSport: boolean;
 		/** The made pick the commissioner is changing. */
 		changingId?: string;
@@ -41,6 +47,33 @@
 			.filter((p) => p.current_franchise_id === myId && !p.player_id)
 	);
 	const next = $derived(mine.find((p) => !p.skipped_at && !p.passed_at) ?? mine[0]);
+	// The emoji a manager can react with.
+	const emojis = ['🔥', '💎', '🐐', '👏', '😂', '😭', '😬', '🤔', '💀', '🥀', '🤡', '🗑️'];
+	// Each pick's reactions, one chip per emoji in the order they first came.
+	const reacted = $derived.by(() => {
+		const byPick = new Map<string, { emoji: string; ids: string[] }[]>();
+		for (const r of reactions) {
+			const chips = byPick.get(r.pick_id) ?? [];
+			const chip = chips.find((c) => c.emoji === r.emoji);
+			if (chip) chip.ids.push(r.franchise_id);
+			else chips.push({ emoji: r.emoji, ids: [r.franchise_id] });
+			byPick.set(r.pick_id, chips);
+		}
+		return byPick;
+	});
+	let choosingFor = $state<string>(); // the pick whose emoji palette is open
+	function react(pickId: string, emoji: string) {
+		choosingFor = undefined;
+		onreact?.(pickId, emoji);
+	}
+	// A chip pops when it appears and each time its count changes, for everyone in the room.
+	const pop = (count: number) => (chip: HTMLElement) => {
+		if (count && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+			chip.animate(
+				[{ transform: 'scale(1)' }, { transform: 'scale(1.3) rotate(-6deg)' }, { transform: 'scale(1)' }],
+				{ duration: 320, easing: 'cubic-bezier(.3, 1.6, .5, 1)' }
+			);
+	};
 	let board: HTMLDivElement;
 	let focused = false;
 	$effect(() => {
@@ -61,6 +94,8 @@
 		});
 	}
 </script>
+
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (choosingFor = undefined)} />
 
 <div class="board-tools">
 	<div class="legend">
@@ -128,6 +163,34 @@
 											title={`Change pick #${pick.position}`}
 											onclick={() => onchange(pick)}>Change</button
 										>{/if}
+									{@const chips = reacted.get(pick.id) ?? []}
+									{#if chips.length || onreact}<div class="reactions">
+											{#each chips as chip (chip.emoji)}<button
+													class="chip"
+													class:own={!!myId && chip.ids.includes(myId)}
+													disabled={!onreact}
+													aria-pressed={!!myId && chip.ids.includes(myId)}
+													title={chip.ids.map(name).join(', ')}
+													onclick={() => react(pick.id, chip.emoji)}
+													{@attach pop(chip.ids.length)}>{chip.emoji}<span>{chip.ids.length}</span></button
+												>{/each}{#if onreact}<button
+													class="add"
+													class:open={choosingFor === pick.id}
+													aria-expanded={choosingFor === pick.id}
+													title="React to this pick"
+													onclick={() => (choosingFor = choosingFor === pick.id ? undefined : pick.id)}
+													>+</button
+												>{/if}
+										</div>{#if choosingFor === pick.id}<div
+												class="palette"
+												role="group"
+												aria-label="React with"
+											>
+												{#each emojis as emoji (emoji)}<button
+														onclick={() => react(pick.id, emoji)}
+														title={`React with ${emoji}`}>{emoji}</button
+													>{/each}
+											</div>{/if}{/if}
 								{:else}<span class="pending"
 										>{pick.id === onClockId
 											? 'On the clock'
@@ -345,6 +408,81 @@
 	}
 	@media (hover: none) {
 		.change {
+			visibility: visible;
+		}
+	}
+	.reactions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.2rem;
+	}
+	.reactions button,
+	.palette button {
+		padding: 0 0.25rem;
+		border: 1px solid var(--rule);
+		border-radius: 999px;
+		background: var(--surface);
+		font-size: 0.68rem;
+		line-height: 1.5;
+	}
+	.chip span {
+		margin-left: 0.15rem;
+		font: 600 0.55rem var(--mono);
+		color: var(--ink-soft);
+	}
+	.chip.own {
+		border-color: var(--brand);
+		background: var(--brand-soft);
+	}
+	.chip.own span {
+		color: var(--brand);
+	}
+	.chip:disabled {
+		opacity: 1;
+		cursor: default;
+	}
+	.add {
+		color: var(--ink-soft);
+		visibility: hidden;
+	}
+	td:hover .add,
+	.add.open,
+	.add:focus-visible {
+		visibility: visible;
+	}
+	.add:hover,
+	.add.open {
+		color: var(--brand);
+		border-color: var(--brand);
+	}
+	.palette {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.15rem;
+		padding: 0.2rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: 6px;
+		background: var(--surface-2);
+		animation: open 140ms ease-out;
+	}
+	.palette button {
+		padding: 0.1rem 0;
+		border-color: transparent;
+		background: transparent;
+		font-size: 0.85rem;
+		transition: transform 120ms;
+	}
+	.palette button:hover {
+		transform: scale(1.25);
+	}
+	@keyframes open {
+		from {
+			opacity: 0;
+			transform: translateY(-3px) scale(0.96);
+		}
+	}
+	@media (hover: none) {
+		.add {
 			visibility: visible;
 		}
 	}

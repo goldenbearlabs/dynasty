@@ -77,6 +77,13 @@ type SeasonSource interface {
 	SeasonStats(ctx context.Context, year int) ([]SeasonLine, error)
 }
 
+// SeasonDiscoverySource supplies identities alongside recent statistics,
+// allowing established players missing from current rosters into the pool.
+// These seasons are refreshed even when their totals are already stored.
+type SeasonDiscoverySource interface {
+	DiscoverySeasons() int
+}
+
 // CareerSource is a feed of a player's seasons outside the league itself:
 // the junior, college and international hockey behind an NHL prospect. It
 // is asked about one player at a time.
@@ -102,6 +109,9 @@ type Season struct {
 type SeasonLine struct {
 	Provider   string
 	ProviderID string
+	// Player, when present, can identify someone the roster feed omitted.
+	// It is used only to create missing players, never to overwrite a roster.
+	Player *Player
 	Season
 }
 

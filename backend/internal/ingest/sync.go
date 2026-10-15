@@ -269,6 +269,11 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 			return 0, err
 		}
 		latest := src.LatestSeason(time.Now())
+		refreshSeasons := 2
+		if discovery, ok := src.(SeasonDiscoverySource); ok {
+			refreshSeasons = max(refreshSeasons, discovery.DiscoverySeasons())
+			backfill = max(backfill, refreshSeasons)
+		}
 		years := []int{}
 		for year := latest; year > latest-backfill; year-- {
 			years = append(years, year)
@@ -279,12 +284,16 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 			}
 		}
 		lines := 0
+		refreshHistory := false
 		for _, year := range years {
-			if year < latest-1 && slices.Contains(stored, int32(year)) && !slices.Contains(missing, int32(year)) {
+			if year < latest-refreshSeasons+1 && !refreshHistory && slices.Contains(stored, int32(year)) && !slices.Contains(missing, int32(year)) {
 				continue // history that is already here does not change
 			}
-			n, err := s.syncSeason(ctx, competition, src, year, startedAt)
+			n, discovered, err := s.syncSeason(ctx, competition, src, year, startedAt)
 			lines += n
+			// A recovered player's older seasons may have been skipped before
+			// he was known. Revisit stored history once, on this run only.
+			refreshHistory = refreshHistory || discovered > 0
 			if err != nil {
 				return lines, fmt.Errorf("season %d: %w", year, err)
 			}
@@ -293,19 +302,20 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 	})
 }
 
-func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonSource, year int, startedAt pgtype.Timestamptz) (int, error) {
+func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonSource, year int, startedAt pgtype.Timestamptz) (int, int, error) {
 	lines, err := src.SeasonStats(ctx, year)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if len(lines) == 0 {
-		return 0, nil // a season not played yet: leave whatever is stored alone
+		return 0, 0, nil // a season not played yet: leave whatever is stored alone
 	}
 	refs := make([]ExternalID, len(lines))
 	for i, line := range lines {
 		refs[i] = ExternalID{Provider: line.Provider, ProviderID: line.ProviderID}
 	}
 	stored := 0
+	discovered := 0
 	err = s.q.Tx(ctx, func(q *db.Queries) error {
 		players, err := playerIDs(ctx, q, refs)
 		if err != nil {
@@ -313,6 +323,22 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 		}
 		for i, line := range lines {
 			playerID, known := players[refs[i]]
+			if !known && line.Player != nil {
+				p := line.Player
+				if p.Provider != line.Provider || p.ProviderID != line.ProviderID || p.FullName == "" {
+					return fmt.Errorf("season %d: invalid identity for %s/%s", year, line.Provider, line.ProviderID)
+				}
+				birth, positions := columns(*p)
+				playerID, err = q.InsertHistoricalPlayer(ctx, db.InsertHistoricalPlayerParams{
+					Provider: p.Provider, ProviderID: p.ProviderID, Competition: competition,
+					FullName: p.FullName, Positions: positions, BirthDate: birth, Note: p.Note, HeadshotUrl: p.HeadshotURL,
+				})
+				if err != nil {
+					return err
+				}
+				players[refs[i]], known = playerID, true
+				discovered++
+			}
 			if !known {
 				continue // someone who is not in our player pool
 			}
@@ -326,9 +352,9 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 		})
 	})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return stored, nil
+	return stored, discovered, nil
 }
 
 // StoreSeason writes one season line for a player.

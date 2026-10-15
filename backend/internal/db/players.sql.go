@@ -386,6 +386,46 @@ func (q *Queries) GetPlayerProfile(ctx context.Context, id pgtype.UUID) (GetPlay
 	return i, err
 }
 
+const insertHistoricalPlayer = `-- name: InsertHistoricalPlayer :one
+with new_player as (
+  insert into players (competition, status, full_name, positions, birth_date, note, headshot_url)
+  values ($3, 'inactive', $4, $5, $6, $7, $8)
+  returning id
+)
+insert into player_external_ids (provider, provider_id, player_id)
+select $1, $2, id from new_player
+returning player_id
+`
+
+type InsertHistoricalPlayerParams struct {
+	Provider    string      `json:"provider"`
+	ProviderID  string      `json:"provider_id"`
+	Competition string      `json:"competition"`
+	FullName    string      `json:"full_name"`
+	Positions   []string    `json:"positions"`
+	BirthDate   pgtype.Date `json:"birth_date"`
+	Note        string      `json:"note"`
+	HeadshotUrl string      `json:"headshot_url"`
+}
+
+// An established player absent from current rosters remains draftable.
+// Do not infer current team membership or prospect status from past games.
+func (q *Queries) InsertHistoricalPlayer(ctx context.Context, arg InsertHistoricalPlayerParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, insertHistoricalPlayer,
+		arg.Provider,
+		arg.ProviderID,
+		arg.Competition,
+		arg.FullName,
+		arg.Positions,
+		arg.BirthDate,
+		arg.Note,
+		arg.HeadshotUrl,
+	)
+	var player_id pgtype.UUID
+	err := row.Scan(&player_id)
+	return player_id, err
+}
+
 const insertManualPlayer = `-- name: InsertManualPlayer :one
 insert into players (competition, status, full_name, positions, birth_date, note)
 values ($1, $2, $3, $4, $5, $6)

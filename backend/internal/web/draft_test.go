@@ -36,8 +36,13 @@ type roomMessage struct {
 		AutoPicked         bool    `json:"auto_picked"`
 		SkippedAt          *string `json:"skipped_at"`
 	}
-	OnClock  *string  `json:"on_clock_pick_id"`
-	AutoPick []string `json:"auto_pick_franchise_ids"`
+	OnClock   *string  `json:"on_clock_pick_id"`
+	AutoPick  []string `json:"auto_pick_franchise_ids"`
+	Reactions []struct {
+		PickID      string `json:"pick_id"`
+		FranchiseID string `json:"franchise_id"`
+		Emoji       string
+	}
 }
 
 // next waits for the next message from the room.
@@ -226,6 +231,21 @@ func TestDraftFlow(t *testing.T) {
 		t.Fatalf("after pick 1 = %+v", m)
 	}
 
+	// Managers react to a made pick; a second tap takes the reaction back.
+	reactURL := func(pick int) string { return draftURL + "/picks/" + state.Picks[pick].ID + "/react" }
+	fire := map[string]string{"emoji": "🔥"}
+	cy.want(http.StatusUnprocessableEntity, "POST", reactURL(1), fire, nil) // not made yet
+	cy.want(http.StatusUnprocessableEntity, "POST", reactURL(0), map[string]string{"emoji": ""}, nil)
+	cy.want(http.StatusNoContent, "POST", reactURL(0), fire, nil)
+	if m := live.next(); m.Type != "update" || len(m.Picks) != 0 || len(m.Reactions) != 1 ||
+		m.Reactions[0].PickID != state.Picks[0].ID || m.Reactions[0].FranchiseID != franchise["Cy"] || m.Reactions[0].Emoji != "🔥" {
+		t.Fatalf("after a reaction = %+v", m)
+	}
+	cy.want(http.StatusNoContent, "POST", reactURL(0), fire, nil)
+	if m := live.next(); len(m.Reactions) != 0 {
+		t.Fatalf("after taking a reaction back = %+v", m.Reactions)
+	}
+
 	// Pick 2 is Bob's own. A drafted player cannot be drafted again.
 	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard One"), nil)
 	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater One"), nil) // another sport, same draft
@@ -269,11 +289,13 @@ func TestDraftFlow(t *testing.T) {
 		t.Fatalf("make-up pick = %+v", m)
 	}
 	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard Four"), nil) // nothing left to make up
+	bob.want(http.StatusNoContent, "POST", reactURL(3), map[string]string{"emoji": "😬"}, nil)
+	live.next()
 
 	bob.want(http.StatusForbidden, "POST", adminURL+"/undo", nil, nil)
 	ann.want(http.StatusNoContent, "POST", adminURL+"/undo", nil, nil)
-	if m := live.next(); m.Type != "state" || m.Picks[3].PlayerName != "" {
-		t.Fatalf("after undo = %+v, want pick 4 open again", m.Picks[3])
+	if m := live.next(); m.Type != "state" || m.Picks[3].PlayerName != "" || len(m.Reactions) != 0 {
+		t.Fatalf("after undo = %+v, want pick 4 open again without its reactions", m)
 	}
 	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Skater+Three&draft_id="+created.ID, nil, &page)
 	if page.Total != 1 {
