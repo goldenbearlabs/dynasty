@@ -374,6 +374,18 @@ func (q *Queries) InsertPeriodScore(ctx context.Context, arg InsertPeriodScorePa
 	return err
 }
 
+const lastScheduledDay = `-- name: LastScheduledDay :one
+select max(day)::date from games where competition = $1
+`
+
+// The latest day a competition has a game stored for, or null with none.
+func (q *Queries) LastScheduledDay(ctx context.Context, competition string) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, lastScheduledDay, competition)
+	var column_1 pgtype.Date
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const latestSeason = `-- name: LatestSeason :one
 select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 order by year desc limit 1
 `

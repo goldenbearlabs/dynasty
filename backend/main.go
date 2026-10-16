@@ -23,6 +23,7 @@ import (
 	"crossover/internal/cache"
 	"crossover/internal/competition"
 	"crossover/internal/db"
+	"crossover/internal/devseed"
 	"crossover/internal/draft"
 	"crossover/internal/dynasty"
 	"crossover/internal/hub"
@@ -32,6 +33,7 @@ import (
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
+	"crossover/internal/sportsday"
 	"crossover/internal/trade"
 	"crossover/internal/waiver"
 	"crossover/internal/web"
@@ -85,6 +87,16 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	client := ingest.NewClient(envDuration("FETCH_GAP", time.Second))
+	// FETCH_GAPS gives a host its own gap: "host=250ms,host=2s". ESPN's site
+	// API took bursts of 16 a second and a steady 5 without refusing, so it
+	// gets 4 a second; feeds not yet measured keep FETCH_GAP.
+	client.Gaps = map[string]time.Duration{}
+	for _, pair := range strings.Split(env("FETCH_GAPS", "site.api.espn.com=250ms"), ",") {
+		host, gap, _ := strings.Cut(strings.TrimSpace(pair), "=")
+		if d, err := time.ParseDuration(gap); err == nil && host != "" {
+			client.Gaps[host] = d
+		}
+	}
 	// FETCH_VIA routes feeds through relays: "host=https://relay,host=https://relay".
 	client.Via = map[string]string{}
 	for _, pair := range strings.Split(os.Getenv("FETCH_VIA"), ",") {
@@ -98,6 +110,10 @@ func run(log *slog.Logger) error {
 		}
 	}
 	registry := competition.NewRegistry(client)
+	// `crossover seed` fills a local database with a dynasty to work against, then exits.
+	if len(os.Args) > 1 && os.Args[1] == "seed" {
+		return devseed.Run(ctx, pool, registry, log)
+	}
 	syncer := ingest.NewSyncer(queries, log)
 	rosters := roster.NewService(pool)
 	// A player who turns up in a new competition takes his fantasy rights
@@ -173,6 +189,33 @@ func run(log *slog.Logger) error {
 	schedule.AddFunc(env("SCORES_SYNC_CRON", "*/15 * * * *"), func() { syncGames(scoring.Window()) })
 	// Without this a fresh server would show no games until the first run above.
 	go syncGames(scoring.Window())
+	// The schedule further ahead, so managers can see who plays when and set
+	// lineups for days to come: nightly, and at start-up for any sport whose
+	// stored schedule runs out within two weeks.
+	scheduleDays := envInt("SCHEDULE_DAYS", 60)
+	syncSchedule := func(onlyIfShort bool) {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			log.Error("list league competitions", "err", err)
+			return
+		}
+		// The games sync covers the days up to the end of its window; this
+		// picks up from there.
+		_, near := scoring.Window()
+		from, to := near.AddDate(0, 0, 1), sportsday.Today().AddDate(0, 0, scheduleDays)
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			if last, err := queries.LastScheduledDay(ctx, key); onlyIfShort && err == nil && last.Valid && last.Time.After(sportsday.Today().AddDate(0, 0, 14)) {
+				continue
+			}
+			syncer.SyncSchedule(ctx, c.Key, c.Games, from, to)
+		}
+	}
+	schedule.AddFunc(env("SCHEDULE_SYNC_CRON", "30 4 * * *"), func() { syncSchedule(false) })
+	go syncSchedule(true)
 	// Stat history: every player's season totals, refreshed with the nightly
 	// sync. The first run for a sport fetches years of it; later runs only
 	// keep the last two seasons current.
@@ -218,6 +261,7 @@ func run(log *slog.Logger) error {
 		Background:     ctx,
 		AdminToken:     os.Getenv("ADMIN_TOKEN"),
 		SeasonBackfill: backfill,
+		ScheduleDays:   scheduleDays,
 	}
 	httpServer := &http.Server{
 		Addr:              env("ADDR", ":8090"),

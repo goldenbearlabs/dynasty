@@ -237,7 +237,7 @@ func settle(p *Player, rules settings.Lineup, now time.Time) {
 	switch {
 	case limit > 0:
 		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && started(g) })
-	case p.Slot == "" && slices.ContainsFunc(rules.Slots, func(s settings.Slot) bool { return s.GamesPerWeek > 0 && fits(p.Positions, s) }):
+	case p.Slot == "" && slices.ContainsFunc(rules.Slots, func(s settings.Slot) bool { return s.GamesPerWeek > 0 && Fits(p.Positions, s) }):
 		p.Locked = len(p.Games) > 0 && !slices.ContainsFunc(p.Games, func(g Game) bool { return !started(g) })
 	default:
 		p.Locked = slices.ContainsFunc(p.Games, started)
@@ -317,7 +317,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 				return problem.New("%s is in the lineup twice.", player.FullName)
 			case !player.StarterEligible:
 				return problem.New("%s is outside this league’s starting conferences.", player.FullName)
-			case !fits(player.Positions, slot):
+			case !Fits(player.Positions, slot):
 				return problem.New("%s cannot play %s.", player.FullName, slot.Name)
 			case filled[slot.Name] == slot.Count:
 				return problem.New("The %s slot only holds %d.", slot.Name, slot.Count)
@@ -368,8 +368,8 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 	})
 }
 
-// fits reports whether a player with these positions may fill the slot.
-func fits(positions []string, slot settings.Slot) bool {
+// Fits reports whether a player with these positions may fill the slot.
+func Fits(positions []string, slot settings.Slot) bool {
 	if slices.Contains(slot.Positions, settings.AnyPosition) {
 		return true
 	}

@@ -72,14 +72,8 @@ func (s *Syncer) SyncProspects(ctx context.Context, competition string, src Pros
 // corrections. It reports the number of stat lines stored.
 func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSource, from, to time.Time) error {
 	return s.run(ctx, competition, "games", func(pgtype.Timestamptz) (int, error) {
-		for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
-			games, err := src.Games(ctx, day)
-			if err != nil {
-				return 0, fmt.Errorf("games on %s: %w", day.Format(time.DateOnly), err)
-			}
-			if err := s.upsertGames(ctx, competition, games); err != nil {
-				return 0, err
-			}
+		if _, err := s.loadSchedule(ctx, competition, src, from, to); err != nil {
+			return 0, err
 		}
 
 		pending, err := s.q.ListGamesNeedingStats(ctx, competition)
@@ -100,6 +94,32 @@ func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSour
 		}
 		return lines, nil
 	})
+}
+
+// SyncSchedule loads one competition's games for a span of sports days,
+// without box scores: the schedule further ahead than SyncGames looks, so
+// managers can see who plays when and set lineups for days to come. It
+// reports the number of games stored.
+func (s *Syncer) SyncSchedule(ctx context.Context, competition string, src GameSource, from, to time.Time) error {
+	return s.run(ctx, competition, "schedule", func(pgtype.Timestamptz) (int, error) {
+		return s.loadSchedule(ctx, competition, src, from, to)
+	})
+}
+
+// loadSchedule stores the games on each day from one to the other.
+func (s *Syncer) loadSchedule(ctx context.Context, competition string, src GameSource, from, to time.Time) (int, error) {
+	stored := 0
+	for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
+		games, err := src.Games(ctx, day)
+		if err != nil {
+			return stored, fmt.Errorf("games on %s: %w", day.Format(time.DateOnly), err)
+		}
+		if err := s.upsertGames(ctx, competition, games); err != nil {
+			return stored, err
+		}
+		stored += len(games)
+	}
+	return stored, nil
 }
 
 // upsertGames stores one day's games in a single transaction, so however

@@ -343,3 +343,18 @@ update players set injury_designation = '', injury_checked_at = now() where comp
 
 -- name: SetInjuryDesignation :exec
 update players set injury_designation = @injury_designation where id = @id;
+
+-- name: ListRankedPlayers :many
+-- One sport's players by fantasy points in its latest season, best first,
+-- with what decides where each can start: the dev seed hands them out.
+select p.id, p.positions, coalesce(t.conference, '')::text as conference
+from players p
+join (select ps.player_id, sum(ps.points) as points
+      from player_seasons ps
+      where ps.competition = @competition and ps.league = '' and ps.points is not null
+        and ps.year = (select max(s.year) from stat_seasons s where s.competition = @competition)
+      group by ps.player_id) scored on scored.player_id = p.id
+left join pro_teams t on t.id = p.pro_team_id
+where p.pool_eligible and p.competition = @competition
+order by scored.points desc, p.id
+limit @page_size;

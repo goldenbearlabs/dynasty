@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,5 +93,28 @@ func TestClientSendsAHostThroughItsRelay(t *testing.T) {
 	}
 	if asked != "/api/v1/teams?sportId=1" {
 		t.Errorf("relay was asked for %q, want the feed's path and query", asked)
+	}
+}
+
+// A host given its own gap is paced by it, not by the client's default.
+func TestHostGap(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{}`)) })
+	fast, slow := httptest.NewServer(ok), httptest.NewServer(ok)
+	defer fast.Close()
+	defer slow.Close()
+	c := ingest.NewClient(time.Hour)
+	c.Gaps = map[string]time.Duration{strings.TrimPrefix(fast.URL, "http://"): time.Millisecond}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var v struct{}
+	for range 3 {
+		if err := c.GetTransient(ctx, fast.URL, &v); err != nil {
+			t.Fatalf("fast host waited out the default gap: %v", err)
+		}
+	}
+	c.GetTransient(ctx, slow.URL, &v)
+	if err := c.GetTransient(ctx, slow.URL, &v); err == nil {
+		t.Fatal("a host without its own gap was not held to the default")
 	}
 }

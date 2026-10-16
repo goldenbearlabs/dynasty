@@ -1,4 +1,4 @@
-.PHONY: db api web gen build test sync runs
+.PHONY: db api web gen build test sync runs seed
 
 API := http://localhost:8090
 ADMIN_TOKEN ?= dev
@@ -27,6 +27,9 @@ test: ## run all tests, using a separate crossover_test database
 	docker compose exec -T db psql -U crossover -tc "select 1 from pg_database where datname = 'crossover_test'" | grep -q 1 \
 		|| docker compose exec -T db createdb -U crossover crossover_test
 	cd backend && TEST_DATABASE_URL=$(TEST_DB) go test ./...
+
+seed: ## replace the local dynasty with a seeded one: default rules, real players, lineups, seasons
+	cd backend && go run . seed
 
 sync: ## make sync c=nba            (rosters)   or   make sync c=nhl j=prospects
 	curl -fsS -X POST -H "Authorization: Bearer $(ADMIN_TOKEN)" $(API)/api/admin/sync/$(c)/$(j)

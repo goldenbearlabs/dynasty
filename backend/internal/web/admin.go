@@ -7,6 +7,7 @@ import (
 
 	"crossover/internal/players"
 	"crossover/internal/scoring"
+	"crossover/internal/sportsday"
 )
 
 // startSync kicks off a feed sync and returns at once; progress is visible
@@ -29,6 +30,9 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 	case job == "games":
 		from, to := scoring.Window()
 		go s.Syncer.SyncGames(s.Background, c.Key, c.Games, from, to)
+	case job == "schedule":
+		_, near := scoring.Window() // the games sync covers the days up to here
+		go s.Syncer.SyncSchedule(s.Background, c.Key, c.Games, near.AddDate(0, 0, 1), sportsday.Today().AddDate(0, 0, s.ScheduleDays))
 	default:
 		writeError(w, http.StatusNotFound, "no such sync for this competition")
 		return

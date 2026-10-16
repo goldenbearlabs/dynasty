@@ -660,7 +660,7 @@
 	}
 	.leagues button {
 		display: grid;
-		grid-template-columns: 3.4rem minmax(9rem, 1fr) auto 17rem 1rem;
+		grid-template-columns: 3.4rem minmax(9rem, 1fr) auto minmax(17rem, max-content) 1rem;
 		align-items: center;
 		gap: 0.4rem 1.25rem;
 		width: 100%;
@@ -707,6 +707,7 @@
 	.stats span {
 		display: grid;
 		justify-items: end;
+		white-space: nowrap;
 		gap: 0.15rem;
 	}
 	.flags {

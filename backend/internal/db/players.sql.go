@@ -902,6 +902,53 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 	return items, nil
 }
 
+const listRankedPlayers = `-- name: ListRankedPlayers :many
+select p.id, p.positions, coalesce(t.conference, '')::text as conference
+from players p
+join (select ps.player_id, sum(ps.points) as points
+      from player_seasons ps
+      where ps.competition = $1 and ps.league = '' and ps.points is not null
+        and ps.year = (select max(s.year) from stat_seasons s where s.competition = $1)
+      group by ps.player_id) scored on scored.player_id = p.id
+left join pro_teams t on t.id = p.pro_team_id
+where p.pool_eligible and p.competition = $1
+order by scored.points desc, p.id
+limit $2
+`
+
+type ListRankedPlayersParams struct {
+	Competition string `json:"competition"`
+	PageSize    int32  `json:"page_size"`
+}
+
+type ListRankedPlayersRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Positions  []string    `json:"positions"`
+	Conference string      `json:"conference"`
+}
+
+// One sport's players by fantasy points in its latest season, best first,
+// with what decides where each can start: the dev seed hands them out.
+func (q *Queries) ListRankedPlayers(ctx context.Context, arg ListRankedPlayersParams) ([]ListRankedPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listRankedPlayers, arg.Competition, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRankedPlayersRow{}
+	for rows.Next() {
+		var i ListRankedPlayersRow
+		if err := rows.Scan(&i.ID, &i.Positions, &i.Conference); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRosteredInactive = `-- name: ListRosteredInactive :many
 select p.id as player_id, p.full_name, p.positions, p.competition, p.note,
        re.league_id, re.list, f.id as franchise_id, f.name as franchise_name, f.slug as franchise_slug

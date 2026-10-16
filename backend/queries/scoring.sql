@@ -352,3 +352,7 @@ select pg_advisory_xact_lock(hashtextextended((@period_id::uuid)::text, 0));
 -- name: InsertPeriodScore :exec
 insert into period_scores (period_id, franchise_id, points) values (@period_id, @franchise_id, @points)
 on conflict do nothing;
+
+-- name: LastScheduledDay :one
+-- The latest day a competition has a game stored for, or null with none.
+select max(day)::date from games where competition = @competition;

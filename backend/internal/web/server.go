@@ -52,6 +52,8 @@ type Server struct {
 	AdminToken string                      // optional bearer token for scripts; see commissioner
 	// SeasonBackfill is how many seasons of stat history a sync keeps.
 	SeasonBackfill int
+	// ScheduleDays is how many days ahead a schedule sync loads games for.
+	ScheduleDays int
 }
 
 // Handler routes every request. Reading is open to anyone who can reach the

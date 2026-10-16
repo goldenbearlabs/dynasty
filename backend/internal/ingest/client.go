@@ -21,6 +21,7 @@ const userAgent = "crossover-dynasty/0.1"
 type Client struct {
 	HTTP    *http.Client
 	Gap     time.Duration                                      // minimum time between requests to one host
+	Gaps    map[string]time.Duration                           // a host's own minimum, in place of Gap
 	CoolOff time.Duration                                      // how long a host that refused is left alone
 	Save    func(ctx context.Context, url string, body []byte) // optional
 	// Via sends one host's requests to a relay instead: host -> the relay's
@@ -134,7 +135,11 @@ func (c *Client) wait(ctx context.Context, host string) error {
 	if slot.Before(now) {
 		slot = now
 	}
-	c.next[host] = slot.Add(c.Gap)
+	gap, ok := c.Gaps[host]
+	if !ok {
+		gap = c.Gap
+	}
+	c.next[host] = slot.Add(gap)
 	c.mu.Unlock()
 
 	select {
