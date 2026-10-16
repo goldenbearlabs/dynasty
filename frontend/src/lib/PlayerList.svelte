@@ -1,4 +1,5 @@
 <script lang="ts">
+ import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A searchable, paged list of players. Used wherever players are picked
@@ -94,10 +95,9 @@
 	const ranked = $derived(order !== 'name');
 	// Whether the season's figures get columns: always in the full list, on request in the compact one.
 	const columns = $derived(ranked && (!compact || statColumns));
+	// What follows a player's team under his name.
 	const under = (player: Player) =>
-		[player.team_abbrev || player.team_name || 'No team', age(player.birth_date) && `age ${age(player.birth_date)}`, !competition && ranked && player.season]
-			.filter(Boolean)
-			.join(' · ');
+		[age(player.birth_date) && `age ${age(player.birth_date)}`, !competition && ranked && player.season].filter(Boolean).join(' · ');
 	const fantasyPoints = (n: number) => Math.round(n).toLocaleString();
 	let page = $state(1);
 
@@ -159,6 +159,8 @@
 			});
 	});
 </script>
+
+{#snippet team(player: Player)}{#if player.team_abbrev}<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />{:else}{player.team_name || 'No team'}{/if}{/snippet}
 
 <div class="stack tight" class:compact>
 	<div class="row filters">
@@ -270,9 +272,9 @@
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 												{#if player.waiver_until}<span class="pill brand">Waivers</span>{/if}
 											</div>
-											{#if compact && statColumns}<div class="muted small-text">{under(player)}</div>
+											{#if compact && statColumns}<div class="muted small-text">{@render team(player)}{#if under(player)} · {under(player)}{/if}</div>
 											{:else if compact}<div class="muted small-text">
-													{player.team_abbrev || player.team_name || 'No team'} · {player.status}
+													{@render team(player)} · {player.status}
 													{#if ranked && player.season}
 														· <strong>{fantasyPoints(player.season_points)}</strong> pts
 														{#if player.season_index}· <span title="League index: 100 is the average rostered player, 15 is one standard deviation">index <strong>{Math.round(player.season_index)}</strong></span>{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
 	import {
 		getPlayerResearch,
@@ -205,7 +206,7 @@
 											target="_blank"
 											rel="noopener noreferrer"
 											title="Open box score in a new tab">{dayLabel(game.day)}</a
-										><small>{game.away_abbrev} @ {game.home_abbrev}</small></td
+										><small><TeamLogo competition={result.player.competition} abbrev={game.away_abbrev} size={22} /> @ <TeamLogo competition={result.player.competition} abbrev={game.home_abbrev} size={22} /></small></td
 									>{#each stats as stat (stat.key)}<td class="num">{game.stats[stat.key] ?? '—'}</td
 										>{/each}<td class="num total">{points(game.points)}</td></tr
 								>{/each}

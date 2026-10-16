@@ -48,7 +48,7 @@
 	);
 	const next = $derived(mine.find((p) => !p.skipped_at && !p.passed_at) ?? mine[0]);
 	// The emoji a manager can react with.
-	const emojis = ['🔥', '💎', '🐐', '👏', '😂', '😭', '😬', '🤔', '💀', '🥀', '🤡', '🗑️'];
+	const emojis = ['🔥', '💎', '🐐', '👏', '😂', '😭', '😬', '🤔', '💀', '🥀', '🤡', '🍆', '🗑️'];
 	// Each pick's reactions, one chip per emoji in the order they first came.
 	const reacted = $derived.by(() => {
 		const byPick = new Map<string, { emoji: string; ids: string[] }[]>();

@@ -32,6 +32,7 @@
 	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	import Meter from '#lib/ui/Meter.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { clockTime, dayLabel, points } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -444,7 +445,7 @@
 											<Headshot name={player.full_name} src={player.headshot_url} />
 											<div>
 												<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
-												<div class="muted small-text">{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}</div>
+												<div class="muted small-text">{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={roster.competition} abbrev={player.team_abbrev} size={22} />{/if}{#if player.note} · {player.note}{/if}</div>
 											</div>
 										</div>
 									</td>
@@ -529,7 +530,7 @@
 														</div>
 														<PlayerNickname franchiseID={team.id} playerID={player.player_id} playerName={player.full_name} initialNickname={player.nickname} editable={canEdit} />
 															<div class="muted small-text">
-															{[player.positions.join('/'), player.team_abbrev, player.note].filter(Boolean).join(' · ')}
+															{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={roster.competition} abbrev={player.team_abbrev} size={22} />{/if}{#if player.note} · {player.note}{/if}
 														</div>
 													</div>
 												</div>

@@ -902,6 +902,43 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 	return items, nil
 }
 
+const listProTeams = `-- name: ListProTeams :many
+select competition, abbrev, name, logo_url from pro_teams order by competition, abbrev
+`
+
+type ListProTeamsRow struct {
+	Competition string `json:"competition"`
+	Abbrev      string `json:"abbrev"`
+	Name        string `json:"name"`
+	LogoUrl     string `json:"logo_url"`
+}
+
+// Every real team, for showing its logo wherever its abbreviation appears.
+func (q *Queries) ListProTeams(ctx context.Context) ([]ListProTeamsRow, error) {
+	rows, err := q.db.Query(ctx, listProTeams)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProTeamsRow{}
+	for rows.Next() {
+		var i ListProTeamsRow
+		if err := rows.Scan(
+			&i.Competition,
+			&i.Abbrev,
+			&i.Name,
+			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRankedPlayers = `-- name: ListRankedPlayers :many
 select p.id, p.positions, coalesce(t.conference, '')::text as conference
 from players p

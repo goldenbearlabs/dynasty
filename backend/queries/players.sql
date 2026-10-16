@@ -358,3 +358,7 @@ left join pro_teams t on t.id = p.pro_team_id
 where p.pool_eligible and p.competition = @competition
 order by scored.points desc, p.id
 limit @page_size;
+
+-- name: ListProTeams :many
+-- Every real team, for showing its logo wherever its abbreviation appears.
+select competition, abbrev, name, logo_url from pro_teams order by competition, abbrev;

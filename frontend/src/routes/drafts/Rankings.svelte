@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A manager's pre-draft rankings: private ranked lists of players, one
 	// league each, which can be loaded into the queue once the draft is on.
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import {
 		createRanking,
 		deleteRanking,
@@ -213,7 +214,7 @@
 									<strong>{player.full_name}</strong>
 									{#if !open.league_id}<SportBadge sport={player.competition} />{/if}
 									<span class="muted small-text">
-										{[player.positions.join('/'), player.team_abbrev].filter(Boolean).join(' · ')}
+										{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />{/if}
 										{#if player.owner_name}· taken by {player.owner_name}{/if}
 									</span>
 								</div>

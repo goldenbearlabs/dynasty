@@ -8,6 +8,7 @@
 	import Crest from '#lib/ui/Crest.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import { dayLabel, points } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import type { PageProps } from './$types';
@@ -56,7 +57,7 @@
 	);
 
 	type Side = (typeof sides)[number];
-	type Cell = { id: string; name: string; nickname?: string; headshot: string; detail: string; points: number };
+	type Cell = { id: string; name: string; nickname?: string; headshot: string; positions: string; team: string; points: number };
 
 	// A player's points are his total over the matchup, not just the lineup's days.
 	function cell(side: Side, id: string): Cell | undefined {
@@ -68,7 +69,8 @@
 			name: listed?.full_name ?? scored!.full_name,
 			nickname: listed?.nickname || scored?.nickname,
 			headshot: listed?.headshot_url ?? scored!.headshot_url,
-			detail: listed ? [listed.positions.join('/'), listed.team_abbrev].filter(Boolean).join(' · ') : '',
+			positions: listed?.positions.join('/') ?? '',
+			team: listed?.team_abbrev ?? '',
 			points: scored?.points ?? 0
 		};
 	}
@@ -117,7 +119,7 @@
 			<span class="shot"><Headshot name={shown.name} src={shown.headshot} size={30} /></span>
 			<span class="who">
 				<a href="/player/{shown.id}">{shown.name}</a>{#if shown.nickname} <span class="pill brand">“{shown.nickname}”</span>{/if}
-				{#if shown.detail}<span class="muted small-text">{shown.detail}</span>{/if}
+				{#if shown.positions || shown.team}<span class="muted small-text">{shown.positions}{#if shown.positions && shown.team} · {/if}{#if shown.team}<TeamLogo competition={matchup!.competition} abbrev={shown.team} size={22} />{/if}</span>{/if}
 			</span>
 			<strong class="pts">{points(shown.points)}</strong>
 		{:else if side.franchise}

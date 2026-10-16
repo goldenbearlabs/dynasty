@@ -1,6 +1,7 @@
 <script lang="ts">
 	// One league's waivers: who is on them and until when, the manager's own
 	// claims, and the order claims are settled in.
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { cancelWaiverClaim, claimWaiver, getWaivers, setWaiverOrder, type Waivers } from '#lib/api.ts';
@@ -134,7 +135,7 @@
 											<div>
 												<strong>{player.full_name}</strong>
 												<div class="muted small-text">
-													{[player.positions.join('/'), player.team_abbrev].filter(Boolean).join(' · ')}
+													{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={league.competition} abbrev={player.team_abbrev} size={22} />{/if}
 													· <strong>{left(player.clears_at)}</strong> <span title={clockTime(player.clears_at)}>(until {clockTime(player.clears_at)})</span>
 												</div>
 											</div>

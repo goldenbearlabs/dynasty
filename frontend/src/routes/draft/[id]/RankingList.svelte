@@ -2,6 +2,7 @@
 	// One of the manager's pre-draft lists, read in the draft room: its
 	// players in the order he ranked them, with anyone already taken greyed
 	// out, so he can queue from it as the draft goes.
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import type { Snippet } from 'svelte';
 	import { getRanking, type RankedPlayer } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
@@ -63,7 +64,7 @@
 						<span class="muted small-text row">
 							{#if showSport}<SportBadge sport={player.competition} />{/if}
 							{player.positions.join('/')}
-							{player.team_abbrev}
+							<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />
 						</span>
 					</div>
 					{#if by}<span class="by">{by}</span>{:else}{@render action?.(player)}{/if}

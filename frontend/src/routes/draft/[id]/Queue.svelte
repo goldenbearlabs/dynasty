@@ -1,4 +1,5 @@
 <script lang="ts">
+ import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
 	// A manager's ranked wish list. If their clock runs out, the first
 	// player on it who is still available is drafted for them.
@@ -47,7 +48,7 @@
 					<span class="muted metadata">
 						<SportBadge sport={player.competition} />
 						{player.positions.join('/')}
-						{player.team_abbrev}
+						<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />
 					</span>
 				</div>
 				<WatchStar playerID={player.player_id} playerName={player.full_name} />

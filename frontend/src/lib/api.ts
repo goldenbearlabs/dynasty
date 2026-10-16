@@ -779,6 +779,9 @@ export const updateLeagueSettings = (leagueId: string, settings: LeagueSettings)
 
 export const addLeague = (competition: string) => request<League>('POST', '/admin/leagues', { competition });
 
+/** A real team, for its logo. */
+export type ProTeam = { competition: string; abbrev: string; name: string; logo_url: string };
+export const getTeams = () => request<ProTeam[]>('GET', '/teams');
 export const getSession = () => request<Session | null>('GET', '/session');
 export const logIn = (credentials: Credentials) => request<void>('POST', '/auth/login', credentials);
 export const logOut = () => request<void>('POST', '/auth/logout');

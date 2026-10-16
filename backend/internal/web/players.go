@@ -153,6 +153,17 @@ func (s *Server) playerSeasons(w http.ResponseWriter, r *http.Request) {
 
 // listCompetitions returns the registry: each sport's positions, stats and
 // default rules, plus how many players are in its pool.
+// listTeams is every real team with its logo, so the app can show logos
+// in place of bare abbreviations.
+func (s *Server) listTeams(w http.ResponseWriter, r *http.Request) {
+	teams, err := s.Queries.ListProTeams(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, teams)
+}
+
 func (s *Server) listCompetitions(w http.ResponseWriter, r *http.Request) {
 	counts, err := s.Queries.CountPlayersByCompetition(r.Context())
 	if err != nil {

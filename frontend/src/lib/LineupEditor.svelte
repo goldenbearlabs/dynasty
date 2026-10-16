@@ -7,11 +7,12 @@
 	// one that counts.
 	import { getLineup, setLineup, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
-	import { statLine } from '#lib/statLine.ts';
+	import { columnValue, statColumns, statValue, sumStats, widestStats, type StatColumn } from '#lib/statLine.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Meter from '#lib/ui/Meter.svelte';
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import { dayLabel, points, shiftDay, timeOfDay } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import WatchStar from '#lib/WatchStar.svelte';
@@ -67,8 +68,14 @@
 		const i = seats.indexOf(id);
 		return i < 0 ? '' : seatSlots[i].name;
 	};
+	// The bench, by kind of player in the order the slots put them (skaters
+	// before goalies, hitters before pitchers), then by name.
+	const kindOf = (positions: string[]) => statColumns(sport, positions).map((c) => c.key).join();
+	const kinds = $derived([...new Set(lineup?.slots.map((s) => kindOf(s.positions)) ?? [])]);
 	const bench = $derived(
-		(lineup?.players ?? []).filter((p) => !seats.includes(p.player_id)).toSorted((a, b) => a.full_name.localeCompare(b.full_name))
+		(lineup?.players ?? [])
+			.filter((p) => !seats.includes(p.player_id))
+			.toSorted((a, b) => kinds.indexOf(kindOf(a.positions)) - kinds.indexOf(kindOf(b.positions)) || a.full_name.localeCompare(b.full_name))
 	);
 	const dirty = $derived(
 		lineup?.players.some((p) => slotOf(p.player_id) !== p.slot || picked[p.player_id] !== p.counts_from) ?? false
@@ -141,6 +148,33 @@
 	const total = (player: LineupPlayer) => player.games.reduce((n, g) => n + (counts(player, g) ? g.points : 0), 0);
 	const pickable = (player: LineupPlayer, game: LineupGame) => limit(player) > 0 && !frozen(player) && !begun(game);
 	const played = (game: LineupGame) => game.status !== 'scheduled';
+	// The games a row's stats come from: those played, and for a starter in a
+	// slot that counts only some, only the ones that count. A bench player in
+	// such a league has none: no game of his counts.
+	const shownGames = (player: LineupPlayer, starting: boolean) =>
+		player.games.filter((g) => played(g) && (limited.length === 0 || (starting && counts(player, g))));
+
+	// ---- stat columns ----
+	const columns = (player: LineupPlayer) => statColumns(sport, player.positions);
+	const statWidth = $derived(widestStats(sport));
+	// A list's rows, each with the stat labels to show above it: the first
+	// player's, and again wherever the kind of player changes (skaters to
+	// goalies, hitters to pitchers).
+	function labelled<T>(rows: T[], player: (row: T) => LineupPlayer | undefined): { row: T; labels?: StatColumn[]; first?: boolean }[] {
+		let last = '';
+		return rows.map((row) => {
+			const p = player(row);
+			if (!p) return { row };
+			const cols = columns(p);
+			const key = cols.map((c) => c.key).join();
+			if (key === last) return { row };
+			const first = last === '';
+			last = key;
+			return { row, labels: cols, first };
+		});
+	}
+	// Blank cells after a kind of player with fewer stats, so every column's lines run on.
+	const padding = (cols: StatColumn[]) => Array.from({ length: Math.max(0, statWidth - cols.length) }, (_, i) => i);
 	const versus = (game: LineupGame) => `${game.at_home ? 'vs' : '@'} ${game.opponent}`;
 	const when = (game: LineupGame) =>
 		game.status === 'live' ? 'Live' : game.status === 'final' ? 'Final' : `${weekly ? `${weekday(game.day)} ` : ''}${timeOfDay(game.starts_at)}`;
@@ -176,37 +210,53 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (moving = undefined)} />
 
+{#snippet tile(game: LineupGame)}
+	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={40} label={false} /></span>
+	<span class="day">{weekday(game.day)} {dayNumber(game.day)}</span>
+	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
+{/snippet}
+
 {#snippet games(player: LineupPlayer, starting: boolean)}
 	{#if player.games.length === 0}
 		<span class="muted small-text">{weekly ? 'No games this week' : 'No game'}</span>
 	{:else if weekly && limited.length > 0}
-		<!-- The week's games: the one that counts is filled in; tap another to count it instead. -->
-		{@const counted = player.games.find((g) => starting && counts(player, g))}
-		<div class="chips">
+		<!-- The week's games as the opponents' logos, each with its day and time
+		     beneath: the one that counts is filled in; tap another to count it instead. -->
+		<div class="tiles">
 			{#each player.games as game (game.starts_at)}
 				{@const on = starting && counts(player, game)}
 				{#if starting && pickable(player, game)}
-					<button class="chip" class:on aria-pressed={on} title="Count {weekday(game.day)} {versus(game)} for {player.full_name}" onclick={() => (picked[player.player_id] = game.day)}>
-						<span>{weekday(game.day)}</span>{versus(game)}
+					<button class="tile" class:on aria-pressed={on} title="Count {weekday(game.day)} {versus(game)} for {player.full_name}" onclick={() => (picked[player.player_id] = game.day)}>
+						{@render tile(game)}
 					</button>
 				{:else}
-					<span class="chip" class:on class:done={played(game)} title="{weekday(game.day)} {versus(game)} · {when(game)}">
-						<span>{weekday(game.day)}</span>{versus(game)}
+					<span class="tile" class:on class:done={played(game)} title="{weekday(game.day)} {versus(game)} · {when(game)}">
+						{@render tile(game)}
 					</span>
 				{/if}
 			{/each}
 		</div>
-		{#if counted && played(counted)}
-			<span class="line">{statLine(sport, counted.stats) || 'No stats'}{#if counted.status === 'live'}{' · '}<span class="live">Live</span>{/if}</span>
-		{/if}
 	{:else}
 		{#each player.games as game (game.starts_at)}
 			<div class="game">
-				<span><strong>{versus(game)}</strong> <span class:live={game.status === 'live'} class="muted">{when(game)}</span></span>
-				{#if played(game)}<span class="line">{statLine(sport, game.stats) || 'No stats'}</span>{/if}
+				<span class="opponent">{game.at_home ? 'vs' : '@'} <TeamLogo competition={sport} abbrev={game.opponent} size={28} /></span>
+				<span class="status" class:live={game.status === 'live'}>{when(game)}</span>
 			</div>
 		{/each}
 	{/if}
+{/snippet}
+
+<!-- A row of column headings; the first in a section also names it. -->
+{#snippet labels(cols: StatColumn[], title: string)}
+	<li class="labels" aria-hidden="true">
+		<span class="title">{title}</span>
+		<span>{title ? (weekly ? 'This week' : 'Game') : ''}</span>
+		<div class="stats">
+			{#each cols as c (c.key)}<span title={c.title}>{c.label}</span>{/each}
+			{#each padding(cols) as i (i)}<span></span>{/each}
+		</div>
+		<span class="pts">FPTS</span>
+	</li>
 {/snippet}
 
 {#snippet who(player: LineupPlayer, starting: boolean)}
@@ -239,14 +289,23 @@
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
 			</span>
-			<span class="muted small-text">{player.positions.join('/')} · {player.team_abbrev}{#if player.eligibility_note} · {player.eligibility_note}{/if}</span>
+			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}</span>
 		</div>
 	</div>
 	<div class="games">{@render games(player, starting)}</div>
-	<div class="pts">{(starting || limited.length === 0) && player.games.some(played) ? points(total(player)) : ''}</div>
+	{@const shown = shownGames(player, starting)}
+	{@const line = sumStats(shown.map((g) => g.stats))}
+	<div class="stats" class:none={shown.length === 0}>
+		{#each columns(player) as c (c.key)}
+			{@const n = columnValue(line, c)}
+			<span class:zero={!n} title={c.title}>{#if shown.length}<small>{c.label}</small>{statValue(n)}{/if}</span>
+		{/each}
+		{#each padding(columns(player)) as i (i)}<span></span>{/each}
+	</div>
+	<div class="pts" class:none={shown.length === 0}><small>FPTS</small>{shown.length ? points(shown.reduce((n, g) => n + g.points, 0)) : '–'}</div>
 {/snippet}
 
-<div class="stack tight" data-sport={sport}>
+<div class="stack tight" data-sport={sport} style:--stat-cols={statWidth}>
 	{#if !lineup}
 		<p class="muted">Loading the lineup…</p>
 	{:else}
@@ -311,10 +370,12 @@
 			{/if}
 
 			<section class="card flush" aria-label="Starters">
-				<header class="head"><span>Starters</span><span>{weekly ? 'This week' : 'Game'}</span><span>Pts</span></header>
+				<header class="head narrow"><span>Starters</span><span>{weekly ? 'This week' : 'Game'}</span></header>
 				<ol class="rows">
-					{#each seatSlots as slot, i (i)}
+					{#each labelled(seatSlots.map((_, i) => i), (i) => (seats[i] ? byId.get(seats[i]!) : undefined)) as { row: i, labels: cols, first } (i)}
+						{@const slot = seatSlots[i]}
 						{@const player = seats[i] ? byId.get(seats[i]) : undefined}
+						{#if cols}{@render labels(cols, first ? 'Starters' : '')}{/if}
 						{@const target = !!moving && canPlace(moving, i)}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions: a drop zone; the tap path is the button inside -->
 						<li
@@ -348,7 +409,7 @@
 				ondragleave={() => over === 'bench' && (over = undefined)}
 				ondrop={(e) => drop(e, 'bench')}
 			>
-				<header class="head">
+				<header class="head" class:narrow={bench.length > 0 && !(moving && canPlace(moving, 'bench'))}>
 					<span>Bench · {bench.length}</span>
 					{#if moving && canPlace(moving, 'bench')}<button class="small" onclick={() => place(moving!, 'bench')}>Move to bench</button>{/if}
 				</header>
@@ -356,7 +417,8 @@
 					<p class="muted small-text pad">Everyone is starting.</p>
 				{:else}
 					<ul class="rows">
-						{#each bench as player (player.player_id)}
+						{#each labelled(bench, (p) => p) as { row: player, labels: cols, first } (player.player_id)}
+							{#if cols}{@render labels(cols, first ? `Bench · ${bench.length}` : '')}{/if}
 							<li class="seat"><span class="slot">BN</span>{@render who(player, false)}</li>
 						{/each}
 					</ul>
@@ -432,9 +494,14 @@
 	}
 
 	/* ---- the slots and the bench ---- */
+	/* Slot, player, game, a column per stat, fantasy points: every row shares
+	   these, so the numbers line up down the table. */
+	.stack {
+		--row: 3rem minmax(11rem, 1.3fr) minmax(6.5rem, 1fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
+	}
 	.head {
 		display: grid;
-		grid-template-columns: 3rem minmax(12rem, 1.2fr) minmax(0, 2fr) 3.5rem;
+		grid-template-columns: var(--row);
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.45rem 0.9rem;
@@ -447,9 +514,6 @@
 	}
 	.head span:first-child {
 		grid-column: span 2;
-	}
-	.head span:last-child {
-		text-align: right;
 	}
 	.bench .head {
 		display: flex;
@@ -465,10 +529,11 @@
 		margin: 0;
 		padding: 0;
 	}
-	.seat {
+	.seat,
+	.labels {
 		position: relative;
 		display: grid;
-		grid-template-columns: 3rem minmax(12rem, 1.2fr) minmax(0, 2fr) 3.5rem;
+		grid-template-columns: var(--row);
 		align-items: center;
 		gap: 0.75rem;
 		min-height: 3.4rem;
@@ -479,6 +544,36 @@
 	}
 	.seat + .seat {
 		border-top: 1px solid var(--rule);
+	}
+	/* The column headings, above the first row of each kind of player. */
+	.labels {
+		min-height: 0;
+		padding: 0 0.9rem;
+		background: var(--surface-2);
+		border-top: 1px solid var(--rule);
+		border-bottom: 1px solid var(--rule-strong);
+		font: 700 0.66rem/1 var(--mono);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.rows > .labels:first-child {
+		border-top: 0;
+	}
+	.labels .title {
+		grid-column: span 2;
+		color: var(--ink);
+		letter-spacing: 0.07em;
+	}
+	/* The section bar repeats what the first heading row says: it stays only
+	   where those rows are hidden, on a phone, or to offer the bench as a target. */
+	@media (min-width: 641px) {
+		.head.narrow {
+			display: none;
+		}
+	}
+	.labels + .seat {
+		border-top: 0;
 	}
 	.slot {
 		justify-self: start;
@@ -502,7 +597,7 @@
 		opacity: 0.85;
 	}
 	.empty {
-		grid-column: span 3;
+		grid-column: span 4;
 		padding: 0.55rem 0.7rem;
 		border: 1px dashed var(--rule-strong);
 		border-radius: var(--radius-small);
@@ -589,54 +684,123 @@
 		min-width: 0;
 		font-size: 0.8rem;
 	}
-	.game {
-		display: grid;
-	}
-	.line {
-		font: 600 0.74rem/1.3 var(--mono);
-		color: var(--ink);
+	.status {
+		color: var(--ink-soft);
 	}
 	.live {
 		color: var(--bad);
 		font-weight: 650;
 	}
-	.chips {
+	/* True columns: each stat and the points sit between lines that run the
+	   full height of the row, headings included. */
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(var(--stat-cols), 1fr);
+		align-self: stretch;
+		margin-block: -0.4rem;
+		text-align: center;
+	}
+	.stats > span {
+		display: grid;
+		place-items: center;
+		border-left: 1px solid var(--rule);
+	}
+	.stats > span:last-child {
+		border-right: 1px solid var(--rule);
+	}
+	.labels .stats {
+		margin-block: 0;
+	}
+	.labels .stats > span,
+	.labels .pts {
+		padding-block: 0.5rem;
+	}
+	.labels .stats > span:last-child,
+	.labels .stats > span {
+		border-color: var(--rule-strong);
+	}
+	.seat .stats {
+		font: 600 0.82rem var(--mono);
+		font-variant-numeric: tabular-nums;
+	}
+	.stats .zero,
+	.none {
+		color: var(--ink-faint);
+		font-weight: 400;
+	}
+	/* Each value's own label shows only where the label rows do not: on a phone. */
+	.seat small {
+		display: none;
+	}
+	.opponent {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-weight: 650;
+	}
+	.game {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.25rem;
+		align-items: center;
+		gap: 0.15rem 0.5rem;
 	}
-	.chip {
-		display: inline-flex;
-		align-items: baseline;
-		gap: 0.25rem;
-		padding: 0.15rem 0.4rem;
+	/* A game as a tile: the opponent's logo, its day and time beneath. */
+	.tiles {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+	}
+	.tile {
+		position: relative;
+		display: grid;
+		justify-items: center;
+		gap: 0.05rem;
+		min-width: 4.4rem;
+		padding: 0.35rem 0.4rem 0.3rem;
 		border: 1px solid var(--rule);
-		border-radius: 999px;
+		border-radius: var(--radius-small);
 		background: var(--surface);
-		font: 600 0.7rem/1.4 var(--body);
+		font: 600 0.68rem/1.25 var(--body);
 		white-space: nowrap;
 	}
-	.chip span {
+	.tile .logo {
+		display: grid;
+		place-items: center;
+		height: 42px;
+	}
+	.tile .logo small {
+		position: absolute;
+		top: 0.2rem;
+		left: 0.3rem;
+		display: block;
+		font: 600 0.55rem var(--mono);
+		color: var(--ink-faint);
+	}
+	.tile .time {
 		font-weight: 400;
 		color: var(--ink-soft);
 	}
-	.chip.done:not(.on) {
-		opacity: 0.55;
+	.tile.done:not(.on) {
+		opacity: 0.5;
 	}
-	button.chip:hover {
+	button.tile:hover {
 		border-color: var(--sport, var(--brand));
 	}
-	.chip.on {
-		background: var(--sport, var(--brand));
+	.tile.on {
 		border-color: var(--sport, var(--brand));
-		color: var(--surface);
+		background: color-mix(in srgb, var(--sport, var(--brand)) 18%, var(--surface));
+		box-shadow: inset 0 -3px 0 var(--sport, var(--brand));
 	}
-	.chip.on span {
-		color: inherit;
+	.tile.on .time {
+		color: var(--ink);
 	}
 	.pts {
 		text-align: right;
 		font: 700 0.9rem var(--mono);
+	}
+	.labels .pts {
+		font: inherit;
+		color: var(--ink);
 	}
 	.pad {
 		padding: 0.6rem 0.9rem;
@@ -669,16 +833,54 @@
 			display: none;
 		}
 		.seat {
-			grid-template-columns: 2.6rem minmax(0, 1fr) 3rem;
+			grid-template-columns: 2.6rem minmax(0, 1fr) 3.4rem;
 			gap: 0.3rem 0.6rem;
+		}
+		.labels {
+			display: none;
+		}
+		/* With the label rows hidden, every player but the first keeps his divider. */
+		.labels + .seat {
+			border-top: 1px solid var(--rule);
+		}
+		.rows > .labels:first-child + .seat {
+			border-top: 0;
 		}
 		.games {
 			grid-column: 2 / 4;
 			grid-row: 2;
 		}
+		.stats {
+			grid-column: 2 / 4;
+			grid-row: 3;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.15rem 0.7rem;
+		}
+		.stats.none {
+			display: none;
+		}
+		.stats {
+			margin-block: 0;
+		}
+		.stats > span,
+		.stats > span:last-child {
+			display: inline;
+			border: 0;
+		}
+		.seat small {
+			display: inline;
+			margin-right: 0.2rem;
+			font: 600 0.58rem var(--mono);
+			color: var(--ink-faint);
+		}
 		.pts {
 			grid-column: 3;
 			grid-row: 1;
+		}
+		.pts small {
+			display: block;
+			margin: 0;
 		}
 		.empty {
 			grid-column: span 2;
