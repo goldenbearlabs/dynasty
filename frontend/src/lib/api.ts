@@ -823,7 +823,7 @@ export const getMergeSuggestions = () => request<MergeSuggestion[]>('GET', '/adm
 export const mergePlayers = (keep_id: string, duplicate_id: string) =>
 	request<void>('POST', '/admin/players/merge', { keep_id, duplicate_id });
 
-export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'seasons';
+export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'schedule' | 'seasons';
 export const startSync = (competition: string, job: SyncJob) =>
 	request<void>('POST', `/admin/sync/${competition}/${job}`);
 export const getIngestRuns = () => request<IngestRun[]>('GET', '/admin/ingest-runs');
