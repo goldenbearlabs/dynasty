@@ -117,9 +117,35 @@ func (s *Syncer) loadSchedule(ctx context.Context, competition string, src GameS
 		if err := s.upsertGames(ctx, competition, games); err != nil {
 			return stored, err
 		}
-		stored += len(games)
+		if err := s.dropUnplayed(ctx, competition, day, games); err != nil {
+			return stored, err
+		}
+		for _, game := range games {
+			if !game.NonRegular {
+				stored++
+			}
+		}
 	}
 	return stored, nil
+}
+
+// dropUnplayed removes games stored for a day that were due to start over
+// a day ago, never did, and that the feed no longer lists: playoff games
+// that were not needed, and others called off. A game that was played is
+// never removed this way, so no stat line is lost to a feed's bad day.
+func (s *Syncer) dropUnplayed(ctx context.Context, competition string, day time.Time, listed []Game) error {
+	unplayed, err := s.q.ListUnplayedGamesOnDay(ctx, db.ListUnplayedGamesOnDayParams{Competition: competition, Day: sportsday.Date(day)})
+	if err != nil {
+		return err
+	}
+	for _, id := range unplayed {
+		if !slices.ContainsFunc(listed, func(g Game) bool { return g.ProviderID == id }) {
+			if err := s.q.DeleteGame(ctx, db.DeleteGameParams{Competition: competition, ProviderID: id}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // upsertGames stores one day's games in a single transaction, so however
@@ -135,6 +161,12 @@ func (s *Syncer) upsertGames(ctx context.Context, competition string, games []Ga
 			ids[t.ProviderID] = t.ID
 		}
 		for _, game := range games {
+			if game.NonRegular {
+				if err := q.DeleteGame(ctx, db.DeleteGameParams{Competition: competition, ProviderID: game.ProviderID}); err != nil {
+					return err
+				}
+				continue
+			}
 			// A team we do not know, such as an all-star side, is left empty.
 			home, away := ids[game.HomeTeam], ids[game.AwayTeam]
 			if !home.Valid && !away.Valid {

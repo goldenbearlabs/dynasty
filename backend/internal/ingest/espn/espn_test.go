@@ -467,7 +467,13 @@ func TestGamesRegularSeasonOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(games) != 1 || games[0].ProviderID != "regular" {
-		t.Fatalf("regular-season games = %+v", games)
+	// Every other game comes back flagged, so a copy stored earlier can be removed.
+	if len(games) != 4 || games[0].ProviderID != "regular" || games[0].NonRegular {
+		t.Fatalf("games = %+v, want game regular first, unflagged", games)
+	}
+	for _, g := range games[1:] {
+		if !g.NonRegular {
+			t.Errorf("game %s was not flagged as outside the regular season", g.ProviderID)
+		}
 	}
 }

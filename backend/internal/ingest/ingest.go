@@ -51,6 +51,9 @@ type Game struct {
 	HomeScore  int
 	AwayScore  int
 	Detail     string // the feed's short description of where the game stands: "7:32 - 3rd", "Final/OT"
+	// NonRegular marks a preseason, postseason or exhibition game. Only its
+	// ProviderID is set: it is never stored, and a copy stored before is removed.
+	NonRegular bool
 }
 
 const (

@@ -31,8 +31,14 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 		from, to := scoring.Window()
 		go s.Syncer.SyncGames(s.Background, c.Key, c.Games, from, to)
 	case job == "schedule":
-		_, near := scoring.Window() // the games sync covers the days up to here
-		go s.Syncer.SyncSchedule(s.Background, c.Key, c.Games, near.AddDate(0, 0, 1), sportsday.Today().AddDate(0, 0, s.ScheduleDays))
+		// Asked for by hand, it goes back over every day already stored too,
+		// so games the feed has since moved or ruled out of the regular season
+		// are put right; the nightly run looks only ahead.
+		from, _ := scoring.Window()
+		if first, err := s.Queries.FirstScheduledDay(r.Context(), c.Key); err == nil && first.Valid && first.Time.Before(from) {
+			from = first.Time
+		}
+		go s.Syncer.SyncSchedule(s.Background, c.Key, c.Games, from, sportsday.Today().AddDate(0, 0, s.ScheduleDays))
 	default:
 		writeError(w, http.StatusNotFound, "no such sync for this competition")
 		return

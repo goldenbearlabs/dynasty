@@ -241,6 +241,95 @@ func TestSyncGames(t *testing.T) {
 	}
 }
 
+// A game the feed rules out of the regular season is never stored, and one
+// stored before it was is removed.
+func TestScheduleDropsNonRegular(t *testing.T) {
+	pool := dbtest.Open(t)
+	ctx := context.Background()
+	const competition = "test_schedule"
+	cleanup := func() {
+		pool.Exec(ctx, `delete from games where competition = $1`, competition)
+		pool.Exec(ctx, `delete from pro_teams where competition = $1`, competition)
+		pool.Exec(ctx, `delete from ingest_runs where competition = $1`, competition)
+	}
+	cleanup()
+	defer cleanup()
+
+	syncer := ingest.NewSyncer(db.New(pool), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := syncer.SyncRosters(ctx, competition, &fakeSource{}); err != nil {
+		t.Fatal(err)
+	}
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 10).Add(12 * time.Hour)
+	src := &fakeGames{games: []ingest.Game{
+		{ProviderID: "opener", StartsAt: day, Status: ingest.GameScheduled, HomeTeam: "1"},
+		{ProviderID: "regular", StartsAt: day, Status: ingest.GameScheduled, HomeTeam: "1"},
+	}}
+	if err := syncer.SyncSchedule(ctx, competition, src, day, day); err != nil {
+		t.Fatal(err)
+	}
+	// The feed now calls the opener a preseason game, and lists an exhibition.
+	src.games[0] = ingest.Game{ProviderID: "opener", StartsAt: day, NonRegular: true}
+	src.games = append(src.games, ingest.Game{ProviderID: "exhibition", StartsAt: day, NonRegular: true})
+	if err := syncer.SyncSchedule(ctx, competition, src, day, day); err != nil {
+		t.Fatal(err)
+	}
+
+	var stored []string
+	rows, _ := pool.Query(ctx, `select provider_id from games where competition = $1`, competition)
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		stored = append(stored, id)
+	}
+	var counted int
+	pool.QueryRow(ctx, `select rows_upserted from ingest_runs where competition = $1 and job = 'schedule' order by id desc limit 1`, competition).Scan(&counted)
+	if len(stored) != 1 || stored[0] != "regular" || counted != 1 {
+		t.Errorf("stored %v, counted %d; want only [regular], counted 1", stored, counted)
+	}
+}
+
+// A game long due that never started and is no longer listed is dropped;
+// one that was played stays, whatever the feed says now.
+func TestScheduleDropsUnplayed(t *testing.T) {
+	pool := dbtest.Open(t)
+	ctx := context.Background()
+	const competition = "test_unplayed"
+	cleanup := func() {
+		pool.Exec(ctx, `delete from games where competition = $1`, competition)
+		pool.Exec(ctx, `delete from pro_teams where competition = $1`, competition)
+		pool.Exec(ctx, `delete from ingest_runs where competition = $1`, competition)
+	}
+	cleanup()
+	defer cleanup()
+
+	syncer := ingest.NewSyncer(db.New(pool), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := syncer.SyncRosters(ctx, competition, &fakeSource{}); err != nil {
+		t.Fatal(err)
+	}
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5).Add(17 * time.Hour)
+	src := &fakeGames{games: []ingest.Game{
+		{ProviderID: "if-necessary", StartsAt: day, Status: ingest.GameScheduled, HomeTeam: "1"},
+		{ProviderID: "played", StartsAt: day, Status: ingest.GameFinal, HomeTeam: "1"},
+	}, byET: true}
+	if err := syncer.SyncSchedule(ctx, competition, src, day, day); err != nil {
+		t.Fatal(err)
+	}
+	src.games = nil // the feed no longer lists either
+	if err := syncer.SyncSchedule(ctx, competition, src, day, day); err != nil {
+		t.Fatal(err)
+	}
+	var stored []string
+	rows, _ := pool.Query(ctx, `select provider_id from games where competition = $1`, competition)
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		stored = append(stored, id)
+	}
+	if len(stored) != 1 || stored[0] != "played" {
+		t.Errorf("stored %v, want only [played]", stored)
+	}
+}
+
 func TestPollLive(t *testing.T) {
 	pool := dbtest.Open(t)
 	ctx := context.Background()

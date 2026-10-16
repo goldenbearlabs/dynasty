@@ -249,9 +249,6 @@ func TestSeasonStats(t *testing.T) {
 func TestGamesRegularSeasonOnly(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("gameType") != "R" {
-			t.Errorf("gameType = %q", r.URL.Query().Get("gameType"))
-		}
 		w.Write([]byte(`{"dates":[{"games":[{"gamePk":1,"gameType":"R","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":2,"gameType":"S","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":3,"gameType":"F","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":4,"gameType":"D","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":5,"gameType":"L","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":6,"gameType":"W","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":7,"gameType":"A","gameDate":"2026-10-04T17:00:00Z"},{"gamePk":8,"gameDate":"2026-10-04T17:00:00Z"}]}]}`))
 	})
 	server := httptest.NewServer(mux)
@@ -263,7 +260,13 @@ func TestGamesRegularSeasonOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(games) != 1 || games[0].ProviderID != "1" {
-		t.Fatalf("regular-season games = %+v", games)
+	// Every other game comes back flagged, so a copy stored earlier can be removed.
+	if len(games) != 8 || games[0].ProviderID != "1" || games[0].NonRegular {
+		t.Fatalf("games = %+v, want game 1 first, unflagged", games)
+	}
+	for _, g := range games[1:] {
+		if !g.NonRegular {
+			t.Errorf("game %s was not flagged as outside the regular season", g.ProviderID)
+		}
 	}
 }

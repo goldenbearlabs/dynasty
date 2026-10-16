@@ -356,3 +356,17 @@ on conflict do nothing;
 -- name: LastScheduledDay :one
 -- The latest day a competition has a game stored for, or null with none.
 select max(day)::date from games where competition = @competition;
+
+-- name: FirstScheduledDay :one
+-- The earliest day a competition has a game stored for, or null with none.
+select min(day)::date from games where competition = @competition;
+
+-- name: DeleteGame :exec
+-- Removes a game the feed says is not part of the regular season, with its stat lines.
+delete from games where competition = @competition and provider_id = @provider_id;
+
+-- name: ListUnplayedGamesOnDay :many
+-- Games on a day that were due to start over a day ago and never did:
+-- placeholders the feed may have since dropped.
+select provider_id from games
+where competition = @competition and day = @day and status = 'scheduled' and starts_at < now() - interval '1 day';

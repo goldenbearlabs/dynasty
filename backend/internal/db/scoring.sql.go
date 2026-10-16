@@ -85,6 +85,21 @@ func (q *Queries) CreateSeason(ctx context.Context, arg CreateSeasonParams) (Sea
 	return i, err
 }
 
+const deleteGame = `-- name: DeleteGame :exec
+delete from games where competition = $1 and provider_id = $2
+`
+
+type DeleteGameParams struct {
+	Competition string `json:"competition"`
+	ProviderID  string `json:"provider_id"`
+}
+
+// Removes a game the feed says is not part of the regular season, with its stat lines.
+func (q *Queries) DeleteGame(ctx context.Context, arg DeleteGameParams) error {
+	_, err := q.db.Exec(ctx, deleteGame, arg.Competition, arg.ProviderID)
+	return err
+}
+
 const deleteLineups = `-- name: DeleteLineups :exec
 delete from lineups
 where league_id = $1 and franchise_id = $2 and effective_on between $3 and $4
@@ -130,6 +145,18 @@ type DeletePeriodsFromParams struct {
 func (q *Queries) DeletePeriodsFrom(ctx context.Context, arg DeletePeriodsFromParams) error {
 	_, err := q.db.Exec(ctx, deletePeriodsFrom, arg.SeasonID, arg.FromDay)
 	return err
+}
+
+const firstScheduledDay = `-- name: FirstScheduledDay :one
+select min(day)::date from games where competition = $1
+`
+
+// The earliest day a competition has a game stored for, or null with none.
+func (q *Queries) FirstScheduledDay(ctx context.Context, competition string) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, firstScheduledDay, competition)
+	var column_1 pgtype.Date
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getGame = `-- name: GetGame :one
@@ -1104,6 +1131,38 @@ func (q *Queries) ListSeasons(ctx context.Context, dynastyID pgtype.UUID) ([]Sea
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnplayedGamesOnDay = `-- name: ListUnplayedGamesOnDay :many
+select provider_id from games
+where competition = $1 and day = $2 and status = 'scheduled' and starts_at < now() - interval '1 day'
+`
+
+type ListUnplayedGamesOnDayParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+// Games on a day that were due to start over a day ago and never did:
+// placeholders the feed may have since dropped.
+func (q *Queries) ListUnplayedGamesOnDay(ctx context.Context, arg ListUnplayedGamesOnDayParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUnplayedGamesOnDay, arg.Competition, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var provider_id string
+		if err := rows.Scan(&provider_id); err != nil {
+			return nil, err
+		}
+		items = append(items, provider_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

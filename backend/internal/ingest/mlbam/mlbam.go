@@ -376,7 +376,7 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 			} `json:"games"`
 		} `json:"dates"`
 	}
-	url := fmt.Sprintf("%s/schedule?sportId=1&gameType=R&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
+	url := fmt.Sprintf("%s/schedule?sportId=1&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
 	if err := s.client.GetTransient(ctx, url, &res); err != nil {
 		return nil, err
 	}
@@ -385,7 +385,8 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	var games []ingest.Game
 	for _, date := range res.Dates {
 		for _, g := range date.Games {
-			if g.GameType != "R" {
+			if g.GameType != "R" { // spring training, exhibitions and the postseason
+				games = append(games, ingest.Game{ProviderID: strconv.Itoa(g.GamePk), NonRegular: true})
 				continue
 			}
 			starts, err := time.Parse(time.RFC3339, g.GameDate)
