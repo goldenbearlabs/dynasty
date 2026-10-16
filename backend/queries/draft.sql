@@ -62,9 +62,14 @@ select k.*,
        coalesce(p.full_name, '')::text    as player_name,
        coalesce(p.positions, '{}')::text[] as player_positions,
        coalesce(p.headshot_url, '')::text as player_headshot,
-       coalesce(l.competition, '')::text  as competition
+       coalesce(l.competition, '')::text  as competition,
+       -- For the draft's stats: how old he was, his year in college, his team.
+       p.birth_date                       as player_birth_date,
+       coalesce(p.class, '')::text        as player_class,
+       coalesce(t.abbrev, '')::text       as player_team
 from draft_picks k
 left join players p on p.id = k.player_id
+left join pro_teams t on t.id = p.pro_team_id
 left join leagues l on l.id = k.league_id
 where k.draft_id = @draft_id
 order by k.position;

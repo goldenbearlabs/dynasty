@@ -39,6 +39,7 @@
 	import Research from './Research.svelte';
 	import Teams from './Teams.svelte';
 	import Queue from './Queue.svelte';
+	import Stats from './Stats.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -306,6 +307,9 @@
 		}
 	}
 
+	// The board pane shows the board, or the draft by the numbers.
+	let boardView = $state<'board' | 'stats'>('board');
+
 	// The pick order editor has a row of controls for every pick, so it is
 	// only built once it is opened. It then stays, to keep unsaved edits.
 	let orderOpened = $state(false);
@@ -464,7 +468,10 @@
 			<div class="main-workspace" bind:this={mainPane}>
 				<section class="board-pane" aria-label="Draft progress">
 					<div class="section-heading">
-						<h2>Draft board</h2>
+						<div class="view-switch" role="group" aria-label="Show">
+							<button class:on={boardView === 'board'} aria-pressed={boardView === 'board'} onclick={() => (boardView = 'board')}>Draft board</button>
+							<button class:on={boardView === 'stats'} aria-pressed={boardView === 'stats'} onclick={() => (boardView = 'stats')}>Stats</button>
+						</div>
 						<div class="upcoming" aria-label="Upcoming picks">
 							{#each upcoming.slice(0, 5) as p (p.id)}<span
 									class:you={p.current_franchise_id === me?.id}
@@ -475,6 +482,9 @@
 								>{/each}
 						</div>
 					</div>
+					{#if boardView === 'stats'}
+						<Stats {draft} {picks} {franchises} showSport={sports.length > 1} />
+					{:else}
 					<Board
 						{picks}
 						{franchises}
@@ -489,6 +499,7 @@
 						onselect={research}
 						onchange={commissioner && (draft.status === 'live' || draft.status === 'paused') ? startChange : undefined}
 					/>
+					{/if}
 				</section>
 				<Splitter
 					orientation="horizontal"
@@ -775,6 +786,29 @@
 		min-height: 0;
 		background: var(--surface);
 		border-block: 1px solid var(--rule);
+	}
+	/* Board or stats, as two halves of one control. */
+	.view-switch {
+		display: inline-flex;
+		flex: none;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-small);
+		overflow: hidden;
+	}
+	.view-switch button {
+		padding: 0.25rem 0.65rem;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		font: 700 0.8rem var(--body);
+		color: var(--ink-soft);
+	}
+	.view-switch button + button {
+		border-left: 1px solid var(--rule);
+	}
+	.view-switch button.on {
+		background: var(--brand-soft);
+		color: var(--brand);
 	}
 	.section-heading {
 		display: flex;

@@ -603,6 +603,10 @@ export type DraftPick = {
 	player_positions: string[];
 	player_headshot: string;
 	competition: string;
+	/** For the draft's stats: the player's birth date, his year in college and his team. */
+	player_birth_date: string | null;
+	player_class: string;
+	player_team: string;
 };
 
 export type DraftState = {

@@ -394,9 +394,14 @@ select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current
        coalesce(p.full_name, '')::text    as player_name,
        coalesce(p.positions, '{}')::text[] as player_positions,
        coalesce(p.headshot_url, '')::text as player_headshot,
-       coalesce(l.competition, '')::text  as competition
+       coalesce(l.competition, '')::text  as competition,
+       -- For the draft's stats: how old he was, his year in college, his team.
+       p.birth_date                       as player_birth_date,
+       coalesce(p.class, '')::text        as player_class,
+       coalesce(t.abbrev, '')::text       as player_team
 from draft_picks k
 left join players p on p.id = k.player_id
+left join pro_teams t on t.id = p.pro_team_id
 left join leagues l on l.id = k.league_id
 where k.draft_id = $1
 order by k.position
@@ -419,6 +424,9 @@ type ListDraftPicksRow struct {
 	PlayerPositions     []string           `json:"player_positions"`
 	PlayerHeadshot      string             `json:"player_headshot"`
 	Competition         string             `json:"competition"`
+	PlayerBirthDate     pgtype.Date        `json:"player_birth_date"`
+	PlayerClass         string             `json:"player_class"`
+	PlayerTeam          string             `json:"player_team"`
 }
 
 func (q *Queries) ListDraftPicks(ctx context.Context, draftID pgtype.UUID) ([]ListDraftPicksRow, error) {
@@ -447,6 +455,9 @@ func (q *Queries) ListDraftPicks(ctx context.Context, draftID pgtype.UUID) ([]Li
 			&i.PlayerPositions,
 			&i.PlayerHeadshot,
 			&i.Competition,
+			&i.PlayerBirthDate,
+			&i.PlayerClass,
+			&i.PlayerTeam,
 		); err != nil {
 			return nil, err
 		}
