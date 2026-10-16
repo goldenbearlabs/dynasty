@@ -155,6 +155,7 @@ type LineupEntry struct {
 	SlotIndex   int32       `json:"slot_index"`
 	PlayerID    pgtype.UUID `json:"player_id"`
 	CountsFrom  pgtype.Date `json:"counts_from"`
+	CountsLast  bool        `json:"counts_last"`
 }
 
 type Matchup struct {

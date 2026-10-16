@@ -106,12 +106,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, registry competition.Registry,
 		if err != nil {
 			return err
 		}
-		rank, err := fillRosters(ctx, q, league, rules, franchises)
-		if err != nil {
+		if err := fillRosters(ctx, q, league, rules, franchises); err != nil {
 			return fmt.Errorf("%s rosters: %w", c.Name, err)
 		}
 		for _, f := range franchises {
-			if err := setLineup(ctx, lineups, league, rules, f.ID, rank, today); err != nil {
+			if err := lineups.AutoSet(ctx, league, f.ID, today); err != nil {
 				log.Warn("seed lineup", "league", c.Name, "franchise", f.Name, "err", err)
 			}
 		}
@@ -139,16 +138,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, registry competition.Registry,
 
 // fillRosters hands out a sport's best players in snake order: first one
 // for each starting slot, so every lineup can be filled, then the best left
-// until each main roster is full. It returns each player's place in the
-// ranking, best first.
-func fillRosters(ctx context.Context, q *db.Queries, league db.League, rules settings.League, franchises []db.Franchise) (map[pgtype.UUID]int, error) {
+// until each main roster is full.
+func fillRosters(ctx context.Context, q *db.Queries, league db.League, rules settings.League, franchises []db.Franchise) error {
 	ranked, err := q.ListRankedPlayers(ctx, db.ListRankedPlayersParams{Competition: league.Competition, PageSize: 5000})
 	if err != nil {
-		return nil, err
-	}
-	rank := map[pgtype.UUID]int{}
-	for i, p := range ranked {
-		rank[p.ID] = i
+		return err
 	}
 	taken := map[pgtype.UUID]bool{}
 	held := map[pgtype.UUID]int{} // franchise -> players
@@ -179,7 +173,7 @@ func fillRosters(ctx context.Context, q *db.Queries, league db.League, rules set
 				if err := give(f, func(p db.ListRankedPlayersRow) bool {
 					return rules.CanStart(league.Competition, p.Conference) && lineup.Fits(p.Positions, slot)
 				}); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -190,7 +184,7 @@ func fillRosters(ctx context.Context, q *db.Queries, league db.League, rules set
 			if held[f.ID] < rules.Roster.Main {
 				full = false
 				if err := give(f, func(db.ListRankedPlayersRow) bool { return true }); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -198,39 +192,7 @@ func fillRosters(ctx context.Context, q *db.Queries, league db.League, rules set
 			break // the pool ran dry
 		}
 	}
-	return rank, nil
-}
-
-// setLineup starts the best player who fits each slot, in slot order.
-func setLineup(ctx context.Context, lineups *lineup.Service, league db.League, rules settings.League, franchiseID pgtype.UUID, rank map[pgtype.UUID]int, day time.Time) error {
-	view, err := lineups.Get(ctx, league, franchiseID, day)
-	if err != nil {
-		return err
-	}
-	players := slices.SortedFunc(slices.Values(view.Players), func(a, b lineup.Player) int { return rank[a.PlayerID] - rank[b.PlayerID] })
-	started := map[pgtype.UUID]bool{}
-	var entries []lineup.Entry
-	for _, slot := range rules.Lineup.Slots {
-		for range slot.Count {
-			i := slices.IndexFunc(players, func(p lineup.Player) bool {
-				return !started[p.PlayerID] && p.StarterEligible && lineup.Fits(p.Positions, slot) && (slot.GamesPerWeek == 0 || gameLeft(p))
-			})
-			if i < 0 {
-				continue
-			}
-			started[players[i].PlayerID] = true
-			entries = append(entries, lineup.Entry{Slot: slot.Name, PlayerID: players[i].PlayerID})
-		}
-	}
-	return lineups.Set(ctx, league, franchiseID, day, entries, true)
-}
-
-// gameLeft reports whether a player can still be given a game to count
-// this week: he has one to come, or has not played yet.
-func gameLeft(p lineup.Player) bool {
-	now := time.Now()
-	return !slices.ContainsFunc(p.Games, func(g lineup.Game) bool { return !g.StartsAt.After(now) }) ||
-		slices.ContainsFunc(p.Games, func(g lineup.Game) bool { return g.StartsAt.After(now) })
+	return nil
 }
 
 // seasonDates is the real season under way, from the start of this week so

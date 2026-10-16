@@ -5,7 +5,7 @@
 	// at a time and shows that day's game; a weekly one shows the week's
 	// games, and where a slot counts only some of them the manager taps the
 	// one that counts.
-	import { getLineup, setLineup, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
+	import { autoSetLineup, getLineup, setLineup, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import { columnValue, statColumns, statValue, sumStats, widestStats, type StatColumn } from '#lib/statLine.ts';
 	import Empty from '#lib/ui/Empty.svelte';
@@ -36,8 +36,11 @@
 	const seatSlots = $derived(lineup?.slots.flatMap((s) => Array.from({ length: s.count }, () => s)) ?? []);
 	let seats = $state<(string | null)[]>([]);
 	// The game picked for each player in a slot that counts only some games a
-	// week, as the day it is played; '' leaves it to his next game.
+	// week: AUTO counts his last game of the week with a stat, a day counts
+	// the game played then, and '' (from before auto) his next game.
+	const AUTO = 'auto';
 	let picked = $state<Record<string, string>>({});
+	const savedPick = (p: LineupPlayer) => (p.counts_last ? AUTO : p.counts_from);
 
 	function show(loaded: Lineup) {
 		lineup = loaded;
@@ -48,17 +51,17 @@
 			if (i >= 0) next[i] = p.player_id;
 		}
 		seats = next;
-		picked = Object.fromEntries(loaded.players.map((p) => [p.player_id, p.counts_from]));
+		picked = Object.fromEntries(loaded.players.map((p) => [p.player_id, savedPick(p)]));
 		moving = undefined;
 	}
 	$effect(() => {
 		getLineup(league.id, franchise.id, day).then(show, toast.error);
 	});
-	// Points and locks follow the games, unless there are unsaved changes to keep.
+	// Points and locks follow the games, unless a change is still being saved.
 	onScoresChange(
 		() => [sport],
 		() => {
-			if (lineup && !dirty) getLineup(league.id, franchise.id, lineup.day).then(show, toast.error);
+			if (lineup && !dirty && !saving) getLineup(league.id, franchise.id, lineup.day).then(show, toast.error);
 		}
 	);
 
@@ -78,7 +81,7 @@
 			.toSorted((a, b) => kinds.indexOf(kindOf(a.positions)) - kinds.indexOf(kindOf(b.positions)) || a.full_name.localeCompare(b.full_name))
 	);
 	const dirty = $derived(
-		lineup?.players.some((p) => slotOf(p.player_id) !== p.slot || picked[p.player_id] !== p.counts_from) ?? false
+		lineup?.players.some((p) => slotOf(p.player_id) !== p.slot || picked[p.player_id] !== savedPick(p)) ?? false
 	);
 	const weekly = $derived(lineup !== undefined && lineup.day !== lineup.last_day);
 	const limited = $derived(lineup?.slots.filter((s) => s.games_per_week > 0) ?? []);
@@ -110,8 +113,20 @@
 			const occupant = seats[target];
 			seats[target] = id;
 			if (from >= 0) seats[from] = occupant && fits(byId.get(occupant)!, seatSlots[from]) ? occupant : null;
+			// Anyone landing in a slot that counts some games starts on auto.
+			for (const [player, seat] of [[id, target], [occupant, from]] as const) {
+				if (player && seat >= 0 && seats[seat] === player && seatSlots[seat].games_per_week > 0 && byId.get(player)?.slot !== seatSlots[seat].name) {
+					picked[player] = AUTO;
+				}
+			}
 		}
 		moving = undefined;
+		queueSave();
+	}
+	// Counts one game for a player, or goes back to auto.
+	function pick(id: string, choice: string) {
+		picked[id] = choice;
+		queueSave();
 	}
 	const toggleMove = (id: string) => (moving = moving === id ? undefined : id);
 	function dragStart(e: DragEvent, id: string) {
@@ -139,10 +154,18 @@
 	function counts(player: LineupPlayer, game: LineupGame): boolean {
 		const n = limit(player);
 		if (n === 0) return true;
-		const unsaved = slotOf(player.player_id) !== player.slot || picked[player.player_id] !== player.counts_from;
+		const choice = picked[player.player_id];
+		const unsaved = slotOf(player.player_id) !== player.slot || choice !== savedPick(player);
 		if (!unsaved) return game.counts;
-		const from = picked[player.player_id] || player.games.find((g) => !begun(g))?.day || '';
+		if (choice === AUTO) return false; // nothing played yet counts for a player just put on auto
+		const from = choice || player.games.find((g) => !begun(g))?.day || '';
 		return player.games.filter((g) => g.day >= from).slice(0, n).includes(game);
+	}
+	// On auto, the game that will count if he plays in it: his last still to come.
+	function projected(player: LineupPlayer, game: LineupGame): boolean {
+		if (limit(player) === 0 || picked[player.player_id] !== AUTO || begun(game)) return false;
+		const ahead = player.games.filter((g) => !begun(g) && g.day >= (slotOf(player.player_id) === player.slot ? player.counts_from : ''));
+		return ahead.at(-1) === game;
 	}
 	// Points from the games that count, as the lineup is now arranged.
 	const total = (player: LineupPlayer) => player.games.reduce((n, g) => n + (counts(player, g) ? g.points : 0), 0);
@@ -191,19 +214,65 @@
 	const weekday = (d: string) => new Date(d + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
 	const dayNumber = (d: string) => new Date(d + 'T12:00').getDate();
 
+	// ---- saving ----
+	// Every change saves itself a moment later. A change made while one is
+	// saving is saved straight after it; a refusal puts the lineup back.
+	let saving = $state(false);
+	let saved = $state(false); // shows "Saved" for a moment
+	let again = false;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	function queueSave() {
+		clearTimeout(timer);
+		timer = setTimeout(save, 300);
+	}
 	async function save() {
-		if (!lineup) return;
+		if (!lineup || !dirty) return;
+		if (saving) {
+			again = true;
+			return;
+		}
+		saving = true;
+		const shown = lineup.day;
 		try {
 			await setLineup(league.id, {
-				day: lineup.day,
-				entries: seats.flatMap((id, i) => (id ? [{ slot: seatSlots[i].name, player_id: id, counts_from: picked[id] ?? '' }] : [])),
+				day: shown,
+				entries: seats.flatMap((id, i) =>
+					id ? [{ slot: seatSlots[i].name, player_id: id, counts_from: picked[id] === AUTO ? '' : (picked[id] ?? ''), auto: picked[id] === AUTO }] : []
+				),
 				franchise_id: franchise.id,
 				force: override
 			});
-			show(await getLineup(league.id, franchise.id, lineup.day));
-			toast.good(weekly ? 'Lineup saved for the week.' : 'Lineup saved. It carries forward until you change it.');
+			if (!again) {
+				show(await getLineup(league.id, franchise.id, shown));
+				saved = true;
+				setTimeout(() => (saved = false), 1800);
+			}
 		} catch (e) {
 			toast.error(e);
+			again = false;
+			show(await getLineup(league.id, franchise.id, shown).catch(() => lineup!));
+		} finally {
+			saving = false;
+			if (again) {
+				again = false;
+				save();
+			}
+		}
+	}
+
+	// Sets the best lineup for every day left this week, or for the week.
+	let autoSetting = $state(false);
+	async function autoSet() {
+		if (!lineup) return;
+		autoSetting = true;
+		try {
+			await autoSetLineup(league.id, { day: lineup.day, franchise_id: franchise.id });
+			show(await getLineup(league.id, franchise.id, lineup.day));
+			toast.good(weekly ? 'Lineup set for the week.' : 'Lineup set for every day left this week.');
+		} catch (e) {
+			toast.error(e);
+		} finally {
+			autoSetting = false;
 		}
 	}
 </script>
@@ -223,14 +292,33 @@
 		<!-- The week's games as the opponents' logos, each with its day and time
 		     beneath: the one that counts is filled in; tap another to count it instead. -->
 		<div class="tiles">
+			{#if starting && canEdit && !frozen(player)}
+				<button
+					class="tile auto"
+					class:on={picked[player.player_id] === AUTO}
+					aria-pressed={picked[player.player_id] === AUTO}
+					title="Count his last game of the week that he plays in"
+					onclick={() => pick(player.player_id, AUTO)}
+				>
+					<span class="logo"><strong>AUTO</strong></span><span class="day">Last</span><span class="time">he plays</span>
+				</button>
+			{/if}
 			{#each player.games as game (game.starts_at)}
 				{@const on = starting && counts(player, game)}
+				{@const next = starting && !on && projected(player, game)}
 				{#if starting && pickable(player, game)}
-					<button class="tile" class:on aria-pressed={on} title="Count {weekday(game.day)} {versus(game)} for {player.full_name}" onclick={() => (picked[player.player_id] = game.day)}>
+					<button
+						class="tile"
+						class:on
+						class:next
+						aria-pressed={on}
+						title={next ? `Counts if he plays: ${weekday(game.day)} ${versus(game)}` : `Count ${weekday(game.day)} ${versus(game)} for ${player.full_name}`}
+						onclick={() => pick(player.player_id, game.day)}
+					>
 						{@render tile(game)}
 					</button>
 				{:else}
-					<span class="tile" class:on class:done={played(game)} title="{weekday(game.day)} {versus(game)} · {when(game)}">
+					<span class="tile" class:on class:next class:done={played(game)} title="{weekday(game.day)} {versus(game)} · {when(game)}">
 						{@render tile(game)}
 					</span>
 				{/if}
@@ -324,12 +412,20 @@
 				<button class="quiet step" aria-label={weekly ? 'Next week' : 'Next day'} onclick={() => (day = shiftDay(lineup!.last_day, 1))}><Icon name="right" size={16} /></button>
 				<button class="quiet small" onclick={() => (day = undefined)}>{weekly ? 'This week' : 'Today'}</button>
 			</nav>
-			{#if commissioner}
-				<label class="check small-text">
-					<input type="checkbox" bind:checked={override} />
-					<span class="pill gold">Commissioner</span> Override locks
-				</label>
-			{/if}
+			<div class="row actions">
+				{#if saving}<span class="muted small-text">Saving…</span>{:else if saved}<span class="saved small-text"><Icon name="check" size={14} /> Saved</span>{/if}
+				{#if canEdit && !lineup.locked && lineup.players.length > 0}
+					<button class="small" disabled={autoSetting || saving} title="Start the best players you have, keeping anyone who has locked" onclick={autoSet}>
+						<Icon name="refresh" size={14} /> {autoSetting ? 'Setting…' : weekly ? 'Auto-set this week' : 'Auto-set rest of week'}
+					</button>
+				{/if}
+				{#if commissioner}
+					<label class="check small-text">
+						<input type="checkbox" bind:checked={override} />
+						<span class="pill gold">Commissioner</span> Override locks
+					</label>
+				{/if}
+			</div>
 		</div>
 
 		{#if lineup.locked}<p class="card note small-text"><Icon name="lock" size={14} /> {lineup.locked}</p>{/if}
@@ -342,12 +438,13 @@
 			{#if limited.length > 0 && canEdit}
 				<p class="muted small-text">
 					{limited.length === lineup.slots.length ? 'Each starter' : `Each ${limited.map((s) => s.name).join(' and ')}`}
-					scores in {limited[0].games_per_week === 1 ? 'one game' : `${limited[0].games_per_week} games`} a week. Tap the game that counts; it locks when that game starts.
+					scores in {limited[0].games_per_week === 1 ? 'one game' : `${limited[0].games_per_week} games`} a week. On <strong>Auto</strong> it is his last game of the
+					week that he plays in, so a game he sits out falls back to the one before. Tap a game to count that one instead. Changes save as you make them.
 				</p>
 			{:else if canEdit && !lineup.locked}
 				<p class="muted small-text">
 					{weekly ? 'Each player locks when his game starts, and stays put for the rest of the week.' : 'Each player locks when his game starts.'}
-					Drag players between slots and the bench, or tap one and then tap where he goes.
+					Drag players between slots and the bench, or tap one and then tap where he goes. Changes save as you make them.
 				</p>
 			{/if}
 
@@ -425,13 +522,6 @@
 				{/if}
 			</section>
 
-			{#if canEdit && dirty}
-				<div class="savebar">
-					<span class="small-text">Unsaved lineup changes</span>
-					<button class="quiet small" onclick={() => show(lineup!)}>Discard</button>
-					<button class="primary small" onclick={save}>Save lineup</button>
-				</div>
-			{/if}
 		{/if}
 	{/if}
 </div>
@@ -497,7 +587,7 @@
 	/* Slot, player, game, a column per stat, fantasy points: every row shares
 	   these, so the numbers line up down the table. */
 	.stack {
-		--row: 3rem minmax(11rem, 1.3fr) minmax(6.5rem, 1fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
+		--row: 3rem minmax(11rem, 1fr) minmax(6.5rem, 1.5fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
 	}
 	.head {
 		display: grid;
@@ -755,8 +845,8 @@
 		display: grid;
 		justify-items: center;
 		gap: 0.05rem;
-		min-width: 4.4rem;
-		padding: 0.35rem 0.4rem 0.3rem;
+		min-width: 4rem;
+		padding: 0.35rem 0.3rem 0.3rem;
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-small);
 		background: var(--surface);
@@ -794,6 +884,18 @@
 	.tile.on .time {
 		color: var(--ink);
 	}
+	/* On auto, the game that counts if he plays in it. */
+	.tile.next {
+		border-style: dashed;
+		border-color: var(--sport, var(--brand));
+	}
+	.tile.auto {
+		min-width: 3.4rem;
+	}
+	.tile.auto .logo strong {
+		font: 700 0.72rem var(--mono);
+		letter-spacing: 0.06em;
+	}
 	.pts {
 		text-align: right;
 		font: 700 0.9rem var(--mono);
@@ -805,22 +907,14 @@
 	.pad {
 		padding: 0.6rem 0.9rem;
 	}
-	.savebar {
-		position: sticky;
-		bottom: 0.75rem;
-		z-index: 2;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		justify-self: end;
-		padding: 0.45rem 0.5rem 0.45rem 0.9rem;
-		border: 1px solid var(--rule-strong);
-		border-radius: var(--radius);
-		background: var(--surface);
-		box-shadow: var(--shadow);
+	.actions {
+		gap: 0.5rem 0.8rem;
 	}
-	.savebar span {
-		margin-right: 0.4rem;
+	.saved {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		color: var(--good);
 	}
 	@media (max-width: 640px) {
 		.head {
@@ -884,9 +978,6 @@
 		}
 		.empty {
 			grid-column: span 2;
-		}
-		.savebar {
-			bottom: 4.5rem; /* above the tab bar */
 		}
 	}
 </style>

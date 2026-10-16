@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("POST /api/leagues/{id}/roster/{action}", s.member(s.changeRoster))
 	mux.HandleFunc("PUT /api/leagues/{id}/lineup", s.member(s.setLineup))
+	mux.HandleFunc("POST /api/leagues/{id}/lineup/auto", s.member(s.autoSetLineup))
 	mux.HandleFunc("POST /api/leagues/{id}/waivers/claims", s.member(s.claimWaiver))
 	mux.HandleFunc("DELETE /api/waivers/claims/{id}", s.member(s.cancelWaiverClaim))
 	mux.HandleFunc("POST /api/trades", s.member(s.proposeTrade))

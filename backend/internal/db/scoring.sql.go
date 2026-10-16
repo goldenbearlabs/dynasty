@@ -27,8 +27,8 @@ func (q *Queries) CompleteSeason(ctx context.Context, arg CompleteSeasonParams) 
 }
 
 const copyLineupEntries = `-- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id, e.counts_from
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id, e.counts_from, e.counts_last
 from lineup_entries e
 where e.league_id = $2 and e.franchise_id = $3 and e.effective_on = $4
 `
@@ -307,8 +307,8 @@ func (q *Queries) InsertLineup(ctx context.Context, arg InsertLineupParams) erro
 }
 
 const insertLineupEntry = `-- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-values ($1, $2, $3, $4, $5, $6, $7)
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+values ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type InsertLineupEntryParams struct {
@@ -319,6 +319,7 @@ type InsertLineupEntryParams struct {
 	SlotIndex   int32       `json:"slot_index"`
 	PlayerID    pgtype.UUID `json:"player_id"`
 	CountsFrom  pgtype.Date `json:"counts_from"`
+	CountsLast  bool        `json:"counts_last"`
 }
 
 func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryParams) error {
@@ -330,6 +331,7 @@ func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryPa
 		arg.SlotIndex,
 		arg.PlayerID,
 		arg.CountsFrom,
+		arg.CountsLast,
 	)
 	return err
 }
@@ -709,7 +711,7 @@ func (q *Queries) ListGamesOnDay(ctx context.Context, arg ListGamesOnDayParams) 
 }
 
 const listLineupEntries = `-- name: ListLineupEntries :many
-select slot, slot_index, player_id, counts_from from lineup_entries
+select slot, slot_index, player_id, counts_from, counts_last from lineup_entries
 where league_id = $1 and franchise_id = $2 and effective_on = $3
 order by slot, slot_index
 `
@@ -725,6 +727,7 @@ type ListLineupEntriesRow struct {
 	SlotIndex  int32       `json:"slot_index"`
 	PlayerID   pgtype.UUID `json:"player_id"`
 	CountsFrom pgtype.Date `json:"counts_from"`
+	CountsLast bool        `json:"counts_last"`
 }
 
 func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesParams) ([]ListLineupEntriesRow, error) {
@@ -741,6 +744,7 @@ func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesPa
 			&i.SlotIndex,
 			&i.PlayerID,
 			&i.CountsFrom,
+			&i.CountsLast,
 		); err != nil {
 			return nil, err
 		}
@@ -770,6 +774,12 @@ with days as (
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
          row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7
                             order by g.starts_at, g.id) as nth,
+         e.counts_last,
+         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
+         -- Counting back from his last game of the week, among those he recorded a stat in.
+         row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7,
+                                         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
+                            order by g.starts_at desc, g.id desc) as nth_last,
          coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
          -- A start, for the cap: he started the game, and if he is a reliever
          -- he went more than an inning, so an opener does not use one up.
@@ -807,7 +817,9 @@ left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id
 cross join lateral jsonb_each_text(st.stats) s
 join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
 where st.day >= $1::date
-  and (st.games_per_week = 0 or st.nth <= st.games_per_week)
+  and (st.games_per_week = 0
+    or (not st.counts_last and st.nth <= st.games_per_week)
+    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week))
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc
@@ -835,7 +847,9 @@ type ListLineupPointsRow struct {
 // each day's stat lines for whoever was in the lineup in force that day,
 // weighted by the league's scoring rules. A slot may count only some of a
 // player's games each week (games_per_week): those are his first so many on
-// or after the day his manager picked. A league may also cap a team's
+// or after the day his manager picked, or, left on auto (counts_last), his
+// last so many that week in which he recorded a stat, so a game he sat out
+// gives way to the one before it. A league may also cap a team's
 // pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 // in the order they were played, score nothing. Weeks are counted from
 // week_start, the first day of the week from_day falls in, so a span that

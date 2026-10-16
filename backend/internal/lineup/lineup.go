@@ -34,6 +34,9 @@ type Entry struct {
 	// some games a week: the day of that game. Empty leaves it as it was,
 	// or takes the player's next game.
 	CountsFrom string `json:"counts_from"`
+	// Auto, in such a slot, counts his last game of the week in which he
+	// recorded a stat, in place of a game picked ahead.
+	Auto bool `json:"auto"`
 }
 
 // View is a franchise's lineup for one day or week: the slots to fill, and
@@ -77,6 +80,7 @@ type Player struct {
 	TeamAbbrev      string      `json:"team_abbrev"`
 	Slot            string      `json:"slot"`        // empty on the bench
 	CountsFrom      string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
+	CountsLast      bool        `json:"counts_last"` // in such a slot, on auto: his last games with a stat count
 	Locked          bool        `json:"locked"`
 	// Points over the day or week, whether he started or not. For a starter
 	// in a slot that counts only some games, only the games that count.
@@ -131,6 +135,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 	// Who is starting, from the lineup in force.
 	starting := map[pgtype.UUID]string{}
 	countsFrom := map[pgtype.UUID]string{}
+	countsLast := map[pgtype.UUID]bool{}
 	inForce, err := q.LineupInForce(ctx, db.LineupInForceParams{LeagueID: league.ID, FranchiseID: franchiseID, Day: sportsday.Date(first)})
 	if err != nil {
 		return View{}, err
@@ -142,6 +147,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		}
 		for _, e := range entries {
 			starting[e.PlayerID] = e.Slot
+			countsLast[e.PlayerID] = e.CountsLast
 			if e.CountsFrom.Valid {
 				countsFrom[e.PlayerID] = e.CountsFrom.Time.Format(time.DateOnly)
 			}
@@ -159,7 +165,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			view.Players = append(view.Players, Player{
 				PlayerID: r.PlayerID, FullName: r.FullName, Nickname: r.Nickname, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
 				StarterEligible: rules.CanStart(league.Competition, r.Conference),
-				TeamAbbrev:      r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], Games: []Game{},
+				TeamAbbrev:      r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], CountsLast: countsLast[r.PlayerID], Games: []Game{},
 			})
 		}
 		if !r.GameID.Valid {
@@ -218,9 +224,21 @@ func gamesCounted(rules settings.Lineup, slot string) int {
 func settle(p *Player, rules settings.Lineup, now time.Time) {
 	limit := gamesCounted(rules, p.Slot)
 	counted := 0
+	if limit > 0 && p.CountsLast {
+		// On auto, his last games of the week in which he recorded a stat.
+		for i := range p.Games {
+			p.Games[i].Counts = false
+		}
+		for i := len(p.Games) - 1; i >= 0 && counted < limit; i-- {
+			if g := &p.Games[i]; g.Day >= p.CountsFrom && recorded(g.Stats) {
+				g.Counts = true
+				counted++
+			}
+		}
+	}
 	for i := range p.Games {
 		g := &p.Games[i]
-		if limit > 0 {
+		if limit > 0 && !p.CountsLast {
 			g.Counts = g.Day >= p.CountsFrom && counted < limit
 			if g.Counts {
 				counted++
@@ -235,6 +253,9 @@ func settle(p *Player, rules settings.Lineup, now time.Time) {
 	}
 	started := func(g Game) bool { return !g.StartsAt.After(now) }
 	switch {
+	case limit > 0 && p.CountsLast:
+		// Any game of his may yet be the one that counts, so the first to begin holds him.
+		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Day >= p.CountsFrom && started(g) })
 	case limit > 0:
 		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && started(g) })
 	case p.Slot == "" && slices.ContainsFunc(rules.Slots, func(s settings.Slot) bool { return s.GamesPerWeek > 0 && Fits(p.Positions, s) }):
@@ -244,19 +265,35 @@ func settle(p *Player, rules settings.Lineup, now time.Time) {
 	}
 }
 
+// recorded reports whether a stat line has any stat in it: whether he
+// played, as far as the box score says.
+func recorded(stats json.RawMessage) bool {
+	var line map[string]float64
+	json.Unmarshal(stats, &line)
+	for _, n := range line {
+		if n != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // pick decides the day a starter's counted games begin in a slot that
 // counts only some. Keeping a player where he was keeps his pick; a new
-// pick must be for a game that has not started.
+// pick must be for a game that has not started. On auto, the games he has
+// already played this week count only if he was there for them: a player
+// coming in counts from his next game.
 func pick(p Player, e Entry, first, last string, now time.Time, force bool) (string, error) {
-	if p.Slot == e.Slot && (e.CountsFrom == "" || e.CountsFrom == p.CountsFrom) {
+	if p.Slot == e.Slot && e.Auto == p.CountsLast && (e.Auto || e.CountsFrom == "" || e.CountsFrom == p.CountsFrom) {
 		return p.CountsFrom, nil
 	}
 	if p.Locked && !force {
 		return "", problem.New("%s is locked: his game has started.", p.FullName)
 	}
 	day := e.CountsFrom
-	if day == "" {
-		// Nothing chosen: his next game, so one already played is not counted after the fact.
+	if e.Auto || day == "" {
+		// Auto, or nothing chosen: from his next game, so one already played
+		// is not counted after the fact.
 		if !slices.ContainsFunc(p.Games, func(g Game) bool { return !g.StartsAt.After(now) }) {
 			return "", nil
 		}
@@ -300,6 +337,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		wanted := map[pgtype.UUID]string{}
 		filled := map[string]int{}
 		counts := map[pgtype.UUID]pgtype.Date{}
+		onAuto := map[pgtype.UUID]bool{}
 		now := time.Now()
 		for _, e := range entries {
 			i := slices.IndexFunc(current.Players, func(p Player) bool { return p.PlayerID == e.PlayerID })
@@ -325,6 +363,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 			wanted[e.PlayerID] = e.Slot
 			filled[slot.Name]++
 			if slot.GamesPerWeek > 0 {
+				onAuto[e.PlayerID] = e.Auto
 				day, err := pick(player, e, current.Day, current.LastDay, now, force)
 				if err != nil {
 					return err
@@ -358,7 +397,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		for _, e := range entries {
 			if err := q.InsertLineupEntry(ctx, db.InsertLineupEntryParams{
 				LeagueID: league.ID, FranchiseID: franchiseID, EffectiveOn: sportsday.Date(first),
-				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID, CountsFrom: counts[e.PlayerID],
+				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID, CountsFrom: counts[e.PlayerID], CountsLast: onAuto[e.PlayerID],
 			}); err != nil {
 				return err
 			}
@@ -366,6 +405,105 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		}
 		return nil
 	})
+}
+
+// AutoSet sets the best lineup it can for each day still to come in the
+// week of day, or for the week itself in a weekly league. A player who has
+// locked stays where he is. Every other place goes to whoever fits it,
+// those with a game still to play first, then by fantasy points in the
+// sport's last season. In a slot that counts only some games, every
+// starter who is free to move is put on auto, so his last game of the week
+// that he plays in counts.
+func (s *Service) AutoSet(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time) error {
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return err
+	}
+	ranked, err := db.New(s.pool).ListRankedPlayers(ctx, db.ListRankedPlayersParams{Competition: league.Competition, PageSize: 5000})
+	if err != nil {
+		return err
+	}
+	rank := map[pgtype.UUID]int{}
+	for i, p := range ranked {
+		rank[p.ID] = i + 1
+	}
+	from, last := span(rules.Lineup, day)
+	if rules.Lineup.Period != settings.PeriodWeek {
+		// Every day left in the week, but none already gone.
+		from, last = day, sportsday.WeekStart(day, rules.Lineup.WeekStart).AddDate(0, 0, 6)
+		if today := sportsday.Today(); from.Before(today) {
+			from = today
+		}
+	}
+	for d := from; !d.After(last); d = d.AddDate(0, 0, 1) {
+		view, err := s.Get(ctx, league, franchiseID, d)
+		if err != nil {
+			return err
+		}
+		if view.Locked == "" {
+			if err := s.Set(ctx, league, franchiseID, d, best(view, rank, time.Now()), false); err != nil {
+				return err
+			}
+		}
+		if rules.Lineup.Period == settings.PeriodWeek {
+			break
+		}
+	}
+	return nil
+}
+
+// best picks a lineup from a view: see AutoSet.
+func best(view View, rank map[pgtype.UUID]int, now time.Time) []Entry {
+	ahead := func(p Player) bool {
+		return slices.ContainsFunc(p.Games, func(g Game) bool { return g.StartsAt.After(now) })
+	}
+	order := func(p Player) int {
+		r, ok := rank[p.PlayerID]
+		if !ok {
+			r = len(rank) + 1
+		}
+		if !ahead(p) {
+			r += len(rank) + 2 // a game to come first, then everyone else
+		}
+		return r
+	}
+	players := slices.SortedFunc(slices.Values(view.Players), func(a, b Player) int { return order(a) - order(b) })
+
+	var entries []Entry
+	taken := map[pgtype.UUID]bool{}
+	filled := map[string]int{}
+	keep := func(p Player) Entry {
+		return Entry{Slot: p.Slot, PlayerID: p.PlayerID, CountsFrom: p.CountsFrom, Auto: p.CountsLast}
+	}
+	for _, p := range players {
+		if p.Locked && p.Slot != "" {
+			entries = append(entries, keep(p))
+			taken[p.PlayerID] = true
+			filled[p.Slot]++
+		}
+	}
+	for _, slot := range view.Slots {
+		for filled[slot.Name] < slot.Count {
+			i := slices.IndexFunc(players, func(p Player) bool {
+				switch {
+				case taken[p.PlayerID] || p.Locked || !p.StarterEligible || !Fits(p.Positions, slot):
+					return false
+				case slot.GamesPerWeek > 0 && p.Slot != slot.Name:
+					// Coming into a slot that counts some games: he needs one still to play.
+					return ahead(p)
+				}
+				return true
+			})
+			if i < 0 {
+				break
+			}
+			p := players[i]
+			taken[p.PlayerID] = true
+			filled[slot.Name]++
+			entries = append(entries, Entry{Slot: slot.Name, PlayerID: p.PlayerID, Auto: slot.GamesPerWeek > 0})
+		}
+	}
+	return entries
 }
 
 // Fits reports whether a player with these positions may fill the slot.

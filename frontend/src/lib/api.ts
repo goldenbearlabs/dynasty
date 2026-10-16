@@ -499,6 +499,8 @@ export type LineupPlayer = {
 	slot: string; // empty on the bench
 	/** The day his counted games begin, in a slot that counts only some; empty for his first game. */
 	counts_from: string;
+	/** In a slot that counts only some games, on auto: his last games of the week with a stat count. */
+	counts_last: boolean;
 	locked: boolean;
 	points: number;
 	games: LineupGame[];
@@ -517,7 +519,8 @@ export type Lineup = {
 
 export type LineupChange = {
 	day: string;
-	entries: { slot: string; player_id: string; counts_from?: string }[];
+	/** auto: in a slot that counts only some games, count his last games with a stat, not a picked one. */
+	entries: { slot: string; player_id: string; counts_from?: string; auto?: boolean }[];
 	franchise_id?: string;
 	force?: boolean;
 };
@@ -880,6 +883,9 @@ export const reopenSeason = (id: string) => request<void>('POST', `/admin/season
 export const getLineup = (leagueId: string, franchiseId: string, day?: string) =>
 	request<Lineup>('GET', `/leagues/${leagueId}/lineup${query({ franchise: franchiseId, day })}`);
 export const setLineup = (leagueId: string, change: LineupChange) => request<void>('PUT', `/leagues/${leagueId}/lineup`, change);
+/** Sets the best lineup for every day left in the week of day, or for that week in a weekly league. */
+export const autoSetLineup = (leagueId: string, change: { day: string; franchise_id?: string }) =>
+	request<void>('POST', `/leagues/${leagueId}/lineup/auto`, change);
 
 export const getScores = (competition: string, day?: string) =>
 	request<Scoreboard>('GET', `/scores/${competition}${query({ day })}`);
