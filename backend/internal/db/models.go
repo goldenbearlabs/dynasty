@@ -19,6 +19,10 @@ type CacheRevision struct {
 	PublicTransaction   int64       `json:"public_transaction"`
 }
 
+type CustomSchedule struct {
+	SeasonID pgtype.UUID `json:"season_id"`
+}
+
 type Draft struct {
 	ID               pgtype.UUID        `json:"id"`
 	DynastyID        pgtype.UUID        `json:"dynasty_id"`
@@ -272,13 +276,20 @@ type RosterEntry struct {
 }
 
 type Season struct {
-	ID                  pgtype.UUID `json:"id"`
-	LeagueID            pgtype.UUID `json:"league_id"`
-	Year                int32       `json:"year"`
-	StartsOn            pgtype.Date `json:"starts_on"`
-	EndsOn              pgtype.Date `json:"ends_on"`
-	Status              string      `json:"status"`
-	ChampionFranchiseID pgtype.UUID `json:"champion_franchise_id"`
+	ID                  pgtype.UUID        `json:"id"`
+	LeagueID            pgtype.UUID        `json:"league_id"`
+	Year                int32              `json:"year"`
+	StartsOn            pgtype.Date        `json:"starts_on"`
+	EndsOn              pgtype.Date        `json:"ends_on"`
+	Status              string             `json:"status"`
+	ChampionFranchiseID pgtype.UUID        `json:"champion_franchise_id"`
+	RosterDeadline      pgtype.Timestamptz `json:"roster_deadline"`
+}
+
+type SeasonRoster struct {
+	SeasonID    pgtype.UUID        `json:"season_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	SetAt       pgtype.Timestamptz `json:"set_at"`
 }
 
 type Secret struct {

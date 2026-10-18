@@ -32,6 +32,9 @@ func playoffRounds(teams int) int {
 // league's matchup rules, or after adding a franchise.
 func (s *Service) GenerateSchedule(ctx context.Context, seasonID pgtype.UUID) error {
 	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		if err := q.LockSchedule(ctx, seasonID); err != nil {
+			return err
+		}
 		season, err := q.GetSeason(ctx, seasonID)
 		if err != nil {
 			return err
@@ -41,6 +44,9 @@ func (s *Service) GenerateSchedule(ctx context.Context, seasonID pgtype.UUID) er
 		}
 		league, err := q.GetLeague(ctx, season.LeagueID)
 		if err != nil {
+			return err
+		}
+		if err := q.SetCustomSchedule(ctx, season.ID, false); err != nil {
 			return err
 		}
 		return schedule(ctx, q, league, season)
@@ -86,7 +92,7 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 	}
 
 	length := rules.Format.MatchupDays
-	spans := periodSpans(start, season.EndsOn.Time, rules)
+	spans := leaguePeriodSpans(start, season.EndsOn.Time, rules, league.Competition)
 	remaining := len(spans)
 	rounds := playoffRounds(min(rules.Format.PlayoffTeams, len(franchises)))
 	regular := remaining - rounds
@@ -187,29 +193,9 @@ func (s *Service) SetMatchups(ctx context.Context, periodID pgtype.UUID, pairing
 		if err != nil {
 			return err
 		}
-		if len(pairings) == 0 {
-			return problem.New("Set at least one matchup, or go back to the automatic ones.")
-		}
-		playing := map[pgtype.UUID]bool{}
-		pairs := make([][2]pgtype.UUID, len(pairings))
-		for i, p := range pairings {
-			if !p.Home.Valid {
-				return problem.New("Every matchup needs a home side.")
-			}
-			for _, id := range []pgtype.UUID{p.Home, p.Away} {
-				if !id.Valid {
-					continue // a bye
-				}
-				at := slices.IndexFunc(franchises, func(f db.Franchise) bool { return f.ID == id })
-				if at < 0 {
-					return problem.New("Every side must be a franchise in this league.")
-				}
-				if playing[id] {
-					return problem.New("%s is in more than one matchup.", franchises[at].Name)
-				}
-				playing[id] = true
-			}
-			pairs[i] = [2]pgtype.UUID{p.Home, p.Away}
+		pairs, err := validatePairings(pairings, franchises)
+		if err != nil {
+			return err
 		}
 		if err := q.DeleteMatchups(ctx, period.ID); err != nil {
 			return err
@@ -219,6 +205,34 @@ func (s *Service) SetMatchups(ctx context.Context, periodID pgtype.UUID, pairing
 		}
 		return pair(ctx, q, period.ID, pairs)
 	})
+}
+
+func validatePairings(pairings []Pairing, franchises []db.Franchise) ([][2]pgtype.UUID, error) {
+	if len(pairings) == 0 {
+		return nil, problem.New("Set at least one matchup, or go back to the automatic ones.")
+	}
+	playing := map[pgtype.UUID]bool{}
+	pairs := make([][2]pgtype.UUID, len(pairings))
+	for i, p := range pairings {
+		if !p.Home.Valid {
+			return nil, problem.New("Every matchup needs a home side.")
+		}
+		for _, id := range []pgtype.UUID{p.Home, p.Away} {
+			if !id.Valid {
+				continue // a bye
+			}
+			at := slices.IndexFunc(franchises, func(f db.Franchise) bool { return f.ID == id })
+			if at < 0 {
+				return nil, problem.New("Every side must be a franchise in this league.")
+			}
+			if playing[id] {
+				return nil, problem.New("%s is in more than one matchup.", franchises[at].Name)
+			}
+			playing[id] = true
+		}
+		pairs[i] = [2]pgtype.UUID{p.Home, p.Away}
+	}
+	return pairs, nil
 }
 
 // ResetMatchups hands a period back to the schedule: its place in the
@@ -275,6 +289,18 @@ func periodLeague(ctx context.Context, q *db.Queries, id pgtype.UUID) (period db
 	}
 	league, err = q.GetLeague(ctx, season.LeagueID)
 	return
+}
+
+// NHL matchups follow calendar weeks even though managers set daily lineups.
+// WeekStart defaults to Monday; an explicitly configured week start is honored.
+func leaguePeriodSpans(start, end time.Time, rules settings.League, competition string) [][2]time.Time {
+	if competition == "nhl" && rules.Format.MatchupDays == 7 {
+		rules.Lineup.Period = settings.PeriodWeek
+		if rules.Lineup.WeekStart == "" {
+			rules.Lineup.WeekStart = "monday"
+		}
+	}
+	return periodSpans(start, end, rules)
 }
 
 // periodSpans cuts the days from start to end into matchup periods.
@@ -349,8 +375,23 @@ func reschedule(ctx context.Context, q *db.Queries, leagueID pgtype.UUID) error 
 		return nil
 	}
 	if rules.Format.Type != settings.FormatHeadToHead {
+		if err := q.SetCustomSchedule(ctx, season.ID, false); err != nil {
+			return err
+		}
 		tomorrow := sportsday.Today().AddDate(0, 0, 1)
 		return q.DeletePeriodsFrom(ctx, db.DeletePeriodsFromParams{SeasonID: season.ID, FromDay: sportsday.Date(tomorrow)})
+	}
+	custom, err := q.HasCustomSchedule(ctx, season.ID)
+	if err != nil {
+		return err
+	}
+	if custom {
+		for _, p := range periods {
+			if p.StartsOn.Time.Before(season.StartsOn.Time) || p.EndsOn.Time.After(season.EndsOn.Time) {
+				return problem.New("The season dates must contain the custom schedule. Edit the schedule first, or rebuild it with automatic dates.")
+			}
+		}
+		return nil
 	}
 	return schedule(ctx, q, league, season)
 }

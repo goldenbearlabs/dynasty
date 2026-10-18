@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -74,6 +75,8 @@ func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Fran
 		err = s.Roster.Move(ctx, change)
 	case "set":
 		err = s.Roster.Set(ctx, change, body.Reserve)
+	case "season":
+		err = s.Roster.SetSeason(ctx, change, body.Reserve)
 	default:
 		writeError(w, http.StatusNotFound, "not found")
 		return
@@ -97,4 +100,25 @@ func (s *Server) listActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, activity)
+}
+
+// setRosterDeadline sets, or clears with an empty deadline, the time by
+// which every franchise must set its roster for a season.
+func (s *Server) setRosterDeadline(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Deadline *time.Time `json:"deadline"` // null clears it
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var deadline time.Time
+	if body.Deadline != nil {
+		deadline = *body.Deadline
+	}
+	s.done(w, r, s.Roster.SetDeadline(r.Context(), id, deadline))
 }

@@ -125,3 +125,30 @@ func TestPeriodSpans(t *testing.T) {
 		}
 	}
 }
+
+func TestNHLDailyLineupsUseMondayMatchups(t *testing.T) {
+	day := func(s string) time.Time { d, _ := time.Parse(time.DateOnly, s); return d }
+	rules := settings.League{Format: settings.Format{MatchupDays: 7}, Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday"}}
+	spans := leaguePeriodSpans(day("2026-10-19"), day("2026-11-08"), rules, "nhl")
+	if len(spans) != 3 {
+		t.Fatalf("got %d weeks, want 3", len(spans))
+	}
+	for _, span := range spans {
+		if span[0].Weekday() != time.Monday || span[1].Weekday() != time.Sunday {
+			t.Fatalf("NHL period = %v, want Monday–Sunday", span)
+		}
+	}
+	// A midweek start ends on Sunday rather than running for seven days.
+	spans = leaguePeriodSpans(day("2026-10-20"), day("2026-11-08"), rules, "nhl")
+	if spans[0][1] != day("2026-10-25") {
+		t.Fatalf("first NHL week = %v", spans[0])
+	}
+	if rules.Lineup.Period != settings.PeriodDay {
+		t.Fatal("matchup alignment changed lineup frequency")
+	}
+	rules.Format.MatchupDays = 3
+	spans = leaguePeriodSpans(day("2026-10-20"), day("2026-10-27"), rules, "nhl")
+	if spans[0][1] != day("2026-10-22") {
+		t.Fatalf("custom length ignored: %v", spans)
+	}
+}

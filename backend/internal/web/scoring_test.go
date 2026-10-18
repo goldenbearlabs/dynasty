@@ -294,8 +294,9 @@ func TestScoringFlow(t *testing.T) {
 
 	// --- leaving the roster ------------------------------------------------
 	// The early guard goes to reserve after his game began: today's points
-	// stand, and from tomorrow he no longer starts.
-	move := map[string]any{"player_id": id["Zs Early Guard"], "list": "reserve"}
+	// stand, and from tomorrow he no longer starts. Mid-season only the
+	// commissioner can move him between the lists.
+	move := map[string]any{"player_id": id["Zs Early Guard"], "list": "reserve", "force": true}
 	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+league.ID+"/roster/move", move, nil)
 	if a, _ := points(); !near(a, 126) {
 		t.Errorf("after benching a player mid-game Ann has %v, want the 126 already scored", a)

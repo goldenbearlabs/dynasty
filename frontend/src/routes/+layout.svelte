@@ -5,7 +5,7 @@
 	import '@fontsource-variable/instrument-sans';
 	import '../app.css';
 
-	import { goto, invalidateAll } from '$app/navigation';
+	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { watchlist } from '#lib/watchlist.svelte.ts';
@@ -47,6 +47,13 @@
 	const path = $derived(page.url.pathname);
 	const current = (href: string) => path === href || path.startsWith(href + '/');
 
+	// On a phone the tab bar holds the first few sections; the rest, and who
+	// is signed in, open from "More".
+	const TABS = 4;
+	const more = $derived(links.slice(TABS));
+	let moreOpen = $state(false);
+	afterNavigate(() => (moreOpen = false));
+
 	// The landing page, the setup wizard and invite links stand alone.
 	const bare = $derived(!data.dynasty || path === '/' || path.startsWith('/join/'));
 
@@ -75,13 +82,26 @@
 			</a>
 
 			<nav aria-label="Main">
-				{#each links as link (link.href)}
-					<a href={link.href} aria-current={current(link.href) ? 'page' : undefined}>
+				{#each links as link, i (link.href)}
+					<a href={link.href} class:extra={i >= TABS} aria-current={current(link.href) ? 'page' : undefined}>
 						<Icon name={link.icon} />
 						<span>{link.label}</span>
 						{#if link.count}<span class="count">{link.count}</span>{/if}
 					</a>
 				{/each}
+				{#if more.length}
+					<button
+						class="more"
+						class:on={moreOpen || more.some((l) => current(l.href))}
+						aria-expanded={moreOpen}
+						aria-controls="more-sheet"
+						onclick={() => (moreOpen = !moreOpen)}
+					>
+						<Icon name="more" />
+						<span>More</span>
+						{#if more.some((l) => l.count)}<span class="count">{more.reduce((n, l) => n + (l.count ?? 0), 0)}</span>{/if}
+					</button>
+				{/if}
 			</nav>
 
 			{#if data.me}
@@ -97,6 +117,34 @@
 				<p class="me"><a class="button primary" href="/">Sign in</a></p>
 			{/if}
 		</aside>
+
+		{#if moreOpen}
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions: a backdrop; Escape and the More button close it too -->
+			<div class="backdrop" onclick={() => (moreOpen = false)}></div>
+			<div class="sheet" id="more-sheet" role="dialog" aria-label="More sections">
+				<nav aria-label="More">
+					{#each more as link (link.href)}
+						<a href={link.href} aria-current={current(link.href) ? 'page' : undefined}>
+							<Icon name={link.icon} />
+							<span>{link.label}</span>
+							{#if link.count}<span class="count">{link.count}</span>{/if}
+						</a>
+					{/each}
+				</nav>
+				{#if data.me}
+					<div class="sheet-me">
+						<Crest src={data.me.image_url} name={data.me.name} size={34} />
+						<div class="who">
+							<strong>{data.me.name}</strong>
+							<span class="muted small-text">{data.me.manager_name}</span>
+						</div>
+						<button class="small" onclick={leave}><Icon name="out" size={16} /> Sign out</button>
+					</div>
+				{:else}
+					<a class="button primary" href="/">Sign in</a>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="page">
 			{#if !path.startsWith('/draft/')}
@@ -114,6 +162,8 @@
 		</div>
 	</div>
 {/if}
+
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (moreOpen = false)} />
 
 <Toaster />
 
@@ -262,8 +312,78 @@
 		}
 	}
 
+	/* The More button and its sheet exist only for the tab bar. */
+	.more,
+	.backdrop,
+	.sheet {
+		display: none;
+	}
+
 	/* ---- narrow screens: the rail becomes a tab bar ---- */
 	@media (max-width: 860px) {
+		nav a.extra {
+			display: none;
+		}
+		.more {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 0.15rem;
+			position: relative;
+			padding: 0.4rem 0.2rem;
+			border: 0;
+			border-radius: var(--radius-small);
+			background: none;
+			color: var(--ink-soft);
+			font: 600 0.68rem var(--body);
+		}
+		.more.on {
+			background: var(--brand-soft);
+			color: var(--brand);
+		}
+		.backdrop {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 18;
+			background: rgb(0 0 0 / 0.45);
+		}
+		.sheet {
+			display: grid;
+			gap: 0.8rem;
+			position: fixed;
+			z-index: 19;
+			inset: auto 0 calc(3.9rem + env(safe-area-inset-bottom)) 0;
+			max-height: 70dvh;
+			overflow-y: auto;
+			padding: 0.8rem 0.8rem 1rem;
+			background: var(--surface);
+			border-top: 1px solid var(--rule-strong);
+			border-radius: var(--radius) var(--radius) 0 0;
+			box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
+		}
+		.sheet nav {
+			grid-auto-flow: row;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			overflow: visible;
+		}
+		.sheet nav a {
+			flex-direction: row;
+			gap: 0.6rem;
+			padding: 0.7rem 0.75rem;
+			font-size: 0.9rem;
+		}
+		.sheet .count {
+			position: static;
+			margin-left: auto;
+		}
+		.sheet-me {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+			padding-top: 0.8rem;
+			border-top: 1px solid var(--rule);
+		}
 		.shell {
 			display: block;
 		}
@@ -282,9 +402,7 @@
 		}
 		nav {
 			grid-auto-flow: column;
-			grid-auto-columns: minmax(4.2rem, 1fr);
-			overflow-x: auto; /* more sections than fit: the bar scrolls */
-			scrollbar-width: none;
+			grid-auto-columns: minmax(0, 1fr);
 		}
 		nav a {
 			flex-direction: column;

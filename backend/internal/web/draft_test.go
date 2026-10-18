@@ -404,12 +404,14 @@ func TestDraftFlow(t *testing.T) {
 	}
 	ann.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard Five", "reserve"), nil) // a free agent has no exemption
 
-	// Once the season is under way nobody comes up from reserve, though a
-	// player can still go down; the commissioner can override.
+	// A season opened after its first day still waits for each roster. Once
+	// a manager sets his, nobody moves between the lists, up or down; drops
+	// still go through, and the commissioner can override.
 	today := time.Now().AddDate(0, 0, -1).Format(time.DateOnly)
 	ann.want(http.StatusCreated, "POST", "/api/admin/seasons", map[string]any{
 		"league_id": nbaLeague, "year": 2026, "starts_on": today, "ends_on": time.Now().AddDate(0, 1, 0).Format(time.DateOnly),
 	}, nil)
+	bob.want(http.StatusNoContent, "POST", nbaRoster+"season", reserve("Zd Guard One"), nil)
 	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"set", reserve("Zd Guard Three"), nil)
 	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
 	bob.want(http.StatusNoContent, "POST", nbaRoster+"drop", pick("Zd Guard Three", ""), nil)
@@ -420,6 +422,5 @@ func TestDraftFlow(t *testing.T) {
 	if l := listed(); l["Zd Guard One"] != "main" {
 		t.Fatalf("after the commissioner's override Bob's guard is on %q", l["Zd Guard One"])
 	}
-	bob.want(http.StatusNoContent, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil) // down is still allowed
-	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil) // nor down
 }

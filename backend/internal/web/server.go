@@ -52,7 +52,8 @@ type Server struct {
 	AdminToken string                      // optional bearer token for scripts; see commissioner
 	// SeasonBackfill is how many seasons of stat history a sync keeps.
 	SeasonBackfill int
-	// ScheduleDays is how many days ahead a schedule sync loads games for.
+	// ScheduleDays extends the full-year schedule horizon when larger than 365.
+	// Active fantasy season end dates can extend it further.
 	ScheduleDays int
 }
 
@@ -87,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/leagues/{id}/lineup", s.getLineup)
 	mux.HandleFunc("GET /api/leagues/{id}/matchups", s.cached(cache.Public, 30*time.Second, s.listMatchups))
 	mux.HandleFunc("GET /api/leagues/{id}/schedule", s.cached(cache.Public, 30*time.Second, s.getSchedule))
+	mux.HandleFunc("GET /api/leagues/{id}/game-counts", s.cached(cache.Public, 30*time.Second, s.getGameCounts))
 	mux.HandleFunc("GET /api/matchups/{id}", s.cached(cache.Public, 30*time.Second, s.getMatchup))
 	mux.HandleFunc("GET /api/scores/{competition}", s.cached(cache.Public, 30*time.Second, s.getScores))
 	mux.HandleFunc("GET /api/scores/{competition}/ws", s.watchScores)
@@ -145,6 +147,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/seasons/{id}", s.commissioner(s.setSeasonDates))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/close", s.commissioner(s.closeSeason))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/reopen", s.commissioner(s.reopenSeason))
+	mux.HandleFunc("PUT /api/admin/seasons/{id}/roster-deadline", s.commissioner(s.setRosterDeadline))
+	mux.HandleFunc("PUT /api/admin/seasons/{id}/schedule", s.commissioner(s.setSchedule))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/schedule", s.commissioner(s.generateSchedule))
 	mux.HandleFunc("POST /api/admin/playoffs/advance", s.commissioner(s.advancePlayoffs))
 	mux.HandleFunc("PUT /api/admin/periods/{id}/matchups", s.commissioner(s.setMatchups))

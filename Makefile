@@ -28,8 +28,8 @@ test: ## run all tests, using a separate crossover_test database
 		|| docker compose exec -T db createdb -U crossover crossover_test
 	cd backend && TEST_DATABASE_URL=$(TEST_DB) go test ./...
 
-seed: ## replace the local dynasty with a seeded one: default rules, real players, lineups, seasons
-	cd backend && go run . seed
+seed: ## replace the local dynasty: make seed (just after the startup drafts) or make seed state=season
+	cd backend && go run . seed $(state)
 
 sync: ## make sync c=nba            (rosters)   or   make sync c=nhl j=prospects
 	curl -fsS -X POST -H "Authorization: Bearer $(ADMIN_TOKEN)" $(API)/api/admin/sync/$(c)/$(j)

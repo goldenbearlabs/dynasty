@@ -355,7 +355,7 @@
 				{:else}<div>
 						<p class="eyebrow">{draft.status === 'complete' ? 'Draft complete' : 'Draft room'}</p>
 						<strong
-							>{draft.status === 'scheduled' ? 'Waiting to start' : 'Waiting for picks'}</strong
+							>{draft.status === 'scheduled' ? 'Waiting to start' : draft.status === 'complete' ? 'Every pick made' : 'Waiting for picks'}</strong
 						>
 					</div>{/if}
 				<div class="clock">
@@ -445,8 +445,8 @@
 			{/if}
 		</header>
 		{#if me && !rookie && draft.status === 'complete'}<p class="makeup">
-				<span class="pill gold">Next</span> Set your roster: choose who is on your reserve list in each league,
-				on <a href="/franchise/{me.slug}">your team page</a>, before the season starts.
+				<span class="pill gold">Next</span> Once the commissioner opens a league's season, set your season roster, who is on the main
+				roster and who on reserve, on <a href="/franchise/{me.slug}">your team page</a>.
 			</p>{/if}
 		{#if changing}<p class="makeup changing">
 				<span class="pill gold">Changing</span> Pick #{changing.position}, {changing.player_name} for
@@ -465,7 +465,7 @@
 			style:--pool="{sizes.pool}%"
 			style:--queue="{sizes.queue}%"
 		>
-			<div class="main-workspace" bind:this={mainPane}>
+			<div class="main-workspace" class:stats-view={boardView === 'stats'} bind:this={mainPane}>
 				<section class="board-pane" aria-label="Draft progress">
 					<div class="section-heading">
 						<div class="view-switch" role="group" aria-label="Show">
@@ -950,6 +950,10 @@
 		.main-workspace {
 			grid-template-rows: 250px auto;
 			gap: 0.75rem;
+		}
+		/* The board scrolls in its short pane; the stats read better at full length. */
+		.main-workspace.stats-view {
+			grid-template-rows: auto auto;
 		}
 		.scouting {
 			grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);

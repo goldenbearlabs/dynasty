@@ -22,6 +22,7 @@
 	import { teamIdentity } from '#lib/identity.ts';
 	import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
+	import SeasonRoster from '#lib/SeasonRoster.svelte';
 	import PlayerNickname from '#lib/PlayerNickname.svelte';
 	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
 	import WatchStar from '#lib/WatchStar.svelte';
@@ -34,7 +35,7 @@
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
-	import { clockTime, dayLabel, points } from '#lib/ui/time.ts';
+	import { clockTime, dayLabel, points, timeLeft as left } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -55,6 +56,14 @@
 		{ value: '', label: 'Organization' },
 		...leagues.map((l) => ({ value: l.competition, label: l.name, sport: l.competition }))
 	]);
+	// A league whose season is open and still waiting for this franchise's roster.
+	const waiting = (r: LeagueRoster) => !!r.season && !r.season.set_at && !r.season.expired;
+	let settingSeason = $state(untrack(() => page.url.searchParams.get('season') === 'roster'));
+	function setSeasonRoster(competition: string) {
+		show(competition);
+		settingSeason = true;
+	}
+
 	function show(to: string) {
 		view = to;
 		const query = new URLSearchParams(page.url.search);
@@ -148,14 +157,7 @@
 		return () => clearInterval(timer);
 	});
 	// "6 days 4 hours", "3 hours 12 minutes": how long is left to sign.
-	function timeLeft(until: string): string {
-		const minutes = Math.max(0, Math.floor((new Date(until).getTime() - clock) / 60_000));
-		const count = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-		const days = Math.floor(minutes / 1440);
-		const hours = Math.floor((minutes % 1440) / 60);
-		if (days > 0) return `${count(days, 'day')} ${count(hours, 'hour')}`;
-		return hours > 0 ? `${count(hours, 'hour')} ${count(minutes % 60, 'minute')}` : count(minutes, 'minute');
-	}
+	const timeLeft = (until: string) => left(until, clock);
 	// The soonest deadline among a roster's unsigned picks, if the draft has ended.
 	const deadline = (r: LeagueRoster) =>
 		on(r, 'rights')
@@ -308,6 +310,26 @@
 
 	{#if !league}
 		<!-- ---- the organization ---- -->
+		{@const due = canEdit ? cards.filter((c) => waiting(c.roster)) : []}
+		{#if due.length}
+			<section class="card season-due" aria-label="Season rosters to set">
+				<div>
+					<p class="eyebrow">Season {due.length === 1 ? 'roster' : 'rosters'} to set</p>
+					<p class="small-text">
+						The commissioner has opened {due.length === 1 ? 'a season' : 'seasons'}. Choose who is on {mine ? 'your' : 'the'} main roster and who goes on reserve
+						for {due.length === 1 ? 'it' : 'each one'}.
+					</p>
+				</div>
+				<div class="row">
+					{#each due as c (c.roster.league_id)}
+						<button class="primary" onclick={() => setSeasonRoster(c.roster.competition)}>
+							<SportBadge sport={c.roster.competition} solid /> Set {c.roster.name} roster
+							{#if c.roster.season?.deadline}<small class="locks">· locks in {timeLeft(c.roster.season.deadline)}</small>{/if}
+						</button>
+					{/each}
+				</div>
+			</section>
+		{/if}
 		<section class="panel">
 			<h2 class="bar">
 				Leagues
@@ -336,6 +358,7 @@
 									</span>
 								</span>
 								<span class="flags">
+									{#if canEdit && waiting(c.roster)}<span class="pill gold">Set season roster{c.roster.season?.deadline ? ` · ${timeLeft(c.roster.season.deadline)} left` : ''}</span>{/if}
 									{#if c.roster.overage > 0}<span class="pill bad">{c.roster.overage} over</span>{/if}
 									{#if signing > 0}<span class="pill gold">{signing} to sign{due ? ` · ${timeLeft(due)}` : ''}</span>{/if}
 									{#if mine && c.phase.key === 'in' && openSlots[c.roster.league_id] > 0}
@@ -417,6 +440,29 @@
 				{/if}
 			</div>
 
+			{#if canEdit && waiting(roster)}
+				{#if settingSeason}
+					<SeasonRoster {roster} franchiseId={team.id} force={!mine} oncancel={() => (settingSeason = false)} />
+				{:else}
+					<section class="card season-due" aria-label="Set your season roster">
+						<div>
+							<p class="eyebrow">{roster.season!.year} season · {roster.season!.started ? 'under way since' : 'starts'} {dayLabel(roster.season!.starts_on)}</p>
+							<p>
+								<strong>Set {mine ? 'your' : 'this'} season roster{roster.season!.started ? ' now' : ''}.</strong> Choose who is on the main roster and who goes on
+								reserve. It is set once, and then holds for the season.
+							</p>
+							{#if roster.season!.deadline}
+								<p class="locks-at">
+									<Icon name="clock" size={14} /> Lists lock automatically in <strong>{timeLeft(roster.season!.deadline)}</strong> ({clockTime(roster.season!.deadline)})
+									with the roster as it stands if {mine ? 'you have' : 'it has'} not set it.
+								</p>
+							{/if}
+						</div>
+						<button class="primary" onclick={() => (settingSeason = true)}>Set season roster</button>
+					</section>
+				{/if}
+			{/if}
+
 			{#if on(roster, 'rights').length > 0}
 				{@const due = deadline(roster)}
 				{@const room = roster.limits.reserve - on(roster, 'reserve').length}
@@ -471,13 +517,7 @@
 				{/key}
 			</section>
 
-			{#if canEdit && !plan && tables.length > 0 && roster.limits.reserve_lock_season && roster.limits.reserve > 0 && on(roster, 'main').length + on(roster, 'reserve').length > 0 && (now.phase.key === 'upcoming' || now.phase.key === 'none')}
-				<p class="card small-text">
-					<span class="pill gold">Set your roster</span> Choose who is on the reserve list before the season starts. Whoever is on it
-					then stays there until the season ends.
-					<button class="small" onclick={() => ((plan = {}), (rosterOpen = true))}>Set roster</button>
-				</p>
-			{/if}
+
 
 			<details class="panel fold" bind:open={rosterOpen}>
 				<summary>
@@ -486,12 +526,20 @@
 						{on(roster, 'main').length} of {roster.limits.main} on the main roster · {on(roster, 'reserve').length} of {roster.limits.reserve} on reserve
 					</span>
 					{#if roster.overage > 0}<span class="pill bad">Over the limit by {roster.overage}</span>{/if}
+					{#if roster.season?.locked}
+						<span class="pill"><Icon name="lock" size={11} /> {roster.season.set_at ? `Set for ${roster.season.year}` : 'Locked at the deadline'} · lists held until {dayLabel(roster.season.ends_on)}</span>
+					{/if}
 				</summary>
 				<div class="meters">
 					<Meter label="Main" value={on(roster, 'main').length} max={roster.limits.main} />
 					<Meter label="Reserve" value={on(roster, 'reserve').length} max={roster.limits.reserve} />
 				</div>
-				{#if canEdit}
+				{#if canEdit && mine && roster.season?.locked}
+					<p class="pad small-text muted">
+						Everyone stays on the list he is on until the season ends. You can still drop a player, add a free agent, make a trade, or send an
+						injured player down with an injury swap.
+					</p>
+				{:else if canEdit}
 					<p class="pad small-text row">
 						{#if plan}
 							<span class="muted grow">Move players between the lists, then save. Nothing changes until you do.</span>
@@ -540,7 +588,7 @@
 													{#if plan}
 														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => (plan![player.player_id] = list.other)}>{list.move}</button>
 													{:else}
-														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>
+														{#if !(mine && roster.season?.locked)}<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>{/if}
 														<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Drop</button>
 														{#if list.key === 'main' && injuryEligible(player)}
 															<div class="injury-swap">
@@ -726,6 +774,10 @@
 			grid-column: 2;
 			justify-content: start;
 		}
+		.stats {
+			flex-wrap: wrap;
+			gap: 0.4rem 1rem;
+		}
 		.stats span {
 			justify-items: start;
 		}
@@ -823,6 +875,40 @@
 	.acquired-key {
 		color: var(--brand);
 		font-weight: 650;
+	}
+
+	/* A season waiting for a roster: hard to miss. */
+	.season-due {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem 1.5rem;
+		padding: 0.9rem 1rem;
+		border: 1px solid var(--gold);
+		border-left-width: 4px;
+		background: color-mix(in srgb, var(--gold) 8%, var(--surface));
+	}
+	.season-due .eyebrow {
+		color: var(--gold);
+	}
+	.season-due p:not(.eyebrow) {
+		margin-top: 0.2rem;
+		max-width: 44rem;
+	}
+	.locks-at {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: var(--gold);
+		font-size: 0.85rem;
+	}
+	.locks {
+		font: 500 0.8rem var(--body);
+		letter-spacing: 0;
+		text-transform: none;
+		color: inherit;
+		opacity: 0.85;
 	}
 
 	/* ---- one league ---- */

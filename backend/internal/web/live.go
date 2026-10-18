@@ -211,3 +211,41 @@ func (s *Server) carryOver(w http.ResponseWriter, r *http.Request) {
 	}
 	s.done(w, r, s.Roster.CarryOver(r.Context(), league, body.PlayerID))
 }
+
+// setSchedule saves the commissioner's dates and matchups for future periods.
+func (s *Server) setSchedule(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Periods []scoring.CustomPeriod `json:"periods"`
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	s.done(w, r, s.Scoring.SetSchedule(r.Context(), id, body.Periods))
+}
+
+// getGameCounts supplies a compact calendar for previewing game totals
+// while a commissioner adjusts unsaved matchup dates. It works for every sport.
+func (s *Server) getGameCounts(w http.ResponseWriter, r *http.Request) {
+	league, err := s.leagueFromPath(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	from, err1 := sportsday.Parse(r.URL.Query().Get("starts_on"))
+	to, err2 := sportsday.Parse(r.URL.Query().Get("ends_on"))
+	if err1 != nil || err2 != nil || to.Before(from) || to.After(from.AddDate(3, 0, 0)) {
+		s.fail(w, r, problem.New("Choose valid first and last days, no more than three years apart."))
+		return
+	}
+	counts, err := s.Queries.ListGameCounts(r.Context(), league.Competition, sportsday.Date(from), sportsday.Date(to))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, counts)
+}

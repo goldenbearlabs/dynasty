@@ -160,7 +160,7 @@
 	});
 </script>
 
-{#snippet team(player: Player)}{#if player.team_abbrev}<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />{:else}{player.team_name || 'No team'}{/if}{/snippet}
+{#snippet team(player: Player)}{#if player.team_abbrev}<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={18} />{:else}{player.team_name || 'No team'}{/if}{/snippet}
 
 <div class="stack tight" class:compact>
 	<div class="row filters">

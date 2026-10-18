@@ -89,3 +89,21 @@ select exists (
 -- name: InsertInjuryReserveLock :exec
 insert into injury_reserve_locks(season_id, player_id, franchise_id, replacement_id)
 values (@season_id, @player_id, @franchise_id, @replacement_id);
+
+-- name: OpenSeason :one
+-- The season a league has open on a day: under way, or opened by the
+-- commissioner and still to start.
+select * from seasons
+where league_id = @league_id and status = 'active' and ends_on >= @day::date
+order by starts_on
+limit 1;
+
+-- name: SeasonRosterSetAt :one
+select set_at from season_rosters where season_id = @season_id and franchise_id = @franchise_id;
+
+-- name: MarkSeasonRosterSet :exec
+insert into season_rosters (season_id, franchise_id) values (@season_id, @franchise_id)
+on conflict do nothing;
+
+-- name: SetRosterDeadline :exec
+update seasons set roster_deadline = @roster_deadline where id = @id;

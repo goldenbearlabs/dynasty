@@ -54,7 +54,7 @@ const createSeason = `-- name: CreateSeason :one
 
 insert into seasons (league_id, year, starts_on, ends_on)
 values ($1, $2, $3, $4)
-returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id
+returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline
 `
 
 type CreateSeasonParams struct {
@@ -81,6 +81,7 @@ func (q *Queries) CreateSeason(ctx context.Context, arg CreateSeasonParams) (Sea
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
 }
@@ -272,7 +273,7 @@ func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error)
 }
 
 const getSeason = `-- name: GetSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where id = $1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where id = $1
 `
 
 func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error) {
@@ -286,6 +287,7 @@ func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error)
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
 }
@@ -416,7 +418,7 @@ func (q *Queries) LastScheduledDay(ctx context.Context, competition string) (pgt
 }
 
 const latestSeason = `-- name: LatestSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 order by year desc limit 1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where league_id = $1 order by year desc limit 1
 `
 
 func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Season, error) {
@@ -430,6 +432,7 @@ func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Seaso
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
 }
@@ -456,7 +459,7 @@ func (q *Queries) LineupInForce(ctx context.Context, arg LineupInForceParams) (p
 }
 
 const listActiveSeasons = `-- name: ListActiveSeasons :many
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where status = 'active'
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where status = 'active'
 `
 
 func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
@@ -476,6 +479,7 @@ func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
 			&i.EndsOn,
 			&i.Status,
 			&i.ChampionFranchiseID,
+			&i.RosterDeadline,
 		); err != nil {
 			return nil, err
 		}
@@ -1118,7 +1122,7 @@ func (q *Queries) ListSeasonMatchups(ctx context.Context, seasonID pgtype.UUID) 
 }
 
 const listSeasons = `-- name: ListSeasons :many
-select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id from seasons s
+select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id, s.roster_deadline from seasons s
 join leagues l on l.id = s.league_id
 where l.dynasty_id = $1
 order by s.year desc
@@ -1141,6 +1145,7 @@ func (q *Queries) ListSeasons(ctx context.Context, dynastyID pgtype.UUID) ([]Sea
 			&i.EndsOn,
 			&i.Status,
 			&i.ChampionFranchiseID,
+			&i.RosterDeadline,
 		); err != nil {
 			return nil, err
 		}
@@ -1353,24 +1358,6 @@ update seasons set status = 'active', champion_franchise_id = null where id = $1
 func (q *Queries) ReopenSeason(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, reopenSeason, id)
 	return err
-}
-
-const runningSeasonEnd = `-- name: RunningSeasonEnd :one
-select ends_on from seasons
-where league_id = $1 and status = 'active' and $2::date between starts_on and ends_on
-`
-
-type RunningSeasonEndParams struct {
-	LeagueID pgtype.UUID `json:"league_id"`
-	Day      pgtype.Date `json:"day"`
-}
-
-// The last day of the season a league is playing on this day, if it is.
-func (q *Queries) RunningSeasonEnd(ctx context.Context, arg RunningSeasonEndParams) (pgtype.Date, error) {
-	row := q.db.QueryRow(ctx, runningSeasonEnd, arg.LeagueID, arg.Day)
-	var ends_on pgtype.Date
-	err := row.Scan(&ends_on)
-	return ends_on, err
 }
 
 const setPeriodByHand = `-- name: SetPeriodByHand :exec

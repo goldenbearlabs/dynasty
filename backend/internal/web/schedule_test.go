@@ -183,4 +183,115 @@ func TestCommissionerSetsMatchups(t *testing.T) {
 	if p := second(); p.Period.ByHand || !same(sides(p), was) {
 		t.Fatalf("after handing them back: %+v, want %v", p, was)
 	}
+	// A custom schedule has individually chosen lengths and playoff dates.
+	customPath := "/api/admin/seasons/" + season.ID + "/schedule"
+	custom := []map[string]any{
+		{"starts_on": day(7), "ends_on": day(9), "is_playoff": false},
+		{"starts_on": day(10), "ends_on": day(17), "is_playoff": false, "matchups": body(mine)["matchups"]},
+		{"starts_on": day(18), "ends_on": day(22), "is_playoff": true, "matchups": body(mine)["matchups"]},
+		{"starts_on": day(23), "ends_on": day(30), "is_playoff": true},
+	}
+	visitor := newBrowser(t, server.URL)
+	visitor.want(http.StatusForbidden, "PUT", customPath, map[string]any{"periods": custom}, nil)
+	ann.want(http.StatusNoContent, "PUT", customPath, map[string]any{"periods": custom}, nil)
+	var saved []struct {
+		ID        string
+		StartsOn  string    `json:"starts_on"`
+		EndsOn    string    `json:"ends_on"`
+		IsPlayoff bool      `json:"is_playoff"`
+		ByHand    bool      `json:"by_hand"`
+		Matchups  []pairing `json:"matchups"`
+	}
+	readCustom := func() {
+		t.Helper()
+		ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &saved)
+		if len(saved) != 4 || saved[0].StartsOn != day(7) || saved[0].EndsOn != day(9) || saved[2].StartsOn != day(18) || !saved[2].IsPlayoff || !saved[1].ByHand || len(saved[2].Matchups) != 2 || len(saved[3].Matchups) != 0 {
+			t.Fatalf("custom schedule = %+v", saved)
+		}
+	}
+	readCustom()
+	originalID := saved[0].ID
+	// Date changes preserve the commissioner's schedule.
+	ann.want(http.StatusNoContent, "PUT", "/api/admin/seasons/"+season.ID, map[string]any{"starts_on": day(7), "ends_on": day(7 + 104)}, nil)
+	readCustom()
+	if saved[0].ID != originalID {
+		t.Fatal("reschedule replaced custom periods")
+	}
+	// Reject overlapping periods and duplicate opponents without losing any saved periods.
+	custom[1]["starts_on"] = day(9)
+	ann.want(http.StatusUnprocessableEntity, "PUT", customPath, map[string]any{"periods": custom}, nil)
+	custom[1]["starts_on"] = day(10)
+	custom[1]["matchups"] = body([2][2]string{{was[0][0], was[0][1]}, {was[0][0], was[1][1]}})["matchups"]
+	ann.want(http.StatusUnprocessableEntity, "PUT", customPath, map[string]any{"periods": custom}, nil)
+	readCustom()
+	if saved[0].ID != originalID {
+		t.Fatal("failed save did not roll back")
+	}
+	ann.want(http.StatusUnprocessableEntity, "PUT", "/api/admin/seasons/"+season.ID, map[string]any{"starts_on": day(7), "ends_on": day(25)}, nil)
+	// An explicit rebuild restores automatic dates.
+	ann.want(http.StatusNoContent, "POST", customPath, nil, nil)
+	ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &saved)
+	if len(saved) <= 4 {
+		t.Fatalf("automatic schedule was not restored: %+v", saved)
+	}
+
+	// A period in progress keeps its identity and scores when future dates change.
+	ctx := context.Background()
+	startedID := saved[0].ID
+	if _, err := pool.Exec(ctx, `update seasons set starts_on=$2 where id=$1`, season.ID, day(-1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `update periods set starts_on=$2, ends_on=$3 where id=$1`, startedID, day(-1), day(1)); err != nil {
+		t.Fatal(err)
+	}
+	custom[1]["matchups"] = body(mine)["matchups"]
+	ann.want(http.StatusNoContent, "PUT", customPath, map[string]any{"periods": custom}, nil)
+	ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &saved)
+	if len(saved) != 5 || saved[0].ID != startedID || saved[0].StartsOn != day(-1) || saved[0].EndsOn != day(1) {
+		t.Fatalf("started period changed: %+v", saved)
+	}
+	// Once a playoff round starts, changing dates is refused.
+	if _, err := pool.Exec(ctx, `update periods set is_playoff=true where id=$1`, startedID); err != nil {
+		t.Fatal(err)
+	}
+	ann.want(http.StatusUnprocessableEntity, "PUT", customPath, map[string]any{"periods": custom}, nil)
+
+	// Explicitly moving the season into the future clears even started periods.
+	seasonPath := "/api/admin/seasons/" + season.ID
+	reset := map[string]any{"starts_on": day(0), "ends_on": day(111), "reset_schedule": true}
+	ann.want(http.StatusUnprocessableEntity, "PUT", seasonPath, reset, nil)
+	monday := today.AddDate(0, 0, 1)
+	for monday.Weekday() != time.Monday {
+		monday = monday.AddDate(0, 0, 1)
+	}
+	reset["starts_on"] = monday.Format(time.DateOnly)
+	visitor.want(http.StatusForbidden, "PUT", seasonPath, reset, nil)
+	// An impossibly short season must roll back deletion of the old schedule.
+	reset["ends_on"] = monday.Format(time.DateOnly)
+	ann.want(http.StatusUnprocessableEntity, "PUT", seasonPath, reset, nil)
+	ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &saved)
+	if saved[0].ID != startedID {
+		t.Fatal("failed restart deleted the schedule")
+	}
+	reset["ends_on"] = day(111)
+	ann.want(http.StatusNoContent, "PUT", seasonPath, reset, nil)
+	ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &saved)
+	if len(saved) < 4 || saved[0].ID == startedID || saved[0].StartsOn != monday.Format(time.DateOnly) {
+		t.Fatalf("restart schedule = %+v", saved)
+	}
+	for i, p := range saved {
+		start, _ := time.Parse(time.DateOnly, p.StartsOn)
+		end, _ := time.Parse(time.DateOnly, p.EndsOn)
+		if start.Weekday() != time.Monday || (i < len(saved)-1 && end.Weekday() != time.Sunday) {
+			t.Fatalf("NHL period not Monday–Sunday: %+v", p)
+		}
+	}
+	var isCustom bool
+	if err := pool.QueryRow(ctx, `select exists(select 1 from custom_schedules where season_id=$1)`, season.ID).Scan(&isCustom); err != nil {
+		t.Fatal(err)
+	}
+	if isCustom {
+		t.Fatal("restart retained the custom schedule flag")
+	}
+
 }

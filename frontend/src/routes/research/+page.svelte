@@ -296,6 +296,7 @@
  .position-picker { position: relative; align-self: flex-end; }
  .position-picker summary { padding: 0.5rem 0.65rem; border: 1px solid var(--rule-strong); border-radius: var(--radius-small); cursor: pointer; font-size: 0.83rem; background: var(--surface); }
  .position-options { position: absolute; z-index: 10; top: calc(100% + 0.4rem); left: 0; min-width: 13rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; padding: 0.8rem; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-small); box-shadow: 0 8px 24px #0002; }
+ @media (max-width: 640px) { .position-picker { flex-basis: 100%; } .position-options { position: static; min-width: 0; margin-top: 0.5rem; box-shadow: none; } } /* on a phone the list takes its own line and opens in place, not off the edge */
  .more-filters { border-top: 1px solid var(--rule); padding-top: 0.7rem; }
  .more-filters summary, .method-guide summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; }
  .expanded-filters, .chart-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(10rem,1fr)); gap: 0.8rem; }

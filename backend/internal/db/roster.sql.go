@@ -80,7 +80,7 @@ func (q *Queries) HasInjuryReserveLock(ctx context.Context, arg HasInjuryReserve
 }
 
 const injurySwapSeason = `-- name: InjurySwapSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 and status = 'active'
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where league_id = $1 and status = 'active'
  and $2::date between starts_on and ends_on
 `
 
@@ -100,6 +100,7 @@ func (q *Queries) InjurySwapSeason(ctx context.Context, arg InjurySwapSeasonPara
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
 }
@@ -434,6 +435,81 @@ type LockFranchiseRosterParams struct {
 // surrounding transaction ends.
 func (q *Queries) LockFranchiseRoster(ctx context.Context, arg LockFranchiseRosterParams) error {
 	_, err := q.db.Exec(ctx, lockFranchiseRoster, arg.LeagueID, arg.FranchiseID)
+	return err
+}
+
+const markSeasonRosterSet = `-- name: MarkSeasonRosterSet :exec
+insert into season_rosters (season_id, franchise_id) values ($1, $2)
+on conflict do nothing
+`
+
+type MarkSeasonRosterSetParams struct {
+	SeasonID    pgtype.UUID `json:"season_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
+func (q *Queries) MarkSeasonRosterSet(ctx context.Context, arg MarkSeasonRosterSetParams) error {
+	_, err := q.db.Exec(ctx, markSeasonRosterSet, arg.SeasonID, arg.FranchiseID)
+	return err
+}
+
+const openSeason = `-- name: OpenSeason :one
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons
+where league_id = $1 and status = 'active' and ends_on >= $2::date
+order by starts_on
+limit 1
+`
+
+type OpenSeasonParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+// The season a league has open on a day: under way, or opened by the
+// commissioner and still to start.
+func (q *Queries) OpenSeason(ctx context.Context, arg OpenSeasonParams) (Season, error) {
+	row := q.db.QueryRow(ctx, openSeason, arg.LeagueID, arg.Day)
+	var i Season
+	err := row.Scan(
+		&i.ID,
+		&i.LeagueID,
+		&i.Year,
+		&i.StartsOn,
+		&i.EndsOn,
+		&i.Status,
+		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
+	)
+	return i, err
+}
+
+const seasonRosterSetAt = `-- name: SeasonRosterSetAt :one
+select set_at from season_rosters where season_id = $1 and franchise_id = $2
+`
+
+type SeasonRosterSetAtParams struct {
+	SeasonID    pgtype.UUID `json:"season_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
+func (q *Queries) SeasonRosterSetAt(ctx context.Context, arg SeasonRosterSetAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, seasonRosterSetAt, arg.SeasonID, arg.FranchiseID)
+	var set_at pgtype.Timestamptz
+	err := row.Scan(&set_at)
+	return set_at, err
+}
+
+const setRosterDeadline = `-- name: SetRosterDeadline :exec
+update seasons set roster_deadline = $1 where id = $2
+`
+
+type SetRosterDeadlineParams struct {
+	RosterDeadline pgtype.Timestamptz `json:"roster_deadline"`
+	ID             pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) SetRosterDeadline(ctx context.Context, arg SetRosterDeadlineParams) error {
+	_, err := q.db.Exec(ctx, setRosterDeadline, arg.RosterDeadline, arg.ID)
 	return err
 }
 

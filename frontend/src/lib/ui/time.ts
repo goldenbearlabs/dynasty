@@ -46,8 +46,26 @@ export function shiftDay(day: string, by: number): string {
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** "6 days 4 hours", "3 hours 12 minutes": how long until a moment, from now or from a given time. */
+export function timeLeft(until: string, now = Date.now()): string {
+	const minutes = Math.max(0, Math.floor((new Date(until).getTime() - now) / 60_000));
+	const count = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+	const days = Math.floor(minutes / 1440);
+	const hours = Math.floor((minutes % 1440) / 60);
+	if (days > 0) return `${count(days, 'day')} ${count(hours, 'hour')}`;
+	return hours > 0 ? `${count(hours, 'hour')} ${count(minutes % 60, 'minute')}` : count(minutes, 'minute');
+}
+
 /** "7:30 PM" */
 export const timeOfDay = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 /** Fantasy points to one decimal place. */
 export const points = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** The server's sports day: US Eastern time, with a 5am rollover. */
+export function sportsToday(): string {
+	const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+	const part = (key: string) => parts.find((p) => p.type === key)!.value;
+	const day = `${part('year')}-${part('month')}-${part('day')}`;
+	return Number(part('hour')) < 5 ? shiftDay(day, -1) : day;
+}

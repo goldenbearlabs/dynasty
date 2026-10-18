@@ -290,6 +290,25 @@ export type LeagueRoster = {
 	limits: LeagueSettings['roster'];
 	overage: number;
 	players: RosterPlayer[];
+	/** The season the commissioner has opened, and where this franchise stands with its roster for it; null when none is open. */
+	season: SeasonRoster | null;
+};
+
+export type SeasonRoster = {
+	id: string;
+	year: number;
+	starts_on: string;
+	ends_on: string;
+	/** When the franchise set its roster for the season; null until it has. */
+	set_at: string | null;
+	/** The season's first day has come. */
+	started: boolean;
+	/** Players stay on the list they are on until the season ends. */
+	locked: boolean;
+	/** When rosters not yet set lock as they stand; null for no deadline. */
+	deadline: string | null;
+	/** The deadline has passed. */
+	expired: boolean;
 };
 
 /** An unused draft pick a franchise holds. */
@@ -369,6 +388,8 @@ export type Season = {
 	ends_on: string;
 	status: 'active' | 'complete';
 	champion_franchise_id: string | null;
+	/** When rosters not yet set for the season lock as they stand; null for no deadline. */
+	roster_deadline: string | null;
 };
 
 export type StandingsRow = {
@@ -406,6 +427,10 @@ export type Matchup = {
 
 /** A period of a season's schedule; its matchups have no points until it starts. */
 export type SchedulePeriod = Period & { matchups: Matchup[] };
+export type GameDayCount = { day: string; games: number };
+export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff'> & {
+ matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[] | null;
+};
 
 /** One period of a head-to-head season. */
 export type Matchups = { periods: Period[]; period: Period | null; matchups: Matchup[] };
@@ -805,6 +830,9 @@ export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move' |
 	request<void>('POST', `/leagues/${leagueId}/roster/${action}`, change);
 export const setRoster = (leagueId: string, split: RosterSplit) =>
 	request<void>('POST', `/leagues/${leagueId}/roster/set`, split);
+/** Sets the roster for the season the commissioner has opened: final, once. */
+export const setSeasonRoster = (leagueId: string, split: RosterSplit) =>
+	request<void>('POST', `/leagues/${leagueId}/roster/season`, split);
 export const getWaivers = (leagueId: string) => request<Waivers>('GET', `/leagues/${leagueId}/waivers`);
 export const claimWaiver = (leagueId: string, claim: WaiverClaim) =>
 	request<void>('POST', `/leagues/${leagueId}/waivers/claims`, claim);
@@ -878,8 +906,11 @@ export const getOverall = () => request<OverallYear[]>('GET', '/overall');
 export const getSeasons = () => request<Season[]>('GET', '/seasons');
 export const createSeason = (season: { league_id: string; year: number; starts_on: string; ends_on: string }) =>
 	request<Season>('POST', '/admin/seasons', season);
-export const setSeasonDates = (id: string, starts_on: string, ends_on: string) =>
-	request<void>('PUT', `/admin/seasons/${id}`, { starts_on, ends_on });
+export const setSeasonDates = (id: string, starts_on: string, ends_on: string, reset_schedule = false) =>
+	request<void>('PUT', `/admin/seasons/${id}`, { starts_on, ends_on, reset_schedule });
+/** Sets, or with null clears, the time by which every season roster must be set. */
+export const setRosterDeadline = (id: string, deadline: string | null) =>
+	request<void>('PUT', `/admin/seasons/${id}/roster-deadline`, { deadline });
 export const closeSeason = (id: string, champion_franchise_id?: string) =>
 	request<void>('POST', `/admin/seasons/${id}/close`, { champion_franchise_id });
 export const reopenSeason = (id: string) => request<void>('POST', `/admin/seasons/${id}/reopen`);
@@ -898,10 +929,13 @@ export const getGame = (id: string) => request<GameDetail>('GET', `/games/${id}`
 export const getMatchups = (leagueId: string, period?: number) =>
 	request<Matchups>('GET', `/leagues/${leagueId}/matchups${query({ period })}`);
 export const getSchedule = (leagueId: string) => request<SchedulePeriod[]>('GET', `/leagues/${leagueId}/schedule`);
+export const getGameCounts = (leagueId: string, starts_on: string, ends_on: string) =>
+	request<GameDayCount[]>('GET', `/leagues/${leagueId}/game-counts${query({ starts_on, ends_on })}`);
 export const getMatchup = (id: string) => request<MatchupDetail>('GET', `/matchups/${id}`);
 export const setMatchups = (periodId: string, matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[]) =>
 	request<void>('PUT', `/admin/periods/${periodId}/matchups`, { matchups });
 export const resetMatchups = (periodId: string) => request<void>('DELETE', `/admin/periods/${periodId}/matchups`);
+export const setSchedule = (seasonId: string, periods: CustomPeriod[]) => request<void>('PUT', `/admin/seasons/${seasonId}/schedule`, { periods });
 export const generateSchedule = (seasonId: string) => request<void>('POST', `/admin/seasons/${seasonId}/schedule`);
 export const advancePlayoffs = () => request<void>('POST', '/admin/playoffs/advance');
 

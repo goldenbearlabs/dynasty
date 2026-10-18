@@ -131,9 +131,19 @@
 	.fantasy small { font: 500 0.55rem var(--mono); color: var(--ink-soft); }
 	.empty { padding: 0.85rem 1.25rem; }
 	@media (max-width: 640px) {
-		.toolbar { padding-inline: 0.85rem; }
+		.toolbar { padding: 0.4rem 0.85rem; }
 		.status, .arrows { display: none; }
 		.controls { gap: 0.35rem; }
 		.filters button { padding-inline: 0.35rem; }
+		/* A phone keeps the strip short: tighter cards, smaller faces, two of your players a game at most. */
+		.match { width: 7.6rem; padding: 0.4rem 0.6rem 0.45rem; }
+		.sport { margin-bottom: 0.15rem; }
+		.players { min-width: 10rem; gap: 0.2rem; padding: 0.4rem 0.6rem 0.4rem 0; }
+		.player:nth-of-type(n + 3) { display: none; }
+		.player :global(.headshot) { --size: 22px; }
+		.match :global(.game) { gap: 0.25rem; }
+		.match :global(.side img), .match :global(.side .logo) { width: 1.3rem; height: 1.3rem; }
+		.identity strong { font-size: 0.7rem; }
+		.fantasy { font-size: 0.85rem; }
 	}
 </style>

@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,7 +34,6 @@ import (
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
-	"crossover/internal/sportsday"
 	"crossover/internal/trade"
 	"crossover/internal/waiver"
 	"crossover/internal/web"
@@ -110,11 +110,47 @@ func run(log *slog.Logger) error {
 		}
 	}
 	registry := competition.NewRegistry(client)
-	// `crossover seed` fills a local database with a dynasty to work against, then exits.
+	// `crossover seed [draft|season]` fills a local database with a dynasty to
+	// work against, just after its startup drafts or in season, then exits.
 	if len(os.Args) > 1 && os.Args[1] == "seed" {
-		return devseed.Run(ctx, pool, registry, log)
+		state := devseed.PostDraft
+		if len(os.Args) > 2 {
+			state = os.Args[2]
+		}
+		return devseed.Run(ctx, pool, registry, log, state)
 	}
 	syncer := ingest.NewSyncer(queries, log)
+	// Fill missing future schedules immediately without starting another API.
+	if len(os.Args) > 1 && os.Args[1] == "sync-schedules" {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			return err
+		}
+		var failures []error
+		var mu sync.Mutex
+		var jobs sync.WaitGroup
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			jobs.Go(func() {
+				from, _ := scoring.Window()
+				if last, err := queries.LastScheduledDay(ctx, c.Key); err == nil && last.Valid && last.Time.After(from) {
+					from = last.Time.AddDate(0, 0, 1)
+				}
+				log.Info("backfill full schedule", "competition", c.Key, "from", from.Format(time.DateOnly))
+				if err := syncer.SyncFullSchedule(ctx, c.Key, c.Games, from, envInt("SCHEDULE_DAYS", 365)); err != nil {
+					mu.Lock()
+					failures = append(failures, fmt.Errorf("%s: %w", c.Key, err))
+					mu.Unlock()
+				}
+			})
+		}
+		jobs.Wait()
+		return errors.Join(failures...)
+	}
+
 	rosters := roster.NewService(pool)
 	// A player who turns up in a new competition takes his fantasy rights
 	// with him, where the league's rules say so.
@@ -189,33 +225,28 @@ func run(log *slog.Logger) error {
 	schedule.AddFunc(env("SCORES_SYNC_CRON", "*/15 * * * *"), func() { syncGames(scoring.Window()) })
 	// Without this a fresh server would show no games until the first run above.
 	go syncGames(scoring.Window())
-	// The schedule further ahead, so managers can see who plays when and set
-	// lineups for days to come: nightly, and at start-up for any sport whose
-	// stored schedule runs out within two weeks.
-	scheduleDays := envInt("SCHEDULE_DAYS", 60)
-	syncSchedule := func(onlyIfShort bool) {
+	// Full published schedules for matchup planning, refreshed nightly and
+	// on startup. A previously loaded 60-day schedule must not skip backfill.
+	scheduleDays := envInt("SCHEDULE_DAYS", 365)
+	syncSchedule := func() {
 		played, err := queries.ListLeagueCompetitions(ctx)
 		if err != nil {
 			log.Error("list league competitions", "err", err)
 			return
 		}
-		// The games sync covers the days up to the end of its window; this
-		// picks up from there.
 		_, near := scoring.Window()
-		from, to := near.AddDate(0, 0, 1), sportsday.Today().AddDate(0, 0, scheduleDays)
 		for _, key := range played {
 			c, ok := registry.Get(key)
 			if !ok {
 				continue
 			}
-			if last, err := queries.LastScheduledDay(ctx, key); onlyIfShort && err == nil && last.Valid && last.Time.After(sportsday.Today().AddDate(0, 0, 14)) {
-				continue
+			if err := syncer.SyncFullSchedule(ctx, c.Key, c.Games, near.AddDate(0, 0, 1), scheduleDays); err != nil {
+				log.Warn("refresh full schedule", "competition", c.Key, "err", err)
 			}
-			syncer.SyncSchedule(ctx, c.Key, c.Games, from, to)
 		}
 	}
-	schedule.AddFunc(env("SCHEDULE_SYNC_CRON", "30 4 * * *"), func() { syncSchedule(false) })
-	go syncSchedule(true)
+	schedule.AddFunc(env("SCHEDULE_SYNC_CRON", "30 4 * * *"), syncSchedule)
+	go syncSchedule()
 	// Stat history: every player's season totals, refreshed with the nightly
 	// sync. The first run for a sport fetches years of it; later runs only
 	// keep the last two seasons current.

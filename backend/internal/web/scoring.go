@@ -104,8 +104,9 @@ func (s *Server) createSeason(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setSeasonDates(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		StartsOn string `json:"starts_on"`
-		EndsOn   string `json:"ends_on"`
+		StartsOn      string `json:"starts_on"`
+		EndsOn        string `json:"ends_on"`
+		ResetSchedule bool   `json:"reset_schedule"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -115,6 +116,11 @@ func (s *Server) setSeasonDates(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if body.ResetSchedule {
+		s.done(w, r, s.Scoring.RestartSeason(r.Context(), id, body.StartsOn, body.EndsOn))
+		return
+	}
+
 	s.done(w, r, s.Scoring.SetSeasonDates(r.Context(), id, body.StartsOn, body.EndsOn))
 }
 

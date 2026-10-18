@@ -29,6 +29,8 @@ Player data comes from the commissioner page ("Data feeds"), or from the shell:
 make sync c=nba               # teams and players: cbb | nba | nhl | nfl | mlb
 make sync c=nhl j=prospects   # prospects: cbb (recruits) | nhl (draft picks, rankings) | mlb (draft picks)
 make sync c=nhl j=games       # schedule and box scores for the days around today
+make sync c=nhl j=schedule    # refresh the full published schedule (at least one year ahead)
+(cd backend && go run . sync-schedules) # backfill missing future schedules for every configured league
 make sync c=nba j=seasons     # season-by-season stat history for every player
 make runs                     # recent sync runs
 ```
@@ -326,3 +328,5 @@ The Watchlist page supports a saved priority order, custom groups and scouting
 notes, with filters for sport, group and ownership. A sport's team page links
 to its filtered watchlist. Watching a player does not change their roster or
 draft status. Saved entries follow the canonical player when duplicates merge.
+
+Schedule imports cover at least 365 days ahead, or the end of an active fantasy season when later. Startup, nightly refreshes and commissioner schedule syncs use the same horizon. `SCHEDULE_DAYS` can extend it beyond a year. Only games published by the sport's feed can be imported; unreleased fixtures become available on subsequent refreshes.
