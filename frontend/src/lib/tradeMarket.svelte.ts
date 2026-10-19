@@ -1,7 +1,7 @@
 // The trade market for the signed-in manager, loaded once and kept current
 // as they change it: who is on each block, what each manager wants, and the
 // targets this manager has set or attracted.
-import { getTradeMarket, setTradeBlock, setTradeTarget, setTradeWants, type TradeMarket } from '#lib/api.ts';
+import { addTradeWant, getTradeMarket, removeTradeWant, setTradeBlock, setTradeTarget, type TradeMarket } from '#lib/api.ts';
 import { toast } from '#lib/ui/toast.svelte.ts';
 
 const empty = (): TradeMarket => ({ block: [], wants: [], targets: [], interest: [] });
@@ -45,6 +45,7 @@ class Market {
 			toast.good(done);
 		} catch (e) {
 			toast.error(e);
+			await this.refresh(); // show whatever got through before the failure
 		} finally {
 			this.busy = false;
 		}
@@ -61,8 +62,23 @@ class Market {
 			on ? `${name} is a target. His manager can see you are interested.` : `${name} is no longer a target.`
 		);
 	}
-	wants(leagueId: string, positions: string[], note: string) {
-		return this.#change(() => setTradeWants({ league_id: leagueId, positions, note }), 'Wants saved.');
+	/** Puts several players on the block at once, all with the same note. */
+	blockMany(leagueId: string, playerIds: string[], note = '') {
+		return this.#change(async () => {
+			for (const id of playerIds) await setTradeBlock({ league_id: leagueId, player_id: id, on: true, note });
+		}, playerIds.length === 1 ? 'He is on your trade block.' : `${playerIds.length} players are on your trade block.`);
+	}
+	/** Targets several players at once. */
+	targetMany(leagueId: string, playerIds: string[]) {
+		return this.#change(async () => {
+			for (const id of playerIds) await setTradeTarget({ league_id: leagueId, player_id: id, on: true });
+		}, `${playerIds.length === 1 ? 'He is a target' : `${playerIds.length} players are targets`}. Their managers can see you are interested.`);
+	}
+	addWant(leagueId: string, positions: string[], note: string) {
+		return this.#change(() => addTradeWant({ league_id: leagueId, positions, note }), 'Want added.');
+	}
+	removeWant(id: string) {
+		return this.#change(() => removeTradeWant(id), 'Want removed.');
 	}
 }
 

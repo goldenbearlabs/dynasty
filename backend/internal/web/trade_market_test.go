@@ -76,6 +76,7 @@ func TestTradeMarket(t *testing.T) {
 	ann.want(http.StatusNoContent, "POST", roster+"add", map[string]any{"player_id": id["Ztm Bobs"], "list": "main", "force": true, "franchise_id": franchise["Bob"]}, nil)
 
 	type entry struct {
+		ID             string `json:"id"`
 		PlayerID       string `json:"player_id"`
 		FranchiseID    string `json:"franchise_id"`
 		ByFranchiseID  string `json:"by_franchise_id"`
@@ -101,18 +102,22 @@ func TestTradeMarket(t *testing.T) {
 		t.Fatalf("Bob sees the block as %+v", m.Block)
 	}
 
-	// --- wants: real positions, cleared when empty --------------------------
+	// --- wants: real positions, several to a league, each removed alone ----
 	wants := func(positions []string, note string) map[string]any {
 		return map[string]any{"league_id": league, "positions": positions, "note": note}
 	}
-	bob.want(http.StatusUnprocessableEntity, "PUT", "/api/trade-market/wants", wants([]string{"QB"}, ""), nil)
-	bob.want(http.StatusNoContent, "PUT", "/api/trade-market/wants", wants([]string{"C", "C"}, "A top-six centre"), nil)
-	if m := look(ann); len(m.Wants) != 1 || len(m.Wants[0].Positions) != 1 || m.Wants[0].Note != "A top-six centre" {
+	bob.want(http.StatusUnprocessableEntity, "POST", "/api/trade-market/wants", wants([]string{"QB"}, ""), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", "/api/trade-market/wants", wants(nil, " "), nil)
+	bob.want(http.StatusNoContent, "POST", "/api/trade-market/wants", wants([]string{"C", "C"}, "A top-six centre"), nil)
+	bob.want(http.StatusNoContent, "POST", "/api/trade-market/wants", wants([]string{"G"}, "A young goalie"), nil)
+	m := look(ann)
+	if len(m.Wants) != 2 || m.Wants[0].Note != "A young goalie" || len(m.Wants[1].Positions) != 1 || m.Wants[1].Note != "A top-six centre" {
 		t.Fatalf("Ann sees Bob's wants as %+v", m.Wants)
 	}
-	bob.want(http.StatusNoContent, "PUT", "/api/trade-market/wants", wants(nil, " "), nil)
-	if m := look(ann); len(m.Wants) != 0 {
-		t.Fatalf("cleared wants still show: %+v", m.Wants)
+	ann.want(http.StatusUnprocessableEntity, "DELETE", "/api/trade-market/wants/"+m.Wants[0].ID, nil, nil)
+	bob.want(http.StatusNoContent, "DELETE", "/api/trade-market/wants/"+m.Wants[0].ID, nil, nil)
+	if m := look(ann); len(m.Wants) != 1 || m.Wants[0].Note != "A top-six centre" {
+		t.Fatalf("after removing one want: %+v", m.Wants)
 	}
 
 	// --- targets: someone else's player, seen by the two of them ------------

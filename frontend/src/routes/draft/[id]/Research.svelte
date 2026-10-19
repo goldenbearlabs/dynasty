@@ -1,6 +1,7 @@
 <script lang="ts">
  import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
+ import ProspectRank from "#lib/ui/ProspectRank.svelte";
 	import {
 		getPlayerResearch,
 		getPlayerSeasons,
@@ -114,7 +115,7 @@
 				<Headshot name={player.full_name} src={player.headshot_url} size={48} />
 				<div>
 					<SportBadge sport={player.competition} />
-					<div class="row"><h3>{player.full_name}</h3><WatchStar playerID={player.id} playerName={player.full_name} /></div>
+					<div class="row"><h3>{player.full_name}</h3><WatchStar playerID={player.id} playerName={player.full_name} /><ProspectRank id={player.id} /></div>
 					<p>{player.positions.join('/')} · {player.team_name || 'No current team'}</p>
 				</div>
 			</header>

@@ -18,3 +18,7 @@ select pg_advisory_xact_lock(hashtextextended('prospect_rankings:' || @source::t
 
 -- name: ProspectRankingYear :one
 select coalesce(max(year),0)::int from prospect_rankings where source = @source;
+
+-- name: ListProspectRankings :many
+-- Every ranked prospect, for a tag beside his name wherever he appears.
+select player_id, rank, year, eta, source_url from prospect_rankings where source = 'mlb_pipeline' order by rank;

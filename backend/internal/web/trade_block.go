@@ -100,9 +100,9 @@ func (s *Server) setTradeBlock(w http.ResponseWriter, r *http.Request, me db.Fra
 	s.done(w, r, s.Queries.PutOnTradeBlock(r.Context(), db.PutOnTradeBlockParams{LeagueID: body.LeagueID, PlayerID: body.PlayerID, FranchiseID: me.ID, Note: note}))
 }
 
-// setTradeWants says what the manager is looking for in one league: the
-// positions, and a note. Neither clears it.
-func (s *Server) setTradeWants(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+// addTradeWant adds something the manager is looking for in one league:
+// positions, a note, or both. A manager may have several in a league.
+func (s *Server) addTradeWant(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	var body struct {
 		LeagueID  pgtype.UUID `json:"league_id"`
 		Positions []string    `json:"positions"`
@@ -132,12 +132,25 @@ func (s *Server) setTradeWants(w http.ResponseWriter, r *http.Request, me db.Fra
 			positions = append(positions, p)
 		}
 	}
-	key := db.ClearTradeWantsParams{FranchiseID: me.ID, LeagueID: league.ID}
 	if len(positions) == 0 && note == "" {
-		s.done(w, r, s.Queries.ClearTradeWants(r.Context(), key))
+		s.fail(w, r, problem.New("Pick a position or write a note."))
 		return
 	}
-	s.done(w, r, s.Queries.SetTradeWants(r.Context(), db.SetTradeWantsParams{FranchiseID: me.ID, LeagueID: league.ID, Positions: positions, Note: note}))
+	s.done(w, r, s.Queries.AddTradeWant(r.Context(), db.AddTradeWantParams{FranchiseID: me.ID, LeagueID: league.ID, Positions: positions, Note: note}))
+}
+
+// removeTradeWant takes back one of the manager's own wants.
+func (s *Server) removeTradeWant(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	n, err := s.Queries.RemoveTradeWant(r.Context(), db.RemoveTradeWantParams{ID: id, FranchiseID: me.ID})
+	if err == nil && n == 0 {
+		err = problem.New("That is not one of your wants.")
+	}
+	s.done(w, r, err)
 }
 
 // setTradeTarget marks another manager's player as one this manager wants,

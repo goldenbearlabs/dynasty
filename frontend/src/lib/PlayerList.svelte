@@ -268,7 +268,7 @@
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />
-												<ProspectRank {player} />
+												<ProspectRank id={player.id} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
 													>{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}

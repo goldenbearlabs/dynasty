@@ -31,7 +31,7 @@ func (s *Server) getRosterStats(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, problem.New("That franchise is not in this league."))
 		return
 	}
-	view, err := s.Players.RosterPerformance(r.Context(), league, franchise, r.URL.Query().Get("window"), r.URL.Query().Get("season"))
+	view, err := s.Players.RosterPerformance(r.Context(), league, franchise, r.URL.Query().Get("window"), r.URL.Query().Get("season"), r.URL.Query().Get("day"))
 	if err != nil {
 		s.fail(w, r, err)
 		return

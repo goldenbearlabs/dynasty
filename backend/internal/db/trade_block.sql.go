@@ -11,17 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearTradeWants = `-- name: ClearTradeWants :exec
-delete from trade_wants where franchise_id = $1 and league_id = $2
+const addTradeWant = `-- name: AddTradeWant :exec
+insert into trade_wants (franchise_id, league_id, positions, note)
+values ($1, $2, $3, $4)
 `
 
-type ClearTradeWantsParams struct {
+type AddTradeWantParams struct {
 	FranchiseID pgtype.UUID `json:"franchise_id"`
 	LeagueID    pgtype.UUID `json:"league_id"`
+	Positions   []string    `json:"positions"`
+	Note        string      `json:"note"`
 }
 
-func (q *Queries) ClearTradeWants(ctx context.Context, arg ClearTradeWantsParams) error {
-	_, err := q.db.Exec(ctx, clearTradeWants, arg.FranchiseID, arg.LeagueID)
+func (q *Queries) AddTradeWant(ctx context.Context, arg AddTradeWantParams) error {
+	_, err := q.db.Exec(ctx, addTradeWant,
+		arg.FranchiseID,
+		arg.LeagueID,
+		arg.Positions,
+		arg.Note,
+	)
 	return err
 }
 
@@ -146,7 +154,7 @@ func (q *Queries) ListTradeTargets(ctx context.Context, franchiseID pgtype.UUID)
 }
 
 const listTradeWants = `-- name: ListTradeWants :many
-select w.franchise_id, w.league_id, l.competition, w.positions, w.note, w.updated_at
+select w.id, w.franchise_id, w.league_id, l.competition, w.positions, w.note, w.updated_at
 from trade_wants w
 join leagues l on l.id = w.league_id
 where l.dynasty_id = $1
@@ -154,6 +162,7 @@ order by w.updated_at desc
 `
 
 type ListTradeWantsRow struct {
+	ID          pgtype.UUID        `json:"id"`
 	FranchiseID pgtype.UUID        `json:"franchise_id"`
 	LeagueID    pgtype.UUID        `json:"league_id"`
 	Competition string             `json:"competition"`
@@ -162,6 +171,8 @@ type ListTradeWantsRow struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+// What every manager is looking for, newest first; a manager may have
+// several wants in one league.
 func (q *Queries) ListTradeWants(ctx context.Context, dynastyID pgtype.UUID) ([]ListTradeWantsRow, error) {
 	rows, err := q.db.Query(ctx, listTradeWants, dynastyID)
 	if err != nil {
@@ -172,6 +183,7 @@ func (q *Queries) ListTradeWants(ctx context.Context, dynastyID pgtype.UUID) ([]
 	for rows.Next() {
 		var i ListTradeWantsRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.FranchiseID,
 			&i.LeagueID,
 			&i.Competition,
@@ -228,6 +240,23 @@ func (q *Queries) RemoveTradeTarget(ctx context.Context, arg RemoveTradeTargetPa
 	return err
 }
 
+const removeTradeWant = `-- name: RemoveTradeWant :execrows
+delete from trade_wants where id = $1 and franchise_id = $2
+`
+
+type RemoveTradeWantParams struct {
+	ID          pgtype.UUID `json:"id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+}
+
+func (q *Queries) RemoveTradeWant(ctx context.Context, arg RemoveTradeWantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeTradeWant, arg.ID, arg.FranchiseID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setTradeTarget = `-- name: SetTradeTarget :exec
 insert into trade_targets (franchise_id, league_id, player_id) values ($1, $2, $3)
 on conflict do nothing
@@ -241,29 +270,6 @@ type SetTradeTargetParams struct {
 
 func (q *Queries) SetTradeTarget(ctx context.Context, arg SetTradeTargetParams) error {
 	_, err := q.db.Exec(ctx, setTradeTarget, arg.FranchiseID, arg.LeagueID, arg.PlayerID)
-	return err
-}
-
-const setTradeWants = `-- name: SetTradeWants :exec
-insert into trade_wants (franchise_id, league_id, positions, note)
-values ($1, $2, $3, $4)
-on conflict (franchise_id, league_id) do update set positions = excluded.positions, note = excluded.note, updated_at = now()
-`
-
-type SetTradeWantsParams struct {
-	FranchiseID pgtype.UUID `json:"franchise_id"`
-	LeagueID    pgtype.UUID `json:"league_id"`
-	Positions   []string    `json:"positions"`
-	Note        string      `json:"note"`
-}
-
-func (q *Queries) SetTradeWants(ctx context.Context, arg SetTradeWantsParams) error {
-	_, err := q.db.Exec(ctx, setTradeWants,
-		arg.FranchiseID,
-		arg.LeagueID,
-		arg.Positions,
-		arg.Note,
-	)
 	return err
 }
 

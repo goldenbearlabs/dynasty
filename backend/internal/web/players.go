@@ -201,6 +201,20 @@ func (s *Server) listStatSeasons(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, seasons)
 }
 
+// listProspectRankings is every ranked prospect, best first: a short list
+// the pages keep to tag a prospect wherever his name appears.
+func (s *Server) listProspectRankings(w http.ResponseWriter, r *http.Request) {
+	ranked, err := s.Queries.ListProspectRankings(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if ranked == nil {
+		ranked = []db.ListProspectRankingsRow{}
+	}
+	writeJSON(w, http.StatusOK, ranked)
+}
+
 func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	page, _ := strconv.Atoi(query.Get("page"))

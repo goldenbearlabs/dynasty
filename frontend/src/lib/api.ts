@@ -106,6 +106,10 @@ export type ProspectRankingFields = {
  prospect_rank_source: string; prospect_rank_url: string; prospect_eta: string;
 };
 
+/** A prospect on the MLB Pipeline Top 100. */
+export type ProspectRanking = { player_id: string; rank: number; year: number; eta: string; source_url: string };
+export const getProspectRankings = () => request<ProspectRanking[]>('GET', '/prospect-rankings');
+
 export type Player = ProspectRankingFields & {
 	id: string;
 	competition: string;
@@ -875,7 +879,7 @@ export type MarketPlayer = {
 	list: List;
 };
 export type BlockEntry = MarketPlayer & { franchise_id: string; note: string; added_at: string };
-export type TradeWants = { franchise_id: string; league_id: string; competition: string; positions: string[]; note: string; updated_at: string };
+export type TradeWants = { id: string; franchise_id: string; league_id: string; competition: string; positions: string[]; note: string; updated_at: string };
 export type TradeTarget = MarketPlayer & { by_franchise_id: string; owner_franchise_id: string; created_at: string };
 /** The trade market as the signed-in manager sees it. Targets are seen only by whoever set them and the player's owner. */
 export type TradeMarket = {
@@ -889,8 +893,9 @@ export type TradeMarket = {
 export const getTradeMarket = () => request<TradeMarket>('GET', '/trade-market');
 export const setTradeBlock = (change: { league_id: string; player_id: string; on: boolean; note?: string }) =>
 	request<void>('PUT', '/trade-market/block', change);
-export const setTradeWants = (change: { league_id: string; positions: string[]; note: string }) =>
-	request<void>('PUT', '/trade-market/wants', change);
+export const addTradeWant = (want: { league_id: string; positions: string[]; note: string }) =>
+	request<void>('POST', '/trade-market/wants', want);
+export const removeTradeWant = (id: string) => request<void>('DELETE', `/trade-market/wants/${id}`);
 export const setTradeTarget = (change: { league_id: string; player_id: string; on: boolean }) =>
 	request<void>('PUT', '/trade-market/targets', change);
 
@@ -1037,5 +1042,5 @@ export const removeWatchlistPlayer = (id: string) => request<void>('DELETE', `/w
 export const editWatchlistPlayer = (id: string, category: string, notes: string) => request<void>('PATCH', `/watchlist/players/${id}`, { category, notes });
 export const orderWatchlist = (player_ids: string[]) => request<void>('PUT', '/watchlist/order', { player_ids });
 
-export const getRosterPerformance = (leagueId: string, franchiseId: string, window: string, season?: string) =>
- request<RosterPerformance>('GET', `/leagues/${leagueId}/roster-stats${query({franchise:franchiseId,window,season})}`);
+export const getRosterPerformance = (leagueId: string, franchiseId: string, window: string, season?: string, day?: string) =>
+ request<RosterPerformance>('GET', `/leagues/${leagueId}/roster-stats${query({franchise:franchiseId,window,season,day})}`);

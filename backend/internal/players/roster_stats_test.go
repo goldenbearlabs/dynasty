@@ -93,7 +93,7 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 		gp     int64
 		fp     float64
 	}{{"today", 1, 23}, {"7", 2, 33}, {"14", 4, 75}, {"30", 6, 81}} {
-		result, err := service.RosterPerformance(ctx, league, owner.ID, tc.window, "")
+		result, err := service.RosterPerformance(ctx, league, owner.ID, tc.window, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,6 +112,24 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 			t.Fatalf("global and multi-position tied ranks: %+v", got)
 		}
 	}
+	for _, tc := range []struct {
+		offset int
+		games  int64
+		points float64
+	}{{-6, 1, 10}, {-30, 1, 2000}, {-2, 0, 0}, {1, 1, 1998}} {
+		day := today.AddDate(0, 0, tc.offset).Format(time.DateOnly)
+		result, err := service.RosterPerformance(ctx, league, owner.ID, "today", "", day)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := row(result, a)
+		if result.FromDay != day || result.ToDay != day || got.Games != tc.games || got.Points != tc.points {
+			t.Fatalf("selected day %s: range %s to %s, player %+v", day, result.FromDay, result.ToDay, got)
+		}
+	}
+	if _, err := service.RosterPerformance(ctx, league, owner.ID, "today", "", "2026-02-30"); err == nil {
+		t.Fatal("invalid selected day must be rejected")
+	}
 	season := func(id pgtype.UUID, year int, label, team string, games int, stats string) {
 		run(`insert into player_seasons (player_id,competition,year,label,team,games,stats) values ($1,$2,$3,$4,$5,$6,$7::jsonb)`, id, sport, year, label, team, games, stats)
 	}
@@ -119,7 +137,7 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 	current := strconv.Itoa(year)
 	past := strconv.Itoa(year - 1)
 	season(d, year, current, "EMPTY", 0, `{}`)
-	fallback, err := service.RosterPerformance(ctx, league, owner.ID, "current", "")
+	fallback, err := service.RosterPerformance(ctx, league, owner.ID, "current", "", "")
 	if err != nil || fallback.Source != "games" || row(fallback, a).Games == 0 {
 		t.Fatalf("empty season placeholders must fall back to recorded games: %+v, %v", fallback, err)
 	}
@@ -130,7 +148,7 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 	season(a, year-1, past, "AAA", 10, `{"pts":90}`)
 	season(b, year-1, past, "AAA", 10, `{"pts":80}`)
 	season(a, year+2, past, "AAA", 10, `{"pts":9999}`) // mislabeled provider row must never double the past season
-	result, err := service.RosterPerformance(ctx, league, owner.ID, "current", "")
+	result, err := service.RosterPerformance(ctx, league, owner.ID, "current", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +156,7 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 	if got.Games != 15 || got.Points != 323 || got.Stats["pts"] != 150 || got.Stats["reb"] != 30 || *got.OverallRank != 2 || result.Source != "season" {
 		t.Fatalf("current season split totals: %+v, %+v", result, got)
 	}
-	result, err = service.RosterPerformance(ctx, league, owner.ID, "season", past)
+	result, err = service.RosterPerformance(ctx, league, owner.ID, "season", past, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,15 +164,15 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 	if got.Points != 180 || got.Games != 10 || *got.OverallRank != 1 || got.PositionRanks["PG"] != 1 || len(result.Seasons) != 2 {
 		t.Fatalf("historical totals and rank: %+v, %+v", result, got)
 	}
-	if _, err := service.RosterPerformance(ctx, league, owner.ID, "season", "not-a-season"); err == nil {
+	if _, err := service.RosterPerformance(ctx, league, owner.ID, "season", "not-a-season", ""); err == nil {
 		t.Fatal("unknown season accepted")
 	}
-	if _, err := service.RosterPerformance(ctx, league, owner.ID, "8", ""); err == nil {
+	if _, err := service.RosterPerformance(ctx, league, owner.ID, "8", "", ""); err == nil {
 		t.Fatal("invalid rolling window accepted")
 	}
 	// Changing roster ownership does not change the comparison pool.
 	run(`update roster_entries set list='reserve' where league_id=$1 and player_id=$2`, league.ID, a)
-	again, err := service.RosterPerformance(ctx, league, owner.ID, "season", past)
+	again, err := service.RosterPerformance(ctx, league, owner.ID, "season", past, "")
 	if err != nil || *row(again, a).OverallRank != 1 {
 		t.Fatalf("reserve placement changed rank: %+v, %v", again, err)
 	}

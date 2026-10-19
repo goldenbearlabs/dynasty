@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getFranchise, type Franchise, type FranchiseDetail, type League, type RosterPlayer, type Slot } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	let {
 		franchises,
@@ -113,7 +114,7 @@
 							onclick={() => onselect(player.player_id)}
 							><Headshot name={player.full_name} src={player.headshot_url} size={22} /><strong
 								>{player.full_name}</strong
-							><span>{player.positions.join('/')}</span></button
+							><ProspectRank id={player.player_id} /><span>{player.positions.join('/')}</span></button
 						>{/each}
 					{#if reserve.length}<details class="reserve">
 							<summary>Reserve list · {reserve.length}</summary
@@ -122,7 +123,7 @@
 									onclick={() => onselect(player.player_id)}
 									><Headshot name={player.full_name} src={player.headshot_url} size={22} /><strong
 										>{player.full_name}</strong
-									><span>{player.positions.join('/')}</span></button
+									><ProspectRank id={player.player_id} /><span>{player.positions.join('/')}</span></button
 								>{/each}
 						</details>{/if}
 				</details>

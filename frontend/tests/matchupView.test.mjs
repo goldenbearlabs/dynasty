@@ -69,3 +69,26 @@ test('games still to be played carry their projection only when they will count'
  const played=matchupRows([scored([official('2026-10-20',8)])],lineup([player({games:[{...game('2026-10-20',8),projected:6}]})]),period,false,'2026-10-20',false)[0];
  assert.equal(played.projected,0);
 });
+
+test('full starter slots precede bench, which never adds projected team points', () => {
+ const starter=player({slot:'PG',games:[game('2026-10-20',0,{status:'scheduled',stats:{},projected:8})]});
+ const reserve=player({player_id:'bench',full_name:'Bench player',slot:'',counts_last:true,games:[game('2026-10-20',0,{status:'scheduled',stats:{},projected:99})]});
+ const rows=matchupRows([],lineup([reserve,starter],{slots:[{name:'PG',positions:['PG'],count:2}]}),period,false,'2026-10-20',true);
+ assert.deepEqual(rows.map(r=>r.id),['curry','empty-PG-1','bench']);
+ assert.equal(rows[1].empty,true);
+ assert.equal(rows[2].bench,true);
+ assert.equal(rows[2].slot,'BN');
+ assert.equal(rows[2].games[0].label,'Bench · Not counted');
+ assert.equal(rows[2].games[0].counted,false);
+ assert.equal(rows.reduce((sum,r)=>sum+r.projected,0),8);
+ assert.equal(rows.reduce((sum,r)=>sum+r.points,0),0);
+});
+test('benched former starters retain official contributions without losing bench placement', () => {
+ const p=player({slot:'',games:[game('2026-10-20',12)]});
+ const row=matchupRows([scored([official('2026-10-20',12)])],lineup([p]),period,false,'2026-10-20',false)[0];
+ assert.equal(row.bench,true);
+ assert.equal(row.earlier,true);
+ assert.equal(row.points,12);
+ assert.equal(row.games.length,1);
+ assert.equal(row.games[0].counted,true);
+});

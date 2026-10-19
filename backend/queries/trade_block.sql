@@ -20,19 +20,20 @@ on conflict (league_id, player_id) do update set franchise_id = excluded.franchi
 delete from trade_block where league_id = @league_id and player_id = @player_id and franchise_id = @franchise_id;
 
 -- name: ListTradeWants :many
-select w.franchise_id, w.league_id, l.competition, w.positions, w.note, w.updated_at
+-- What every manager is looking for, newest first; a manager may have
+-- several wants in one league.
+select w.id, w.franchise_id, w.league_id, l.competition, w.positions, w.note, w.updated_at
 from trade_wants w
 join leagues l on l.id = w.league_id
 where l.dynasty_id = @dynasty_id
 order by w.updated_at desc;
 
--- name: SetTradeWants :exec
+-- name: AddTradeWant :exec
 insert into trade_wants (franchise_id, league_id, positions, note)
-values (@franchise_id, @league_id, @positions, @note)
-on conflict (franchise_id, league_id) do update set positions = excluded.positions, note = excluded.note, updated_at = now();
+values (@franchise_id, @league_id, @positions, @note);
 
--- name: ClearTradeWants :exec
-delete from trade_wants where franchise_id = @franchise_id and league_id = @league_id;
+-- name: RemoveTradeWant :execrows
+delete from trade_wants where id = @id and franchise_id = @franchise_id;
 
 -- name: ListTradeTargets :many
 -- Targets that concern one franchise: those it has set, and those others

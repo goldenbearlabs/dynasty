@@ -1,11 +1,20 @@
 <script lang="ts">
- import type { ProspectRankingFields } from '#lib/api.ts';
- let { player }: { player: ProspectRankingFields } = $props();
+	// A small tag beside a ranked prospect's name: his place on the MLB Pipeline Top 100.
+	import { prospectRank } from '#lib/prospects.svelte.ts';
+
+	let { id }: { id: string } = $props();
+	const r = $derived(prospectRank(id));
 </script>
 
-{#if player.prospect_rank != null}
- <a class="pill gold" href={player.prospect_rank_url} target="_blank" rel="noopener noreferrer"
-  title="MLB Pipeline Top 100 prospects · {player.prospect_rank_year}{player.prospect_eta ? ` · MLB ETA ${player.prospect_eta}` : ''}">
-  MLB Pipeline #{player.prospect_rank} · {player.prospect_rank_year}
- </a>
+{#if r}
+	<!-- A plain tag, not a link, so it can sit inside a clickable row. -->
+	<span class="pill gold prospect" title="MLB Pipeline Top 100 prospect · #{r.rank} in {r.year}{r.eta ? ` · MLB ETA ${r.eta}` : ''}">#{r.rank}</span>
 {/if}
+
+<style>
+	.prospect {
+		padding: 0.12rem 0.32rem;
+		font-size: 0.6rem;
+		vertical-align: middle;
+	}
+</style>

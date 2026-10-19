@@ -7,6 +7,7 @@
 	import { getRanking, type RankedPlayer } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 
 	type Props = {
@@ -60,7 +61,7 @@
 					<span class="n">{i + 1}</span>
 					<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 					<div class="who">
-						<button class="name" onclick={() => onselect?.(player.player_id)}>{player.full_name}</button>
+						<button class="name" onclick={() => onselect?.(player.player_id)}>{player.full_name} <ProspectRank id={player.player_id} /></button>
 						<span class="muted small-text row">
 							{#if showSport}<SportBadge sport={player.competition} />{/if}
 							{player.positions.join('/')}

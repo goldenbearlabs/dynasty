@@ -4,6 +4,7 @@
  import type { PageProps } from './$types';
  import { watchlist } from '#lib/watchlist.svelte.ts';
  import WatchStar from '#lib/WatchStar.svelte';
+ import ProspectRank from '#lib/ui/ProspectRank.svelte';
  import PlayerSearch from '#lib/PlayerSearch.svelte';
  import Headshot from '#lib/ui/Headshot.svelte';
  import SportBadge from '#lib/ui/SportBadge.svelte';
@@ -40,7 +41,7 @@
     {#each visible as p (p.player_id)}
      {@const index = watchlist.entries.findIndex(e => e.player_id === p.player_id)}
      <article class="card entry">
-      <div class="spread"><div class="row who"><span class="rank">{index+1}</span><Headshot name={p.full_name} src={p.headshot_url} size={40} /><div><div class="row"><a href="/player/{p.player_id}"><strong>{p.full_name}</strong></a><WatchStar playerID={p.player_id} playerName={p.full_name} /><SportBadge sport={p.competition} />{#if p.category}<span class="pill">{p.category}</span>{/if}</div><p class="muted small-text">{p.positions?.join(' / ')} · {p.team_name || 'No real-world team'} · {p.status} · {#if p.owner_slug}<a href="/franchise/{p.owner_slug}">{p.owner_name}</a>{:else}Free agent{/if}</p></div></div>
+      <div class="spread"><div class="row who"><span class="rank">{index+1}</span><Headshot name={p.full_name} src={p.headshot_url} size={40} /><div><div class="row"><a href="/player/{p.player_id}"><strong>{p.full_name}</strong></a><WatchStar playerID={p.player_id} playerName={p.full_name} /><ProspectRank id={p.player_id} /><SportBadge sport={p.competition} />{#if p.category}<span class="pill">{p.category}</span>{/if}</div><p class="muted small-text">{p.positions?.join(' / ')} · {p.team_name || 'No real-world team'} · {p.status} · {#if p.owner_slug}<a href="/franchise/{p.owner_slug}">{p.owner_name}</a>{:else}Free agent{/if}</p></div></div>
        <div class="row"><button class="small" aria-label="Move {p.full_name} up" disabled={watchlist.busy || index===0} onclick={() => watchlist.move(p.player_id,-1).catch(toast.error)}>↑</button><button class="small" aria-label="Move {p.full_name} down" disabled={watchlist.busy || index===watchlist.entries.length-1} onclick={() => watchlist.move(p.player_id,1).catch(toast.error)}>↓</button><button class="small" disabled={watchlist.busy} onclick={() => { editing=p.player_id; draftCategory=p.category; draftNotes=p.notes; }}>Group & notes</button></div>
       </div>
       {#if editing===p.player_id}<form class="stack tight" onsubmit={event => { event.preventDefault(); void save(); }}><label>Group<input bind:value={draftCategory} maxlength="60" list="watchlist-groups" placeholder="Trade targets, prospects, keepers…" /></label><label>Scouting notes<textarea bind:value={draftNotes} maxlength="2000" rows="3" placeholder="What are you watching for?"></textarea></label><div class="row"><button class="small primary" disabled={watchlist.busy}>Save</button><button type="button" class="small quiet" onclick={() => editing=''}>Cancel</button></div></form>{:else if p.notes}<p class="notes small-text">{p.notes}</p>{/if}

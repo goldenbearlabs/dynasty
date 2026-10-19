@@ -381,6 +381,7 @@ type TradeWant struct {
 	Positions   []string           `json:"positions"`
 	Note        string             `json:"note"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
 }
 
 type Transaction struct {

@@ -7,7 +7,8 @@
 	// one that counts.
 	import { autoSetLineup, getLineup, setLineup, getRosterPerformance, type Competition, type LeagueRoster, type RosterPerformance, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
-	import { columnValue, statColumns, statValue, sumStats, widestStats, type StatColumn } from '#lib/statLine.ts';
+	import { columnValue, hockeyScoringColumns, statColumns, statValue, sumStats, type StatColumn } from '#lib/statLine.ts';
+	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -17,7 +18,8 @@
 	import { dayLabel, points, shiftDay, timeOfDay, sportsToday } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import WatchStar from '#lib/WatchStar.svelte';
-	import TradeFlag from '#lib/TradeFlag.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
+	import PlayerActions from '#lib/PlayerActions.svelte';
 	import { dropPlayer } from '#lib/dropPlayer.ts';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -48,16 +50,16 @@
 		statsLoading = true;
 		try {
 			const historical = statsView.startsWith('season:');
-			const found = await getRosterPerformance(league.id,franchise.id,historical ? 'season' : statsView,historical ? statsView.slice(7) : undefined);
+			const found = await getRosterPerformance(league.id,franchise.id,historical ? 'season' : statsView,historical ? statsView.slice(7) : undefined,statsView === 'today' ? day ?? sportsToday() : undefined);
 			if (token === statsRequest) { performance = found; statsError = ''; }
 		} catch(e) { if(token === statsRequest) statsError = String(e); }
 		finally { if(token === statsRequest) statsLoading = false; }
 	}
-	$effect(() => { void [statsView,league.id,franchise.id,roster?.players,competition]; loadStats(); return () => { statsRequest++; }; });
+	$effect(() => { void [statsView,day,league.id,franchise.id,roster?.players,competition]; loadStats(); return () => { statsRequest++; }; });
 	const performanceFor = (id: string) => statsLoading || statsError ? undefined : performance?.players.find(p => p.player_id === id);
 	const statAbbreviations: Record<string,string> = {
 		pts:'PTS',reb:'REB',ast:'AST',stl:'STL',blk:'BLK',tpm:'3PM',tpa:'3PA',tov:'TO',fgm:'FGM',fga:'FGA',ftm:'FTM',fta:'FTA',
-		goals:'G',assists:'A',shots:'SOG',hits:'HIT',blocks:'BLK',pp_points:'PPP',pim:'PIM',saves:'SV',goals_against:'GA',goalie_wins:'W',shutouts:'SO',
+		goals:'G',assists:'A',shots:'SOG',hits:'HIT',blocks:'BLK',pp_points:'PPP',pp_goals:'PPG',plus_minus:'+/-',pim:'PIM',saves:'SV',goals_against:'GA',goalie_wins:'W',shutouts:'SO',
 		pass_yds:'PYD',pass_td:'PTD',interceptions:'INT',rush_yds:'RYD',rush_td:'RTD',receptions:'REC',rec_yds:'RECYD',rec_td:'RECTD',fumbles_lost:'FUM',
 		bat_ab:'AB',bat_h:'B H',bat_r:'R',bat_hr:'HR',bat_rbi:'RBI',bat_sb:'SB',bat_bb:'B BB',bat_so:'B K',pit_ip:'IP',pit_h:'P H',pit_er:'ER',pit_bb:'P BB',pit_so:'P K',pit_w:'W',pit_sv:'SV',pit_gs:'GS'
 	};
@@ -241,26 +243,24 @@
 			.reduce((n, g) => n + g.projected, 0);
 
 	// ---- stat columns ----
-	const columns = (player: LineupPlayer) => statsEnabled ? performanceColumns : statColumns(sport, player.positions);
-	const statWidth = $derived(statsEnabled ? performanceColumns.length : widestStats(sport));
-	// A list's rows, each with the stat labels to show above it: the first
-	// player's, and again wherever the kind of player changes (skaters to
-	// goalies, hitters to pitchers).
-	function labelled<T>(rows: T[], player: (row: T) => LineupPlayer | undefined): { row: T; labels?: StatColumn[]; first?: boolean }[] {
-		let last = '';
-		return rows.map((row) => {
-			const p = player(row);
-			if (!p) return { row };
-			const cols = columns(p);
-			const key = cols.map((c) => c.key).join();
-			if (key === last) return { row };
-			const first = last === '';
-			last = key;
-			return { row, labels: cols, first };
+	function groupColumns(group: string): StatColumn[] {
+		if (sport === 'nhl') {
+			const scored = hockeyScoringColumns(group === 'Goalies', league.settings.scoring);
+			return statsEnabled ? [performanceColumns[0], ...scored, performanceColumns.at(-1)!] : scored;
+		}
+		if (!statsEnabled) return statColumns(sport, group === 'Goalies' ? ['G'] : group === 'Pitchers' ? ['SP'] : sport === 'nhl' ? ['C'] : sport === 'mlb' ? ['OF'] : ['PG']);
+		return performanceColumns.filter(c => {
+			if (c.key.startsWith('__')) return true;
+			if (sport === 'mlb') return c.key.startsWith(group === 'Pitchers' ? 'pit_' : 'bat_');
+			return true;
 		});
 	}
-	// Blank cells after a kind of player with fewer stats, so every column's lines run on.
-	const padding = (cols: StatColumn[]) => Array.from({ length: Math.max(0, statWidth - cols.length) }, (_, i) => i);
+	const columns = (player: LineupPlayer) => groupColumns(rosterGroup(sport, player.positions, slotOf(player.player_id)));
+	const tableGroups = $derived(rosterGroupOrder(sport).map(label => ({
+		label, columns: groupColumns(label),
+		seats: seatSlots.map((slot,index) => ({slot,index})).filter(({slot}) => rosterGroup(sport,slot.positions,slot.name) === label),
+		bench: bench.filter(p => rosterGroup(sport,p.positions) === label)
+	})).filter(group => group.seats.length || group.bench.length));
 	// Who a feed has starting in goal or on the mound, shown on games still to come.
 	const starts = {
 		confirmed: { tone: 'good', label: 'Starting', title: 'Confirmed to start' },
@@ -360,7 +360,7 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (moving = undefined)} />
 
 {#snippet tile(game: LineupGame)}
-	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={40} label={false} /></span>
+	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={24} label={false} /></span>
 	<span class="day">{weekday(game.day)} {dayNumber(game.day)}</span>
 	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
 	{#if !played(game) && game.projected}<span class="proj" title="Projected fantasy points, from recent seasons and the betting line">{points(game.projected)} proj</span>{/if}
@@ -429,7 +429,6 @@
 		<span>{title ? (weekly ? 'This week' : 'Game') : ''}</span>
 		<div class="stats">
 			{#each cols as c (c.key)}<span title={c.title}>{c.label}</span>{/each}
-			{#each padding(cols) as i (i)}<span></span>{/each}
 		</div>
 		<span class="pts" title="Fantasy points. In italics: projected for games to come, from recent seasons and the betting line.">FPTS</span>
 	</li>
@@ -457,22 +456,22 @@
 				<Icon name={frozen(player) && player.locked ? 'lock' : 'grip'} size={14} />
 			</button>
 		{/if}
-		<Headshot name={player.full_name} src={player.headshot_url} size={30} />
+		<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 		<div class="name">
 			<span class="row tight">
 				<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
-				<WatchStar playerID={player.player_id} playerName={player.full_name} />
+				<WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} />
+				<PlayerActions leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} detail={`${player.positions.join('/')} · ${player.team_abbrev ?? ''}`} onDrop={canEdit ? () => release(player) : undefined} />
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 				<InjuryBadge designation={player.injury} />
 				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
 			</span>
-			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}
-				<TradeFlag leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} />
-				{#if canEdit}<button class="drop-player" title="Drop {player.full_name}" onclick={() => release(player)}>Drop</button>{/if}</span>
+			<div class="player-meta"><span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={18} />{#if player.eligibility_note} · {player.eligibility_note}{/if}</span>
 			{#if statsEnabled}
 				{@const stats = performanceFor(player.player_id)}
 				<div class="period-ranks" aria-label="Ranks for {player.full_name}"><span title="Overall rank by total fantasy points">Rank {stats?.overall_rank ? `#${stats.overall_rank}` : '—'}</span>{#each Object.entries(stats?.position_ranks ?? {}) as [position,rank] (position)}<span>{position} #{rank}</span>{:else}<span>Position —</span>{/each}</div>
 			{/if}
+			</div>
 		</div>
 	</div>
 	<div class="games">{@render games(player, starting)}</div>
@@ -483,7 +482,6 @@
 			{@const n = statsEnabled ? viewedStat(player,c) : columnValue(line, c)}
 			<span class:zero={!n} title={c.title}>{#if statsEnabled || shown.length}<small>{c.label}</small>{statsEnabled && n === undefined ? '—' : c.key === '__fpg' && n !== undefined ? points(n) : statValue(n)}{/if}</span>
 		{/each}
-		{#each padding(columns(player)) as i (i)}<span></span>{/each}
 	</div>
 	{@const ahead = !statsEnabled || statsView === 'today' ? forecast(player, starting) : 0}
 	{@const viewed = performanceFor(player.player_id)}
@@ -493,7 +491,7 @@
 	</div>
 {/snippet}
 
-<div class="stack tight" class:stats-enabled={statsEnabled} data-sport={sport} style:--stat-cols={statWidth}>
+<div class="stack tight" class:stats-enabled={statsEnabled} data-sport={sport}>
 	{#if !lineup}
 		<p class="muted">Loading the lineup…</p>
 	{:else}
@@ -501,7 +499,7 @@
 			<div class="spread stat-view-controls">
 				<label class="row small-text">View
 					<select aria-label="View" bind:value={statsView}>
-						<option value="today">Today</option><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option>
+						<option value="today">{day && day !== sportsToday() ? dayLabel(day) : 'Today'}</option><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option>
 						<option value="current">Current season{performance?.current_season ? ` · ${performance.current_season}` : ''}</option>
 						{#if performance?.seasons.length}<optgroup label="Past seasons">{#each performance.seasons.filter(s => s.label !== performance?.current_season) as season (season.label)}<option value={`season:${season.label}`}>{season.label}</option>{/each}</optgroup>{/if}
 					</select>
@@ -586,13 +584,14 @@
 				</div>
 			{/if}
 
-			<section class="card flush lineup-list" aria-label="Starters">
-				<header class="head narrow"><span>Starters</span><span>{weekly ? 'This week' : 'Game'}</span></header>
+			{#each tableGroups as group (group.label)}
+			<section class="card flush lineup-list" aria-label={group.label} style:--stat-cols={group.columns.length}>
+				<header class="head narrow"><span>{group.label === 'Lineup' ? 'Starters' : group.label}</span><span>{weekly ? 'This week' : 'Game'}</span></header>
 				<ol class="rows">
-					{#each labelled(seatSlots.map((_, i) => i), (i) => (seats[i] ? byId.get(seats[i]!) : undefined)) as { row: i, labels: cols, first } (i)}
+					{@render labels(group.columns, group.label === 'Lineup' ? 'Starters' : `${group.label} · Starters`)}
+					{#each group.seats as {index: i} (i)}
 						{@const slot = seatSlots[i]}
 						{@const player = seats[i] ? byId.get(seats[i]) : undefined}
-						{#if cols}{@render labels(cols, first ? 'Starters' : '')}{/if}
 						{@const target = !!moving && canPlace(moving, i)}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions: a drop zone; the tap path is the button inside -->
 						<li
@@ -613,40 +612,32 @@
 							{#if target}<button class="drop" onclick={() => place(moving!, i)}>Move {byId.get(moving!)?.full_name} here</button>{/if}
 						</li>
 					{/each}
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions: Bench drop zone has a button for keyboard access. -->
+					<li class="bench-zone" class:target={!!moving && canPlace(moving, 'bench')} class:over={over === 'bench'} ondragover={(e) => dragOver(e, 'bench')} ondragleave={() => over === 'bench' && (over = undefined)} ondrop={(e) => drop(e, 'bench')}>
+						<div class="bench-divider"><span>Bench · {group.bench.length}</span>{#if moving && canPlace(moving, 'bench')}<button class="small" onclick={() => place(moving!, 'bench')}>Move to bench</button>{/if}</div>
+						<ul class="rows">
+							{#each group.bench as player (player.player_id)}
+								<li class="seat bench-seat"><span class="slot">BN</span>{@render who(player, false)}</li>
+							{:else}<li class="muted small-text pad">Everyone is starting.</li>{/each}
+						</ul>
+					</li>
 				</ol>
 			</section>
-
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions: a drop zone; the tap path is the button inside -->
-			<section
-				class="card flush bench lineup-list"
-				class:target={!!moving && canPlace(moving, 'bench')}
-				class:over={over === 'bench'}
-				aria-label="Bench"
-				ondragover={(e) => dragOver(e, 'bench')}
-				ondragleave={() => over === 'bench' && (over = undefined)}
-				ondrop={(e) => drop(e, 'bench')}
-			>
-				<header class="head" class:narrow={bench.length > 0 && !(moving && canPlace(moving, 'bench'))}>
-					<span>Bench · {bench.length}</span>
-					{#if moving && canPlace(moving, 'bench')}<button class="small" onclick={() => place(moving!, 'bench')}>Move to bench</button>{/if}
-				</header>
-				{#if bench.length === 0}
-					<p class="muted small-text pad">Everyone is starting.</p>
-				{:else}
-					<ul class="rows">
-						{#each labelled(bench, (p) => p) as { row: player, labels: cols, first } (player.player_id)}
-							{#if cols}{@render labels(cols, first ? `Bench · ${bench.length}` : '')}{/if}
-							<li class="seat"><span class="slot">BN</span>{@render who(player, false)}</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
+			{/each}
 
 		{/if}
 	{/if}
 </div>
 
 <style>
+	.bench-divider { display:flex; align-items:center; justify-content:space-between; padding:.3rem .55rem; background:var(--surface-2); border-block:1px solid var(--rule); font:600 .62rem var(--mono); text-transform:uppercase; }
+	.name { font-size:.8rem; }
+	.player-meta { display:flex; align-items:center; flex-wrap:wrap; gap:0 .45rem; }
+	.name .row.tight :global(.watch-star) { padding:.1rem; }
+	.name .small-text { font-size:.66rem; }
+	.name .period-ranks { margin-top:0; font-size:.6rem; }
+	.seat .empty { padding:.25rem .5rem; }
+
 	.stat-view-controls { gap: .4rem; }
 	.stat-view-controls label { gap: .4rem; }
 	.stat-view-controls select { font-size: .8rem; padding: .35rem .5rem; }
@@ -654,8 +645,8 @@
 	.period-ranks { display: flex; flex-wrap: wrap; gap: .25rem .5rem; font-size: .65rem; color: var(--brand); margin-top: .15rem; }
 	.stats-enabled { min-width: 0; grid-template-columns: minmax(0,1fr); }
 	.stats-enabled .lineup-list { overflow-x: auto; scrollbar-width: thin; }
-	.stats-enabled .lineup-list .rows { min-width: calc(30rem + var(--stat-cols) * 2.55rem); }
-	@media(max-width:640px) { .stats-enabled .lineup-list .rows { min-width: 0; } }
+	.stats-enabled .lineup-list > .rows { min-width: calc(30rem + var(--stat-cols) * 2.55rem); }
+	@media(max-width:640px) { .stats-enabled .lineup-list > .rows { min-width: 0; } }
 
 	/* ---- the day or week ---- */
 	.days {
@@ -720,14 +711,14 @@
 	/* ---- the slots and the bench ---- */
 	/* Slot, player, game, a column per stat, fantasy points: every row shares
 	   these, so the numbers line up down the table. */
-	.stack {
-		--row: 3rem minmax(11rem, 1fr) minmax(6.5rem, 1.5fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
+	.lineup-list {
+		--row: 2rem minmax(14rem, 1fr) minmax(6rem, 1fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
 	}
 	.head {
 		display: grid;
 		grid-template-columns: var(--row);
 		align-items: center;
-		gap: 0.75rem;
+		gap: 0.45rem;
 		padding: 0.45rem 0.9rem;
 		background: var(--surface-2);
 		border-bottom: 1px solid var(--rule);
@@ -738,15 +729,6 @@
 	}
 	.head span:first-child {
 		grid-column: span 2;
-	}
-	.bench .head {
-		display: flex;
-		justify-content: space-between;
-	}
-	.bench .head button {
-		font-family: var(--body);
-		letter-spacing: 0;
-		text-transform: none;
 	}
 	.rows {
 		list-style: none;
@@ -759,9 +741,9 @@
 		display: grid;
 		grid-template-columns: var(--row);
 		align-items: center;
-		gap: 0.75rem;
-		min-height: 3.4rem;
-		padding: 0.4rem 0.9rem;
+		gap: 0.45rem;
+		min-height: 2.7rem;
+		padding: 0.25rem 0.55rem;
 		transition:
 			background 120ms,
 			opacity 120ms;
@@ -772,7 +754,7 @@
 	/* The column headings, above the first row of each kind of player. */
 	.labels {
 		min-height: 0;
-		padding: 0 0.9rem;
+		padding: 0 0.55rem;
 		background: var(--surface-2);
 		border-top: 1px solid var(--rule);
 		border-bottom: 1px solid var(--rule-strong);
@@ -801,7 +783,7 @@
 	}
 	.slot {
 		justify-self: start;
-		min-width: 2.4rem;
+		min-width: 1.8rem;
 		padding: 0.3rem 0.35rem;
 		border-radius: var(--radius-small);
 		background: color-mix(in srgb, var(--sport, var(--brand)) 14%, transparent);
@@ -809,14 +791,11 @@
 		font: 700 0.68rem/1 var(--mono);
 		text-align: center;
 	}
-	.bench .slot {
+	.bench-seat .slot {
 		background: var(--surface-2);
 		color: var(--ink-faint);
 	}
-	.bench {
-		background: var(--surface-2);
-	}
-	.bench .seat {
+	.bench-zone .seat {
 		background: var(--surface);
 		opacity: 0.85;
 	}
@@ -838,10 +817,10 @@
 		color: var(--sport, var(--brand));
 	}
 	.seat.over,
-	.bench.over {
+	.bench-zone.over {
 		background: color-mix(in srgb, var(--sport, var(--brand)) 16%, transparent);
 	}
-	.bench.target {
+	.bench-zone.target {
 		outline: 2px dashed var(--sport, var(--brand));
 		outline-offset: -2px;
 	}
@@ -919,12 +898,14 @@
 	   full height of the row, headings included. */
 	.stats {
 		display: grid;
-		grid-template-columns: repeat(var(--stat-cols), 1fr);
+		grid-template-columns: repeat(var(--stat-cols), minmax(0, 1fr));
 		align-self: stretch;
-		margin-block: -0.4rem;
+		margin-block: -0.25rem;
 		text-align: center;
 	}
 	.stats > span {
+		min-width: 0;
+		white-space: nowrap;
 		display: grid;
 		place-items: center;
 		border-left: 1px solid var(--rule);
@@ -944,7 +925,7 @@
 		border-color: var(--rule-strong);
 	}
 	.seat .stats {
-		font: 600 0.82rem var(--mono);
+		font: 600 0.72rem var(--mono);
 		font-variant-numeric: tabular-nums;
 	}
 	.stats .zero,
@@ -979,8 +960,8 @@
 		display: grid;
 		justify-items: center;
 		gap: 0.05rem;
-		min-width: 4rem;
-		padding: 0.35rem 0.3rem 0.3rem;
+		min-width: 2.8rem;
+		padding: 0.2rem 0.25rem;
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-small);
 		background: var(--surface);
@@ -990,7 +971,7 @@
 	.tile .logo {
 		display: grid;
 		place-items: center;
-		height: 42px;
+		height: 26px;
 	}
 	.tile .logo small {
 		position: absolute;
@@ -1049,19 +1030,6 @@
 		font-style: italic;
 		font-weight: 500;
 		color: var(--ink-soft);
-	}
-	.drop-player {
-		margin-left: 0.3rem;
-		padding: 0 0.2rem;
-		border: 0;
-		background: none;
-		color: var(--ink-faint);
-		font: 600 0.7rem var(--body);
-		text-decoration: underline;
-		vertical-align: middle;
-	}
-	.drop-player:hover {
-		color: var(--bad);
 	}
 	.labels .pts {
 		font: inherit;

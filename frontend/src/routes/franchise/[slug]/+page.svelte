@@ -24,10 +24,11 @@
 	import Matchups from '#lib/Matchups.svelte';
 	import SeasonRoster from '#lib/SeasonRoster.svelte';
 	import { dropQuestion } from '#lib/dropPlayer.ts';
-	import TradeFlag from '#lib/TradeFlag.svelte';
+	import PlayerActions from '#lib/PlayerActions.svelte';
 	import PlayerNickname from '#lib/PlayerNickname.svelte';
 	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
 	import WatchStar from '#lib/WatchStar.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
@@ -64,6 +65,11 @@
 	function setSeasonRoster(competition: string) {
 		show(competition);
 		settingSeason = true;
+	}
+
+	// Another team's page, on the same view.
+	function switchTeam(slug: string) {
+		goto(`/franchise/${slug}${page.url.search}`);
 	}
 
 	function show(to: string) {
@@ -298,6 +304,13 @@
 				{#if team.is_commissioner}<span class="pill gold">Commissioner</span>{/if}
 			</p>
 		</div>
+		{#if franchises.length > 1}
+			<select class="switch" aria-label="Team to view" value={team.slug} onchange={(e) => switchTeam(e.currentTarget.value)}>
+				{#each franchises as f (f.id)}
+					<option value={f.slug}>{nameOf(f.id, league?.id)}{f.id === data.me?.id ? ' (you)' : ''}</option>
+				{/each}
+			</select>
+		{/if}
 		{#if data.me && !mine}
 			<a class="button primary" href="/trades/new?with={team.slug}"><Icon name="trade" size={16} /> Propose a trade</a>
 		{:else if mine}
@@ -493,7 +506,7 @@
 										<div class="player">
 											<Headshot name={player.full_name} src={player.headshot_url} />
 											<div>
-												<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
+												<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} />
 												<div class="muted small-text">{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={roster.competition} abbrev={player.team_abbrev} size={22} />{/if}{#if player.note} · {player.note}{/if}</div>
 											</div>
 										</div>
@@ -570,7 +583,7 @@
 													<Headshot name={player.full_name} src={player.headshot_url} />
 													<div>
 														<div class="row who">
-															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} /><TradeFlag leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} />
+															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} /><PlayerActions leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} detail={`${player.positions.join('/')} · ${list.title}`} onDrop={canEdit && !plan ? () => change(roster, 'drop', player) : undefined} />
 															<InjuryBadge designation={player.injury_designation} />
 																{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}
@@ -592,7 +605,6 @@
 														<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => (plan![player.player_id] = list.other)}>{list.move}</button>
 													{:else}
 														{#if !(mine && roster.season?.locked)}<button class="small" disabled={player.injury_reserve_locked || (mine && !!player.locked_until)} onclick={() => change(roster, 'move', player, list.other)}>{list.move}</button>{/if}
-														<button class="small quiet danger" onclick={() => change(roster, 'drop', player)}>Drop</button>
 														{#if list.key === 'main' && injuryEligible(player)}
 															<div class="injury-swap">
 																<select aria-label="Reserve replacement for {player.full_name}" bind:value={injuryReplacement[player.player_id]} disabled={swapping}>
@@ -660,6 +672,10 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 1rem;
+	}
+	.switch {
+		max-width: 14rem;
+		font-size: 0.85rem;
 	}
 	.grow {
 		flex: 1;

@@ -128,7 +128,7 @@
 					{#if !side.id}<p class="empty muted">No opponent this round.</p>
 					{:else if side.rows.length === 0}<p class="empty muted">No starters or scored contributions for this view.</p>
 					{:else}
-						<MatchupStats rows={side.rows} sport={league.competition} {showOther} picking={pickedGames} />
+						<MatchupStats rows={side.rows} sport={league.competition} scoring={league.settings.scoring} {showOther} picking={pickedGames} />
 					{/if}
 				</section>
 			{/each}

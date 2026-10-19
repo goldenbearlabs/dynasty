@@ -46,6 +46,45 @@ func (q *Queries) InsertProspectRanking(ctx context.Context, arg InsertProspectR
 	return err
 }
 
+const listProspectRankings = `-- name: ListProspectRankings :many
+select player_id, rank, year, eta, source_url from prospect_rankings where source = 'mlb_pipeline' order by rank
+`
+
+type ListProspectRankingsRow struct {
+	PlayerID  pgtype.UUID `json:"player_id"`
+	Rank      int32       `json:"rank"`
+	Year      int32       `json:"year"`
+	Eta       string      `json:"eta"`
+	SourceUrl string      `json:"source_url"`
+}
+
+// Every ranked prospect, for a tag beside his name wherever he appears.
+func (q *Queries) ListProspectRankings(ctx context.Context) ([]ListProspectRankingsRow, error) {
+	rows, err := q.db.Query(ctx, listProspectRankings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProspectRankingsRow{}
+	for rows.Next() {
+		var i ListProspectRankingsRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.Rank,
+			&i.Year,
+			&i.Eta,
+			&i.SourceUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockProspectRankingSource = `-- name: LockProspectRankingSource :exec
 select pg_advisory_xact_lock(hashtextextended('prospect_rankings:' || $1::text,0))
 `

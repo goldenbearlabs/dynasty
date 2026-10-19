@@ -55,6 +55,18 @@ export function statColumns(competition: string, positions: string[]): StatColum
 	}
 }
 
+/** NHL tables follow the league's active scoring categories, including deductions. */
+export function hockeyScoringColumns(goalie: boolean, scoring: Record<string, number>): StatColumn[] {
+	const columns = goalie ? [
+		...statColumns('nhl', ['G'])
+	] : [
+		...statColumns('nhl', ['C']),
+		col('pp_goals', 'PPG', 'Power-play goals'),
+		col('plus_minus', '+/−', 'Plus/minus')
+	];
+	return columns.filter(column => Number.isFinite(scoring[column.key]) && scoring[column.key] !== 0);
+}
+
 /** The most columns any player in the sport has, so every row lines up. */
 export const widestStats = (competition: string) =>
 	Math.max(...['G', 'C', 'QB', 'P', 'SS'].map((p) => statColumns(competition, [p]).length));

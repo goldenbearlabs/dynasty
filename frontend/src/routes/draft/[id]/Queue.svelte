@@ -1,6 +1,7 @@
 <script lang="ts">
  import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
+ import ProspectRank from "#lib/ui/ProspectRank.svelte";
 	// A manager's ranked wish list. If their clock runs out, the first
 	// player on it who is still available is drafted for them.
 	import type { QueuedPlayer } from '#lib/api.ts';
@@ -51,7 +52,7 @@
 						<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />
 					</span>
 				</div>
-				<WatchStar playerID={player.player_id} playerName={player.full_name} />
+				<WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} />
 				{#if editable}<span class="moves">
 						<button
 							class="quiet small"

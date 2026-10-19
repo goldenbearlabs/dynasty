@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { MatchupRow } from '#lib/matchupView.ts';
-	import { columnValue, statColumns, statValue, sumStats } from '#lib/statLine.ts';
+	import { columnValue, hockeyScoringColumns, statColumns, statValue, sumStats } from '#lib/statLine.ts';
+	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { dayLabel, points, timeOfDay } from '#lib/ui/time.ts';
 
 	// picking: whether the league's slots count only some games, so a game is picked and can be looked into.
-	let { rows, sport, showOther = false, picking = true }: { rows: MatchupRow[]; sport: string; showOther?: boolean; picking?: boolean } = $props();
+	let { rows, sport, scoring, showOther = false, picking = true }: { rows: MatchupRow[]; sport: string; scoring: Record<string, number>; showOther?: boolean; picking?: boolean } = $props();
 	let expanded = $state<string[]>([]);
-	const columns = (positions: string[]) => sport === 'nfl' ? [
+	const columns = (positions: string[]) => sport === 'nhl' ? hockeyScoringColumns(positions.includes('G'), scoring) : sport === 'nfl' ? [
 		['pass_yds','PYD','Passing yards'], ['pass_td','PTD','Passing touchdowns'], ['interceptions','INT','Interceptions'],
 		['rush_yds','RYD','Rushing yards'], ['rush_td','RTD','Rushing touchdowns'],
 		['receptions','REC','Receptions'], ['rec_yds','RECYD','Receiving yards'], ['rec_td','RECTD','Receiving touchdowns'],
@@ -17,28 +18,28 @@
 		const grouped: { key: string; label: string; columns: ReturnType<typeof columns>; rows: MatchupRow[] }[] = [];
 		for (const row of rows) {
 			const cols = columns(row.positions);
-			const key = cols.map(c => c.key).join(',');
+			const key = rosterGroup(sport,row.positions,row.bench ? '' : row.slot);
 			let group = grouped.find(g => g.key === key);
 			if (!group) {
-				group = {key, columns: cols, rows: [], label: sport === 'nhl' ? row.positions.includes('G') ? 'Goalies' : 'Skaters' : sport === 'mlb' ? cols[0]?.key === 'pit_ip' ? 'Pitchers' : 'Hitters' : ''};
+				group = {key, columns: cols, rows: [], label: key === 'Lineup' ? '' : key};
 				grouped.push(group);
 			}
 			group.rows.push(row);
 		}
-		return grouped;
+		return grouped.sort((a,b) => rosterGroupOrder(sport).indexOf(a.key)-rosterGroupOrder(sport).indexOf(b.key));
 	});
-	const visible = (row: MatchupRow) => row.games.filter(g => showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate');
+	const visible = (row: MatchupRow) => row.games.filter(g => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate');
 	const statsFor = (row: MatchupRow) => {
-		const games = row.games.filter(g => g.counted);
+		const games = row.games.filter(g => row.bench || g.counted);
 		return { line: sumStats(games.map(g => g.stats)), played: games.some(g => Object.keys(g.stats ?? {}).length > 0) };
 	};
 	const shortDate = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 	function gameSummary(row: MatchupRow): string {
 		const games = visible(row);
-		const auto = row.selection.startsWith('Auto');
+		const auto = !row.bench && row.selection.startsWith('Auto');
 		if (games.length === 1) return `${shortDate(games[0].day)} ${games[0].opponent}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
 		if (games.length > 1) return `${games.length} games${auto ? ' · Auto' : ''}`;
-		return auto ? 'Auto · waiting for a game' : 'No selected game';
+		return row.bench ? 'No game in this view' : auto ? 'Auto · waiting for a game' : 'No selected game';
 	}
 	function toggle(id: string) { expanded = expanded.includes(id) ? expanded.filter(p => p !== id) : [...expanded,id]; }
 </script>
@@ -50,16 +51,18 @@
 		<table>
 			<thead><tr><th scope="col" class="player-cell">Player / game</th>{#each group.columns as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}<th scope="col" class="num fp" title="Counted fantasy points">FP</th></tr></thead>
 			<tbody>
-				{#each group.rows as row (row.id)}
+				<tr class="section-row"><th colspan={group.columns.length+2}>Starting lineup</th></tr>
+				{#each group.rows as row, index (row.id)}
+					{#if row.bench && (index === 0 || !group.rows[index-1].bench)}<tr class="section-row"><th colspan={group.columns.length+2}>Bench · {group.rows.filter(p => p.bench).length}</th></tr>{/if}
 					{@const stats = statsFor(row)}
 					{@const open = expanded.includes(row.id)}
-					<tr class="player-row">
+					<tr class="player-row" class:bench-row={row.bench}>
 						<th scope="row" class="player-cell">
-							<div class="player-identity">{#if picking}<button class="expand" aria-label={`${open ? 'Hide' : 'Show'} games for ${row.name}`} aria-expanded={open} onclick={() => toggle(row.id)}><Icon name={open ? 'down' : 'right'} size={12} /></button>{/if}<span class="slot">{row.slot}</span><a href="/player/{row.id}" title={row.name}>{row.name}</a></div>
-							<div class="game-summary" class:flat={!picking} title={`${gameSummary(row)}${row.earlier ? ' · Started earlier' : ''}`}>{gameSummary(row)}{#if row.earlier} · Earlier{/if}</div>
+							<div class="player-identity">{#if picking && !row.empty}<button class="expand" aria-label={`${open ? 'Hide' : 'Show'} games for ${row.name}`} aria-expanded={open} onclick={() => toggle(row.id)}><Icon name={open ? 'down' : 'right'} size={12} /></button>{/if}<span class="slot">{row.slot}</span>{#if row.empty}<span class="muted">Empty</span>{:else}<a href="/player/{row.id}" title={row.name}>{row.name}</a>{/if}</div>
+							<div class="game-summary" class:flat={!picking} title={`${gameSummary(row)}${row.earlier ? ' · Started earlier' : ''}`}>{row.empty ? 'No starter selected' : gameSummary(row)}{#if row.earlier} · Earlier{/if}</div>
 						</th>
 						{#each group.columns as col (col.key)}<td class="num" title={col.title}>{stats.played ? statValue(columnValue(stats.line,col)) : '—'}</td>{/each}
-						<td class="num fp player-points">{#if row.points || !row.projected}{points(row.points)}{/if}{#if row.projected}<span class="proj" title="Projected for games still to come, from recent seasons and the betting line">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}</td>
+						<td class="num fp player-points">{#if row.empty}—{:else if row.points || !row.projected}{points(row.points)}{/if}{#if row.projected}<span class="proj" title="Projected for games still to come, from recent seasons and the betting line">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}</td>
 					</tr>
 					{#if open && picking}
 						{#each visible(row) as game, i (i)}
@@ -78,6 +81,8 @@
 {/each}
 
 <style>
+	.section-row th { padding:.25rem .45rem; background:var(--surface-2); color:var(--ink-soft); text-align:left; font-size:.58rem; }
+	.bench-row .slot { color:var(--ink-faint); }
 	.stat-scroll { overflow-x: auto; scrollbar-width: thin; }
 	table { width: 100%; font-size: .72rem; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 	th, td { padding: .4rem .25rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }

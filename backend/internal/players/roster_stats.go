@@ -66,7 +66,7 @@ func sportSeason(competition string, today time.Time) (RosterStatSeason, time.Ti
 
 // RosterPerformance returns current roster players with their real production
 // and competition-wide ranks under this league's scoring rules.
-func (s *Service) RosterPerformance(ctx context.Context, league db.League, franchise pgtype.UUID, window, seasonLabel string) (RosterStats, error) {
+func (s *Service) RosterPerformance(ctx context.Context, league db.League, franchise pgtype.UUID, window, seasonLabel, day string) (RosterStats, error) {
 	rules, err := settings.Parse[settings.League](league.Settings)
 	if err != nil {
 		return RosterStats{}, err
@@ -122,6 +122,14 @@ func (s *Service) RosterPerformance(ctx context.Context, league db.League, franc
 		days, _ := strconv.Atoi(window)
 		if window == "today" {
 			days = 1
+			if day != "" {
+				viewedDay, err := sportsday.Parse(day)
+				if err != nil {
+					return result, problem.New("Choose a valid date (YYYY-MM-DD).")
+				}
+				today = viewedDay
+				result.ToDay = day
+			}
 		}
 		from = today.AddDate(0, 0, -days+1)
 		result.FromDay = from.Format(time.DateOnly)

@@ -6,6 +6,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { setSeasonRoster, type LeagueRoster, type RosterPlayer } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
@@ -77,7 +78,7 @@
 					<li>
 						<Headshot name={p.full_name} src={p.headshot_url} size={30} />
 						<span class="who">
-							<strong>{p.full_name}</strong>
+							<strong>{p.full_name} <ProspectRank id={p.player_id} /></strong>
 							<span class="muted">{p.positions.join('/')}{#if p.team_abbrev} · <TeamLogo competition={roster.competition} abbrev={p.team_abbrev} size={18} />{/if}</span>
 						</span>
 						<InjuryBadge designation={p.injury_designation} />

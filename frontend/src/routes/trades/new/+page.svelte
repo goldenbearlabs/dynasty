@@ -126,7 +126,7 @@
 					{#if wants.length}
 						<p class="wants small-text">
 							<strong>Looking for</strong>
-							{#each wants as w (w.league_id)}
+							{#each wants as w (w.id)}
 								<span><SportBadge sport={w.competition} /> {w.positions.join(', ')}{#if w.note}{' '}“{w.note}”{/if}</span>
 							{/each}
 						</p>

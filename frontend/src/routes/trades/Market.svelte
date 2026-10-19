@@ -3,11 +3,12 @@
 	// your players and who you are after, then every manager's block and
 	// wants, so a trade can start from what the other side said they want.
 	import { page } from '$app/state';
-	import type { Competition, Dynasty, Franchise, LeagueRoster, MarketPlayer } from '#lib/api.ts';
+	import { getFranchise, type Competition, type Dynasty, type Franchise, type LeagueRoster, type MarketPlayer, type RosterPlayer } from '#lib/api.ts';
 	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
@@ -32,9 +33,12 @@
 			.toSorted((a, b) => Number(b.franchise.id !== me?.id) - Number(a.franchise.id !== me?.id) || b.block.length + b.wants.length - (a.block.length + a.wants.length))
 	);
 
-	// ---- your block: adding a player ----
+	// ---- picking several players from a roster at once ----
+	const pickToggle = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+	// ---- your block: adding players ----
 	let addLeague = $state('');
-	let addPlayer = $state('');
+	let addPlayers = $state<string[]>([]);
 	let addNote = $state('');
 	const addable = $derived(
 		rosters
@@ -43,10 +47,8 @@
 			.toSorted((a, b) => a.full_name.localeCompare(b.full_name)) ?? []
 	);
 	async function add() {
-		const player = addable.find((p) => p.player_id === addPlayer);
-		if (!player) return;
-		await tradeMarket.block(addLeague, player.player_id, true, addNote, player.full_name);
-		addPlayer = '';
+		await tradeMarket.blockMany(addLeague, addPlayers, addNote);
+		addPlayers = [];
 		addNote = '';
 	}
 	const myBlock = $derived(market.block.filter((b) => b.franchise_id === me?.id));
@@ -63,14 +65,16 @@
 			myLeagues.find((l) => market.wants.some((w) => w.franchise_id === me?.id && w.league_id === l.id)) ??
 			myLeagues[0]
 	);
-	const savedWants = $derived(market.wants.find((w) => w.franchise_id === me?.id && w.league_id === wantFor?.id));
+	const myWants = $derived(market.wants.filter((w) => w.franchise_id === me?.id && w.league_id === wantFor?.id));
+	// A new want being written.
 	let wantPositions = $state<string[]>([]);
 	let wantNote = $state('');
-	$effect(() => {
-		// Start from what is saved whenever the league or the saved wants change.
-		wantPositions = [...(savedWants?.positions ?? [])];
-		wantNote = savedWants?.note ?? '';
-	});
+	async function addWant() {
+		if (!wantFor) return;
+		await tradeMarket.addWant(wantFor.id, wantPositions, wantNote);
+		wantPositions = [];
+		wantNote = '';
+	}
 	const positionsOf = (competition: string) => competitions.find((c) => c.key === competition)?.positions ?? [];
 	const toggle = (p: string) => (wantPositions = wantPositions.includes(p) ? wantPositions.filter((x) => x !== p) : [...wantPositions, p]);
 
@@ -80,18 +84,64 @@
 			Object.groupBy(market.interest, (t) => key(t)) as Record<string, typeof market.interest>
 		).map((ts) => ({ player: ts[0], by: ts.map((t) => t.by_franchise_id) }))
 	);
+	// ---- your targets: several of one manager's players at once ----
+	let targetLeague = $state('');
+	let targetFrom = $state('');
+	let targetPicks = $state<string[]>([]);
+	let targetRoster = $state<RosterPlayer[]>([]);
+	$effect(() => {
+		const league = targetLeague;
+		const slug = franchise(targetFrom)?.slug;
+		targetPicks = [];
+		targetRoster = [];
+		if (!league || !slug) return;
+		let active = true;
+		getFranchise(slug).then(
+			(detail) => {
+				if (active) targetRoster = detail.rosters.find((r) => r.league_id === league)?.players ?? [];
+			},
+			() => {}
+		);
+		return () => (active = false);
+	});
+	const targetable = $derived(
+		targetRoster.filter((p) => !tradeMarket.targeted(targetLeague, p.player_id)).toSorted((a, b) => a.full_name.localeCompare(b.full_name))
+	);
+	async function addTargets() {
+		await tradeMarket.targetMany(targetLeague, targetPicks);
+		targetPicks = [];
+	}
 	const proposeTo = (id: string) => `/trades/new?with=${franchise(id)?.slug ?? ''}`;
 </script>
 
 {#snippet who(p: MarketPlayer, extra?: string)}
 	<Headshot name={p.full_name} src={p.headshot_url} size={30} />
 	<span class="who">
-		<a href="/player/{p.player_id}"><strong>{p.full_name}</strong></a>
+		<span><a href="/player/{p.player_id}"><strong>{p.full_name}</strong></a> <ProspectRank id={p.player_id} /></span>
 		<span class="muted">
 			<SportBadge sport={p.competition} />
 			{p.positions.join('/')}{#if p.team_abbrev} · <TeamLogo competition={p.competition} abbrev={p.team_abbrev} size={16} />{/if}{#if p.list === 'reserve'} · reserve{/if}{#if extra} · {extra}{/if}
 		</span>
 	</span>
+{/snippet}
+
+<!-- A roster to tick several players from. -->
+{#snippet checklist(players: RosterPlayer[], picked: string[], toggle: (id: string) => void, label: string)}
+	{#if players.length}
+		<ul class="checklist" aria-label={label}>
+			{#each players as p (p.player_id)}
+				<li>
+					<label class:on={picked.includes(p.player_id)}>
+						<input type="checkbox" checked={picked.includes(p.player_id)} onchange={() => toggle(p.player_id)} />
+						<span>{p.full_name} <ProspectRank id={p.player_id} /></span>
+						<span class="muted">{p.positions.join('/')}{#if p.list !== 'main'} · {p.list}{/if}</span>
+					</label>
+				</li>
+			{/each}
+		</ul>
+	{:else}
+		<p class="muted small-text">Nobody left to pick.</p>
+	{/if}
 {/snippet}
 
 <div class="market">
@@ -122,17 +172,20 @@
 				{:else}
 					<p class="muted small-text">Nobody yet. Add players here, or tap <strong>Trade block</strong> next to anyone on your roster.</p>
 				{/if}
-				<div class="add row">
-					<select bind:value={addLeague} aria-label="League">
-						<option value="">League…</option>
+				<div class="add">
+					<select bind:value={addLeague} aria-label="League" onchange={() => (addPlayers = [])}>
+						<option value="">Add players from…</option>
 						{#each myLeagues as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 					</select>
-					<select bind:value={addPlayer} aria-label="Player" disabled={!addLeague}>
-						<option value="">Player…</option>
-						{#each addable as p (p.player_id)}<option value={p.player_id}>{p.full_name} · {p.positions.join('/')}</option>{/each}
-					</select>
-					<input placeholder="Note (optional)" bind:value={addNote} />
-					<button class="primary small" disabled={!addPlayer || tradeMarket.busy} onclick={add}><Icon name="plus" size={14} /> Add</button>
+					{#if addLeague}
+						{@render checklist(addable, addPlayers, (id) => (addPlayers = pickToggle(addPlayers, id)), 'Players to put on the block')}
+						<div class="row">
+							<input class="grow" placeholder="Note for them all (optional)" bind:value={addNote} />
+							<button class="primary small" disabled={!addPlayers.length || tradeMarket.busy} onclick={add}>
+								<Icon name="plus" size={14} /> Add {addPlayers.length || ''}
+							</button>
+						</div>
+					{/if}
 				</div>
 			</div>
 
@@ -141,7 +194,7 @@
 				<div class="card part">
 					<header>
 						<h2><Icon name="search" size={16} /> What you're looking for</h2>
-						<span class="muted small-text">Positions and a note for each league, shown to every manager.</span>
+						<span class="muted small-text">As many as you like in each league, each with positions and a note. Every manager can see them.</span>
 					</header>
 					<div class="row">
 						{#each myLeagues as l (l.id)}
@@ -151,14 +204,27 @@
 							</button>
 						{/each}
 					</div>
-					<div class="chips" role="group" aria-label="Positions wanted in {wantFor.name}">
+					{#if myWants.length}
+						<ul class="wants mine-wants">
+							{#each myWants as w (w.id)}
+								<li>
+									{#each w.positions as p (p)}<span class="chip on small">{p}</span>{/each}
+									{#if w.note}<span class="quote">“{w.note}”</span>{/if}
+									<button class="quiet small remove" title="Remove this want" disabled={tradeMarket.busy} onclick={() => tradeMarket.removeWant(w.id)}><Icon name="x" size={14} /></button>
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="muted small-text">Nothing yet in {wantFor.name}.</p>
+					{/if}
+					<div class="chips" role="group" aria-label="Positions for a new want in {wantFor.name}">
 						{#each positionsOf(wantFor.competition) as p (p)}
 							<button class="chip" class:on={wantPositions.includes(p)} aria-pressed={wantPositions.includes(p)} onclick={() => toggle(p)}>{p}</button>
 						{/each}
 					</div>
 					<div class="row">
 						<input class="grow" placeholder="e.g. A young goalie, or picks for a veteran" bind:value={wantNote} />
-						<button class="primary small" disabled={tradeMarket.busy} onclick={() => tradeMarket.wants(wantFor.id, wantPositions, wantNote)}>Save</button>
+						<button class="primary small" disabled={tradeMarket.busy || (!wantPositions.length && !wantNote.trim())} onclick={addWant}><Icon name="plus" size={14} /> Add want</button>
 					</div>
 				</div>
 			{/if}
@@ -207,6 +273,24 @@
 				{:else}
 					<p class="muted small-text">No targets yet.</p>
 				{/if}
+				<div class="add">
+					<div class="row">
+						<select bind:value={targetLeague} aria-label="League for new targets">
+							<option value="">Add targets in…</option>
+							{#each dynasty.leagues as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+						</select>
+						<select bind:value={targetFrom} aria-label="Manager" disabled={!targetLeague}>
+							<option value="">From…</option>
+							{#each dynasty.franchises.filter((f) => f.id !== me.id) as f (f.id)}<option value={f.id}>{f.name}</option>{/each}
+						</select>
+					</div>
+					{#if targetLeague && targetFrom}
+						{@render checklist(targetable, targetPicks, (id) => (targetPicks = pickToggle(targetPicks, id)), 'Players to target')}
+						<button class="primary small" disabled={!targetPicks.length || tradeMarket.busy} onclick={addTargets}>
+							<Icon name="target" size={14} /> Target {targetPicks.length || ''}
+						</button>
+					{/if}
+				</div>
 			</div>
 		</section>
 	{/if}
@@ -241,7 +325,7 @@
 					<h3>Looking for</h3>
 					{#if m.wants.length}
 						<ul class="wants">
-							{#each m.wants as w (w.league_id)}
+							{#each m.wants as w (w.id)}
 								<li>
 									<SportBadge sport={w.competition} />
 									{#each w.positions as p (p)}<span class="chip on small">{p}</span>{/each}
@@ -338,6 +422,7 @@
 		font-size: 0.8rem;
 	}
 	.add {
+		display: grid;
 		gap: 0.4rem;
 		padding-top: 0.6rem;
 		border-top: 1px solid var(--rule);
@@ -346,6 +431,41 @@
 	.add input {
 		flex: 1 1 8rem;
 		font-size: 0.82rem;
+	}
+	.add .row {
+		gap: 0.4rem;
+	}
+	.checklist {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+		gap: 0.15rem 0.6rem;
+		max-height: 15rem;
+		overflow-y: auto;
+		margin: 0;
+		padding: 0.2rem;
+		list-style: none;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-small);
+	}
+	.checklist label {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.3rem;
+		border-radius: var(--radius-small);
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+	.checklist label.on {
+		background: var(--brand-soft);
+	}
+	.checklist .muted {
+		margin-left: auto;
+		font-size: 0.7rem;
+	}
+	.mine-wants .remove {
+		margin-left: auto;
+		padding: 0.15rem;
 	}
 	.league {
 		padding: 0.2rem 0.35rem;

@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import type { DraftPick, Franchise, PickReaction } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import PresenceDot from '#lib/ui/PresenceDot.svelte';
 	import { layoutDraftBoard } from '#lib/draftBoard.ts';
 
@@ -152,7 +153,7 @@
 									>
 										<Headshot name={pick.player_name} src={pick.player_headshot} size={22} /><strong
 											>{pick.player_name}</strong
-										>
+										>{#if pick.player_id}<ProspectRank id={pick.player_id} />{/if}
 									</button>
 									<span class="meta"
 										>{pick.player_positions.join('/')}{#if showSport}
