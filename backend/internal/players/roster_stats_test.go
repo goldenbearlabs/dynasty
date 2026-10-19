@@ -92,7 +92,7 @@ func TestRosterPerformanceWindowsAndRanks(t *testing.T) {
 		window string
 		gp     int64
 		fp     float64
-	}{{"7", 2, 33}, {"14", 4, 75}, {"30", 6, 81}} {
+	}{{"today", 1, 23}, {"7", 2, 33}, {"14", 4, 75}, {"30", 6, 81}} {
 		result, err := service.RosterPerformance(ctx, league, owner.ID, tc.window, "")
 		if err != nil {
 			t.Fatal(err)

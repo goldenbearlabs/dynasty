@@ -74,8 +74,8 @@ func (s *Service) RosterPerformance(ctx context.Context, league db.League, franc
 	if window == "" {
 		window = "current"
 	}
-	if !slices.Contains([]string{"current", "7", "14", "30", "season"}, window) {
-		return RosterStats{}, problem.New("Choose current season, a past season, or the last 7, 14 or 30 days.")
+	if !slices.Contains([]string{"today", "current", "7", "14", "30", "season"}, window) {
+		return RosterStats{}, problem.New("Choose today, current season, a past season, or the last 7, 14 or 30 days.")
 	}
 	today := sportsday.Today()
 	current, from := sportSeason(league.Competition, today)
@@ -120,6 +120,9 @@ func (s *Service) RosterPerformance(ctx context.Context, league db.League, franc
 	useSeason := window == "season" || window == "current"
 	if !useSeason {
 		days, _ := strconv.Atoi(window)
+		if window == "today" {
+			days = 1
+		}
 		from = today.AddDate(0, 0, -days+1)
 		result.FromDay = from.Format(time.DateOnly)
 		result.Season = ""

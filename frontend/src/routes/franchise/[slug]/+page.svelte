@@ -21,7 +21,6 @@
 	} from '#lib/api.ts';
 	import { teamIdentity } from '#lib/identity.ts';
 	import LineupEditor from '#lib/LineupEditor.svelte';
-	import RosterStats from '#lib/RosterStats.svelte';
 	import Matchups from '#lib/Matchups.svelte';
 	import SeasonRoster from '#lib/SeasonRoster.svelte';
 	import { dropQuestion } from '#lib/dropPlayer.ts';
@@ -212,7 +211,6 @@
 	// player is headed; nothing is saved until the whole split is.
 	let plan = $state<Record<string, List>>();
 	let rosterOpen = $state(false);
-	let playerView = $state<'lineup'|'stats'>('lineup');
 	$effect(() => {
 		void league?.id;
 		void team.id;
@@ -515,14 +513,10 @@
 			{/if}
 
 			<section class="stack tight player-views">
-				<div class="spread"><h2>Players</h2><Tabs tabs={[{value:'lineup',label:'Lineup'},{value:'stats',label:'Player stats'}]} bind:value={playerView} label="Team player view" /></div>
+				<h2>Players</h2>
+				{#if mine}<a class="small-text" href="/watchlist?competition={league.competition}">View your {league.name} watchlist →</a>{/if}
 				{#key league.id + team.id}
-					{#if playerView === 'stats'}
-						<RosterStats {league} {roster} franchiseId={team.id} competition={data.competitions.find(c => c.key === league.competition)!} />
-					{:else}
-						{#if mine}<a class="small-text" href="/watchlist?competition={league.competition}">View your {league.name} watchlist →</a>{/if}
-						<LineupEditor {league} franchise={team} {canEdit} commissioner={data.me?.is_commissioner === true} />
-					{/if}
+					<LineupEditor {league} franchise={team} {roster} competition={data.competitions.find(c => c.key === league.competition)!} {canEdit} commissioner={data.me?.is_commissioner === true} />
 				{/key}
 			</section>
 

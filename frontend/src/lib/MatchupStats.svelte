@@ -4,7 +4,8 @@
 	import Icon from '#lib/ui/Icon.svelte';
 	import { dayLabel, points, timeOfDay } from '#lib/ui/time.ts';
 
-	let { rows, sport, showOther = false }: { rows: MatchupRow[]; sport: string; showOther?: boolean } = $props();
+	// picking: whether the league's slots count only some games, so a game is picked and can be looked into.
+	let { rows, sport, showOther = false, picking = true }: { rows: MatchupRow[]; sport: string; showOther?: boolean; picking?: boolean } = $props();
 	let expanded = $state<string[]>([]);
 	const columns = (positions: string[]) => sport === 'nfl' ? [
 		['pass_yds','PYD','Passing yards'], ['pass_td','PTD','Passing touchdowns'], ['interceptions','INT','Interceptions'],
@@ -35,7 +36,7 @@
 	function gameSummary(row: MatchupRow): string {
 		const games = visible(row);
 		const auto = row.selection.startsWith('Auto');
-		if (games.length === 1) return `${shortDate(games[0].day)} ${games[0].opponent}${auto ? ' · Auto' : games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
+		if (games.length === 1) return `${shortDate(games[0].day)} ${games[0].opponent}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
 		if (games.length > 1) return `${games.length} games${auto ? ' · Auto' : ''}`;
 		return auto ? 'Auto · waiting for a game' : 'No selected game';
 	}
@@ -54,19 +55,19 @@
 					{@const open = expanded.includes(row.id)}
 					<tr class="player-row">
 						<th scope="row" class="player-cell">
-							<div class="player-identity"><button class="expand" aria-label={`${open ? 'Hide' : 'Show'} games for ${row.name}`} aria-expanded={open} onclick={() => toggle(row.id)}><Icon name={open ? 'down' : 'right'} size={12} /></button><span class="slot">{row.slot}</span><a href="/player/{row.id}" title={row.name}>{row.name}</a></div>
-							<div class="game-summary" title={`${gameSummary(row)}${row.earlier ? ' · Started earlier' : ''}`}>{gameSummary(row)}{#if row.earlier} · Earlier{/if}</div>
+							<div class="player-identity">{#if picking}<button class="expand" aria-label={`${open ? 'Hide' : 'Show'} games for ${row.name}`} aria-expanded={open} onclick={() => toggle(row.id)}><Icon name={open ? 'down' : 'right'} size={12} /></button>{/if}<span class="slot">{row.slot}</span><a href="/player/{row.id}" title={row.name}>{row.name}</a></div>
+							<div class="game-summary" class:flat={!picking} title={`${gameSummary(row)}${row.earlier ? ' · Started earlier' : ''}`}>{gameSummary(row)}{#if row.earlier} · Earlier{/if}</div>
 						</th>
 						{#each group.columns as col (col.key)}<td class="num" title={col.title}>{stats.played ? statValue(columnValue(stats.line,col)) : '—'}</td>{/each}
-						<td class="num fp player-points">{points(row.points)}</td>
+						<td class="num fp player-points">{#if row.points || !row.projected}{points(row.points)}{/if}{#if row.projected}<span class="proj" title="Projected for games still to come, from recent seasons and the betting line">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}</td>
 					</tr>
-					{#if open}
+					{#if open && picking}
 						{#each visible(row) as game, i (i)}
 							{@const played = Object.keys(game.stats ?? {}).length > 0}
 							<tr class="game-line" class:uncounted={!game.counted}>
 								<td class="player-cell game-cell"><div>{#if game.gameId}<a href="/game/{game.gameId}" title={dayLabel(game.day)}>{shortDate(game.day)} {game.opponent}</a>{:else}{shortDate(game.day)} {game.opponent}{/if}</div><small class:counted={game.counted}>{game.label.replace('Selected · Awaiting scored stats','Awaiting scored stats')}{game.status === 'live' ? ' · Live' : game.status === 'final' ? ' · Final' : ` · ${timeOfDay(game.starts_at)}`}</small></td>
 								{#each group.columns as col (col.key)}<td class="num">{played ? statValue(columnValue(game.stats,col)) : '—'}</td>{/each}
-								<td class="num fp">{game.counted ? points(game.points) : '—'}</td>
+								<td class="num fp">{game.counted ? points(game.points) : game.projected ? '' : '—'}{#if game.projected}<span class="proj" title="Projected">{points(game.projected)}</span>{/if}</td>
 							</tr>
 						{:else}<tr class="game-line"><td colspan={group.columns.length+2} class="no-games">No games in this view.</td></tr>{/each}
 					{/if}
@@ -88,6 +89,8 @@
 	.slot { flex: none; font-size: .55rem; color: var(--ink-soft); min-width: 1.05rem; }
 	.expand { flex: none; padding: .15rem 0; border: 0; background: transparent; color: var(--ink-soft); }
 	.game-summary { font-size: .6rem; color: var(--ink-soft); font-weight: 400; padding-left: 1rem; overflow: hidden; text-overflow: ellipsis; margin-top: .1rem; }
+	.game-summary.flat { padding-left: 0; }
+	.proj { display: block; font-style: italic; font-weight: 500; color: var(--ink-soft); }
 	.fp { position: sticky; right: 0; z-index: 1; background: var(--surface); border-left: 1px solid var(--rule); padding-inline: .45rem; font-weight: 750; min-width: 3rem; }
 	thead .fp { background: var(--surface-2); }
 	.game-line td { font-size: .67rem; background: var(--surface-2); padding-block: .25rem; }

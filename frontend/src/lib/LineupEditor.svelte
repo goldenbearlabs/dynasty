@@ -5,7 +5,7 @@
 	// at a time and shows that day's game; a weekly one shows the week's
 	// games, and where a slot counts only some of them the manager taps the
 	// one that counts.
-	import { autoSetLineup, getLineup, setLineup, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
+	import { autoSetLineup, getLineup, setLineup, getRosterPerformance, type Competition, type LeagueRoster, type RosterPerformance, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import { columnValue, statColumns, statValue, sumStats, widestStats, type StatColumn } from '#lib/statLine.ts';
 	import Empty from '#lib/ui/Empty.svelte';
@@ -14,7 +14,7 @@
 	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	import Meter from '#lib/ui/Meter.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
-	import { dayLabel, points, shiftDay, timeOfDay } from '#lib/ui/time.ts';
+	import { dayLabel, points, shiftDay, timeOfDay, sportsToday } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import WatchStar from '#lib/WatchStar.svelte';
 	import TradeFlag from '#lib/TradeFlag.svelte';
@@ -28,10 +28,58 @@
 		/** Whether the viewer may change this lineup, and whether they are a commissioner. */
 		canEdit: boolean;
 		commissioner?: boolean;
+		roster?: LeagueRoster;
+		competition?: Competition;
 		/** The day to open on; today when left out. Kept up to date as the viewer moves. */
 		day?: string;
 	};
-	let { league, franchise, canEdit, commissioner = false, day = $bindable() }: Props = $props();
+	let { league, franchise, canEdit, commissioner = false, roster, competition, day = $bindable() }: Props = $props();
+
+	// View changes the statistics in these same starter and bench rows.
+	let statsView = $state('today');
+	let performance = $state<RosterPerformance>();
+	let statsLoading = $state(false);
+	let statsError = $state('');
+	let statsRequest = 0;
+	const statsEnabled = $derived(!!roster && !!competition);
+	async function loadStats() {
+		if (!roster || !competition) return;
+		const token = ++statsRequest;
+		statsLoading = true;
+		try {
+			const historical = statsView.startsWith('season:');
+			const found = await getRosterPerformance(league.id,franchise.id,historical ? 'season' : statsView,historical ? statsView.slice(7) : undefined);
+			if (token === statsRequest) { performance = found; statsError = ''; }
+		} catch(e) { if(token === statsRequest) statsError = String(e); }
+		finally { if(token === statsRequest) statsLoading = false; }
+	}
+	$effect(() => { void [statsView,league.id,franchise.id,roster?.players,competition]; loadStats(); return () => { statsRequest++; }; });
+	const performanceFor = (id: string) => statsLoading || statsError ? undefined : performance?.players.find(p => p.player_id === id);
+	const statAbbreviations: Record<string,string> = {
+		pts:'PTS',reb:'REB',ast:'AST',stl:'STL',blk:'BLK',tpm:'3PM',tpa:'3PA',tov:'TO',fgm:'FGM',fga:'FGA',ftm:'FTM',fta:'FTA',
+		goals:'G',assists:'A',shots:'SOG',hits:'HIT',blocks:'BLK',pp_points:'PPP',pim:'PIM',saves:'SV',goals_against:'GA',goalie_wins:'W',shutouts:'SO',
+		pass_yds:'PYD',pass_td:'PTD',interceptions:'INT',rush_yds:'RYD',rush_td:'RTD',receptions:'REC',rec_yds:'RECYD',rec_td:'RECTD',fumbles_lost:'FUM',
+		bat_ab:'AB',bat_h:'B H',bat_r:'R',bat_hr:'HR',bat_rbi:'RBI',bat_sb:'SB',bat_bb:'B BB',bat_so:'B K',pit_ip:'IP',pit_h:'P H',pit_er:'ER',pit_bb:'P BB',pit_so:'P K',pit_w:'W',pit_sv:'SV',pit_gs:'GS'
+	};
+	const performanceColumns = $derived.by(() => {
+		const definitions = (competition?.stats ?? []).map(s => ({...s}));
+		const known = new Set(definitions.map(s => s.key));
+		for (const player of performance?.players ?? []) for(const key of Object.keys(player.stats)) {
+			if(!known.has(key)) { definitions.push({key,label:key.replaceAll('_',' ')}); known.add(key); }
+		}
+		return [
+			{key:'__gp',keys:[],label:'GP',title:'Games played in the selected view'},
+			...definitions.map(s => ({key:s.key,keys:[s.key],label:statAbbreviations[s.key] ?? s.key.toUpperCase(),title:s.label})),
+			{key:'__fpg',keys:[],label:'FP/G',title:'Fantasy points per game in the selected view'}
+		];
+	});
+	function viewedStat(player: LineupPlayer, col: StatColumn): number | undefined {
+		const data = performanceFor(player.player_id);
+		if(!data) return undefined;
+		if(col.key === '__gp') return data.games;
+		if(!data.games) return undefined;
+		return col.key === '__fpg' ? data.points_per_game : data.stats[col.key];
+	}
 
 	const sport = $derived(league.competition);
 	let override = $state(false); // the commissioner's override of the locks
@@ -66,6 +114,7 @@
 	onScoresChange(
 		() => [sport],
 		() => {
+			if (statsEnabled) loadStats();
 			if (lineup && !dirty && !saving) getLineup(league.id, franchise.id, lineup.day).then(show, toast.error);
 		}
 	);
@@ -192,8 +241,8 @@
 			.reduce((n, g) => n + g.projected, 0);
 
 	// ---- stat columns ----
-	const columns = (player: LineupPlayer) => statColumns(sport, player.positions);
-	const statWidth = $derived(widestStats(sport));
+	const columns = (player: LineupPlayer) => statsEnabled ? performanceColumns : statColumns(sport, player.positions);
+	const statWidth = $derived(statsEnabled ? performanceColumns.length : widestStats(sport));
 	// A list's rows, each with the stat labels to show above it: the first
 	// player's, and again wherever the kind of player changes (skaters to
 	// goalies, hitters to pitchers).
@@ -314,6 +363,7 @@
 	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={40} label={false} /></span>
 	<span class="day">{weekday(game.day)} {dayNumber(game.day)}</span>
 	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
+	{#if !played(game) && game.projected}<span class="proj" title="Projected fantasy points, from recent seasons and the betting line">{points(game.projected)} proj</span>{/if}
 	{@render starter(game)}
 {/snippet}
 
@@ -419,29 +469,47 @@
 			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}
 				<TradeFlag leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} />
 				{#if canEdit}<button class="drop-player" title="Drop {player.full_name}" onclick={() => release(player)}>Drop</button>{/if}</span>
+			{#if statsEnabled}
+				{@const stats = performanceFor(player.player_id)}
+				<div class="period-ranks" aria-label="Ranks for {player.full_name}"><span title="Overall rank by total fantasy points">Rank {stats?.overall_rank ? `#${stats.overall_rank}` : '—'}</span>{#each Object.entries(stats?.position_ranks ?? {}) as [position,rank] (position)}<span>{position} #{rank}</span>{:else}<span>Position —</span>{/each}</div>
+			{/if}
 		</div>
 	</div>
 	<div class="games">{@render games(player, starting)}</div>
 	{@const shown = shownGames(player, starting)}
 	{@const line = sumStats(shown.map((g) => g.stats))}
-	<div class="stats" class:none={shown.length === 0}>
+	<div class="stats" class:none={!statsEnabled && shown.length === 0}>
 		{#each columns(player) as c (c.key)}
-			{@const n = columnValue(line, c)}
-			<span class:zero={!n} title={c.title}>{#if shown.length}<small>{c.label}</small>{statValue(n)}{/if}</span>
+			{@const n = statsEnabled ? viewedStat(player,c) : columnValue(line, c)}
+			<span class:zero={!n} title={c.title}>{#if statsEnabled || shown.length}<small>{c.label}</small>{statsEnabled && n === undefined ? '—' : c.key === '__fpg' && n !== undefined ? points(n) : statValue(n)}{/if}</span>
 		{/each}
 		{#each padding(columns(player)) as i (i)}<span></span>{/each}
 	</div>
-	{@const ahead = forecast(player, starting)}
-	<div class="pts" class:none={shown.length === 0 && !ahead}>
-		<small>FPTS</small>{#if shown.length}{points(shown.reduce((n, g) => n + g.points, 0))}{:else if !ahead}–{/if}
-		{#if ahead}<span class="proj" title="Projected for games to come">{shown.length ? '+' : ''}{points(ahead)}</span>{/if}
+	{@const ahead = !statsEnabled || statsView === 'today' ? forecast(player, starting) : 0}
+	{@const viewed = performanceFor(player.player_id)}
+	<div class="pts" class:none={statsEnabled ? !viewed?.games : shown.length === 0 && !ahead}>
+		<small>FPTS</small>{#if statsEnabled}{viewed?.games ? points(viewed.points) : '—'}{:else if shown.length}{points(shown.reduce((n, g) => n + g.points, 0))}{:else if !ahead}–{/if}
+		{#if ahead}<span class="proj" title="Projected for games to come in this lineup">{!statsEnabled && shown.length ? '+' : ''}{points(ahead)}</span>{/if}
 	</div>
 {/snippet}
 
-<div class="stack tight" data-sport={sport} style:--stat-cols={statWidth}>
+<div class="stack tight" class:stats-enabled={statsEnabled} data-sport={sport} style:--stat-cols={statWidth}>
 	{#if !lineup}
 		<p class="muted">Loading the lineup…</p>
 	{:else}
+		{#if statsEnabled}
+			<div class="spread stat-view-controls">
+				<label class="row small-text">View
+					<select aria-label="View" bind:value={statsView}>
+						<option value="today">Today</option><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option>
+						<option value="current">Current season{performance?.current_season ? ` · ${performance.current_season}` : ''}</option>
+						{#if performance?.seasons.length}<optgroup label="Past seasons">{#each performance.seasons.filter(s => s.label !== performance?.current_season) as season (season.label)}<option value={`season:${season.label}`}>{season.label}</option>{/each}</optgroup>{/if}
+					</select>
+				</label>
+				{#if statsLoading}<span class="muted small-text" role="status">Loading stats…</span>{:else if performance}<span class="muted stat-context">{statsView === 'today' ? dayLabel(performance.to_day) : performance.season || `${dayLabel(performance.from_day)} – ${dayLabel(performance.to_day)}`} · ranks by total FP</span>{/if}
+			</div>
+			{#if statsError}<p role="alert">{statsError}</p><button class="small" onclick={loadStats}>Retry stats</button>{/if}
+		{/if}
 		<div class="spread">
 			<nav class="row days" aria-label={weekly ? 'Week' : 'Day'}>
 				<button class="quiet step" aria-label={weekly ? 'Previous week' : 'Previous day'} onclick={() => (day = shiftDay(lineup!.day, -1))}><Icon name="left" size={16} /></button>
@@ -518,7 +586,7 @@
 				</div>
 			{/if}
 
-			<section class="card flush" aria-label="Starters">
+			<section class="card flush lineup-list" aria-label="Starters">
 				<header class="head narrow"><span>Starters</span><span>{weekly ? 'This week' : 'Game'}</span></header>
 				<ol class="rows">
 					{#each labelled(seatSlots.map((_, i) => i), (i) => (seats[i] ? byId.get(seats[i]!) : undefined)) as { row: i, labels: cols, first } (i)}
@@ -550,7 +618,7 @@
 
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions: a drop zone; the tap path is the button inside -->
 			<section
-				class="card flush bench"
+				class="card flush bench lineup-list"
 				class:target={!!moving && canPlace(moving, 'bench')}
 				class:over={over === 'bench'}
 				aria-label="Bench"
@@ -579,6 +647,16 @@
 </div>
 
 <style>
+	.stat-view-controls { gap: .4rem; }
+	.stat-view-controls label { gap: .4rem; }
+	.stat-view-controls select { font-size: .8rem; padding: .35rem .5rem; }
+	.stat-context { font-size: .68rem; }
+	.period-ranks { display: flex; flex-wrap: wrap; gap: .25rem .5rem; font-size: .65rem; color: var(--brand); margin-top: .15rem; }
+	.stats-enabled { min-width: 0; grid-template-columns: minmax(0,1fr); }
+	.stats-enabled .lineup-list { overflow-x: auto; scrollbar-width: thin; }
+	.stats-enabled .lineup-list .rows { min-width: calc(30rem + var(--stat-cols) * 2.55rem); }
+	@media(max-width:640px) { .stats-enabled .lineup-list .rows { min-width: 0; } }
+
 	/* ---- the day or week ---- */
 	.days {
 		gap: 0.25rem;
@@ -925,6 +1003,12 @@
 	.tile .time {
 		font-weight: 400;
 		color: var(--ink-soft);
+	}
+	.tile .proj {
+		font-size: 0.62rem;
+	}
+	.tile.on .proj {
+		color: var(--ink);
 	}
 	.tile.done:not(.on) {
 		opacity: 0.5;

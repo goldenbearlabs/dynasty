@@ -57,3 +57,15 @@ test('doubleheaders match distinct game IDs even when start timestamps coincide'
  assert.deepEqual(row.games.map(g=>g.points),[10,20]);
  assert.deepEqual(row.games.map(g=>g.gameId),['first','second']);
 });
+
+test('games still to be played carry their projection only when they will count', () => {
+ const ahead=(day,projected,extra={})=>game(day,0,{status:'scheduled',stats:{},projected,...extra});
+ const daily=matchupRows([],lineup([player({games:[ahead('2026-10-20',7.5)]})]),period,false,'2026-10-20',false)[0];
+ assert.equal(daily.projected,7.5);
+ const picked=matchupRows([],lineup([player({games:[ahead('2026-10-20',7,{counts:false}),ahead('2026-10-23',9)]})]),period,false,'2026-10-21',true)[0];
+ assert.equal(picked.projected,9);
+ const auto=matchupRows([],lineup([player({counts_last:true,games:[ahead('2026-10-20',7,{counts:false}),ahead('2026-10-23',9,{counts:false})]})]),period,false,'2026-10-21',true)[0];
+ assert.equal(auto.projected,9);
+ const played=matchupRows([scored([official('2026-10-20',8)])],lineup([player({games:[{...game('2026-10-20',8),projected:6}]})]),period,false,'2026-10-20',false)[0];
+ assert.equal(played.projected,0);
+});
