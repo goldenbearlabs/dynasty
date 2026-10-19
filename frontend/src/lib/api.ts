@@ -304,6 +304,15 @@ export type LeagueRoster = {
 	season: SeasonRoster | null;
 };
 
+export type RosterPerformancePlayer = {
+ player_id: string; games: number; stats: Record<string,number>; points: number; points_per_game: number;
+ overall_rank: number | null; position_ranks: Record<string,number>;
+};
+export type RosterPerformance = {
+ current_season: string; window: string; season: string; from_day: string; to_day: string; source: 'games' | 'season';
+ ranked_players: number; seasons: {label:string;year:number}[]; players: RosterPerformancePlayer[];
+};
+
 export type SeasonRoster = {
 	id: string;
 	year: number;
@@ -463,6 +472,9 @@ export type MatchupDetail = Matchup & {
 	period: Period;
 	home_players: MatchupScorer[];
 	away_players: MatchupScorer[];
+	/** Each side's points so far plus what its starters are projected to add; null once final, or for a bye. */
+	home_projected: number | null;
+	away_projected: number | null;
 };
 
 // ---- scores ----
@@ -532,6 +544,10 @@ export type LineupGame = {
 	points: number;
 	/** False for a game left out by a slot that counts only some games a week. */
 	counts: boolean;
+	/** Whether a feed has him starting in goal or on the mound; other: a teammate at his position is. */
+	starter: '' | 'confirmed' | 'expected' | 'other';
+	/** Projected fantasy points in a game still to be played, from his recent seasons and the betting line. */
+	projected: number;
 	/** His stat line by the competition's stat keys; empty until he plays. */
 	stats: Record<string, number>;
 };
@@ -545,6 +561,8 @@ export type LineupPlayer = {
 	positions: string[];
 	headshot_url: string;
 	team_abbrev: string;
+	/** An injured-list designation (IR, IL10, OUT…), or empty. */
+	injury: string;
 	slot: string; // empty on the bench
 	/** The day his counted games begin, in a slot that counts only some; empty for his first game. */
 	counts_from: string;
@@ -1018,3 +1036,6 @@ export const addWatchlistPlayer = (id: string) => request<void>('PUT', `/watchli
 export const removeWatchlistPlayer = (id: string) => request<void>('DELETE', `/watchlist/players/${id}`);
 export const editWatchlistPlayer = (id: string, category: string, notes: string) => request<void>('PATCH', `/watchlist/players/${id}`, { category, notes });
 export const orderWatchlist = (player_ids: string[]) => request<void>('PUT', '/watchlist/order', { player_ids });
+
+export const getRosterPerformance = (leagueId: string, franchiseId: string, window: string, season?: string) =>
+ request<RosterPerformance>('GET', `/leagues/${leagueId}/roster-stats${query({franchise:franchiseId,window,season})}`);

@@ -115,7 +115,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, registry competition.Registry,
 	if err != nil {
 		return err
 	}
-	lineups := lineup.NewService(pool)
+	lineups := lineup.NewService(pool, registry)
 	scores := scoring.NewService(pool)
 	drafts := draft.NewService(pool, hub.New(), log)
 	today := sportsday.Today()

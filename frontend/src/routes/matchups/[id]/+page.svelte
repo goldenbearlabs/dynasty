@@ -40,5 +40,6 @@
 </div>
 
 <style>
- .matchup-page { min-width: 0; grid-template-columns: minmax(0,1fr); }
+ .matchup-page { gap: .6rem; min-width: 0; grid-template-columns: minmax(0,1fr); }
+ .matchup-page h1 { font-size: 1.6rem; }
 </style>

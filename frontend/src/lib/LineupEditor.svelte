@@ -11,6 +11,7 @@
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	import Meter from '#lib/ui/Meter.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import { dayLabel, points, shiftDay, timeOfDay } from '#lib/ui/time.ts';
@@ -182,6 +183,13 @@
 	// such a league has none: no game of his counts.
 	const shownGames = (player: LineupPlayer, starting: boolean) =>
 		player.games.filter((g) => played(g) && (limited.length === 0 || (starting && counts(player, g))));
+	// His projected points in the games still to come that would count: for
+	// a starter in a slot that counts only some, the picked one or on auto
+	// his last; for anyone else, all of them.
+	const forecast = (player: LineupPlayer, starting: boolean) =>
+		player.games
+			.filter((g) => !played(g) && (limited.length === 0 || !starting || counts(player, g) || projected(player, g)))
+			.reduce((n, g) => n + g.projected, 0);
 
 	// ---- stat columns ----
 	const columns = (player: LineupPlayer) => statColumns(sport, player.positions);
@@ -204,6 +212,13 @@
 	}
 	// Blank cells after a kind of player with fewer stats, so every column's lines run on.
 	const padding = (cols: StatColumn[]) => Array.from({ length: Math.max(0, statWidth - cols.length) }, (_, i) => i);
+	// Who a feed has starting in goal or on the mound, shown on games still to come.
+	const starts = {
+		confirmed: { tone: 'good', label: 'Starting', title: 'Confirmed to start' },
+		expected: { tone: 'gold', label: 'Probable', title: 'Expected to start' },
+		other: { tone: 'bad', label: 'Not starting', title: 'A teammate is named to start' }
+	};
+	const startOf = (game: LineupGame) => (game.starter && game.status === 'scheduled' ? starts[game.starter] : undefined);
 	const versus = (game: LineupGame) => `${game.at_home ? 'vs' : '@'} ${game.opponent}`;
 	const when = (game: LineupGame) =>
 		game.status === 'live' ? 'Live' : game.status === 'final' ? 'Final' : `${weekly ? `${weekday(game.day)} ` : ''}${timeOfDay(game.starts_at)}`;
@@ -299,6 +314,12 @@
 	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={40} label={false} /></span>
 	<span class="day">{weekday(game.day)} {dayNumber(game.day)}</span>
 	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
+	{@render starter(game)}
+{/snippet}
+
+{#snippet starter(game: LineupGame)}
+	{@const start = startOf(game)}
+	{#if start}<span class="pill start {start.tone}" title={start.title}>{start.label}</span>{/if}
 {/snippet}
 
 {#snippet games(player: LineupPlayer, starting: boolean)}
@@ -345,6 +366,7 @@
 			<div class="game">
 				<span class="opponent">{game.at_home ? 'vs' : '@'} <TeamLogo competition={sport} abbrev={game.opponent} size={28} /></span>
 				<span class="status" class:live={game.status === 'live'}>{when(game)}</span>
+				{@render starter(game)}
 			</div>
 		{/each}
 	{/if}
@@ -359,7 +381,7 @@
 			{#each cols as c (c.key)}<span title={c.title}>{c.label}</span>{/each}
 			{#each padding(cols) as i (i)}<span></span>{/each}
 		</div>
-		<span class="pts">FPTS</span>
+		<span class="pts" title="Fantasy points. In italics: projected for games to come, from recent seasons and the betting line.">FPTS</span>
 	</li>
 {/snippet}
 
@@ -391,6 +413,7 @@
 				<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
 				<WatchStar playerID={player.player_id} playerName={player.full_name} />
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
+				<InjuryBadge designation={player.injury} />
 				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
 			</span>
 			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}
@@ -408,7 +431,11 @@
 		{/each}
 		{#each padding(columns(player)) as i (i)}<span></span>{/each}
 	</div>
-	<div class="pts" class:none={shown.length === 0}><small>FPTS</small>{shown.length ? points(shown.reduce((n, g) => n + g.points, 0)) : '–'}</div>
+	{@const ahead = forecast(player, starting)}
+	<div class="pts" class:none={shown.length === 0 && !ahead}>
+		<small>FPTS</small>{#if shown.length}{points(shown.reduce((n, g) => n + g.points, 0))}{:else if !ahead}–{/if}
+		{#if ahead}<span class="proj" title="Projected for games to come">{shown.length ? '+' : ''}{points(ahead)}</span>{/if}
+	</div>
 {/snippet}
 
 <div class="stack tight" data-sport={sport} style:--stat-cols={statWidth}>
@@ -918,6 +945,10 @@
 		border-style: dashed;
 		border-color: var(--sport, var(--brand));
 	}
+	.tile .start {
+		padding: 0.15rem 0.3rem;
+		font-size: 0.56rem;
+	}
 	.tile.auto {
 		min-width: 3.4rem;
 	}
@@ -928,6 +959,12 @@
 	.pts {
 		text-align: right;
 		font: 700 0.9rem var(--mono);
+	}
+	.proj {
+		display: block;
+		font-style: italic;
+		font-weight: 500;
+		color: var(--ink-soft);
 	}
 	.drop-player {
 		margin-left: 0.3rem;

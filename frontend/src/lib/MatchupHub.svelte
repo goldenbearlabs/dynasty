@@ -111,18 +111,19 @@
 </div>
 
 <style>
-	.matchup-hub { min-width: 0; grid-template-columns: minmax(0,1fr); }
-	.period-controls nav { min-width: 0; flex-wrap: nowrap; gap: .4rem; }
-	.period-controls select { min-width: 0; max-width: 30rem; font-size: .8rem; }
-	nav button, .matchup-nav button { padding: .4rem .5rem; }
-	.matchup-picker { position: relative; display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .35rem; scrollbar-width: thin; scroll-snap-type: x proximity; }
-	.matchup-picker button { flex: 0 0 12.5rem; text-align: left; display: grid; gap: .25rem; padding: .65rem .75rem; scroll-snap-align: start; }
+	.matchup-hub { gap: .45rem; min-width: 0; grid-template-columns: minmax(0,1fr); }
+	.period-controls nav { min-width: 0; flex-wrap: nowrap; gap: .25rem; }
+	.period-controls select { min-width: 0; max-width: 30rem; font-size: .72rem; padding: .35rem .4rem; }
+	nav button, .matchup-nav button { padding: .3rem .4rem; }
+	.matchup-picker { position: relative; display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .35rem; scrollbar-width: thin; scroll-snap-type: x proximity; }
+	.matchup-picker button { flex: 0 0 11rem; text-align: left; display: grid; gap: .1rem; padding: .35rem .5rem; scroll-snap-align: start; }
 	.matchup-picker button.selected { border-color: var(--sport); background: var(--surface-2); box-shadow: inset 0 -2px var(--sport); }
-	.pair { display: flex; justify-content: space-between; gap: .5rem; font-size: .8rem; }
+	.pair { display: flex; justify-content: space-between; gap: .4rem; font-size: .7rem; }
 	.pair span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.pair strong { font-variant-numeric: tabular-nums; }
-	.matchup-picker small { color: var(--ink-soft); font-weight: 500; font-size: .65rem; }
-	.matchup-nav { gap: .5rem; }
+	.matchup-picker small { color: var(--ink-soft); font-weight: 500; font-size: .55rem; }
+	.matchup-nav { gap: .35rem; }
+	.matchup-nav span { font-size: .65rem; }
 	.swipe-area { min-width: 0; touch-action: pan-y pinch-zoom; }
 	.swipe-area:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; border-radius: var(--radius); }
 	@media(max-width:640px) { .period-controls nav { width: 100%; } .period-controls select { flex: 1; } }

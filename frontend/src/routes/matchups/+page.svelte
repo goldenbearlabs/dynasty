@@ -52,6 +52,7 @@
 </div>
 
 <style>
- .matchups-page { min-width: 0; grid-template-columns: minmax(0,1fr); }
+ .matchups-page { gap: .6rem; min-width: 0; grid-template-columns: minmax(0,1fr); }
  .matchups-page section { min-width: 0; grid-template-columns: minmax(0,1fr); }
+ .matchups-page h1 { font-size: 1.6rem; }
 </style>

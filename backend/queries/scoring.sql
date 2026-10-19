@@ -131,7 +131,19 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
        coalesce(sl.points, 0)::float8 as points,
-       coalesce(sl.stats, '{}')::jsonb as stats
+       coalesce(sl.stats, '{}')::jsonb as stats,
+       p.injury_designation,
+       -- The market's view of the game from his side: his team's implied
+       -- score, the opponent's, and his team's chance of winning; zero without a line.
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_implied else g.away_implied end, 0)::float8 as team_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.away_implied else g.home_implied end, 0)::float8 as opponent_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_win else 1 - g.home_win end, 0)::float8 as win_chance,
+       -- Whether a feed has him starting that day: confirmed, expected, or
+       -- other when his team has someone else at his position named.
+       (case when ps.player_id is not null then case when ps.confirmed then 'confirmed' else 'expected' end
+             when exists (select 1 from probable_starters o join players op on op.id = o.player_id
+                          where o.day = g.day and op.pro_team_id = p.pro_team_id and op.positions && p.positions) then 'other'
+             else '' end)::text as starter
 from roster_entries re
 join players p on p.id = re.player_id
 join leagues l on l.id = re.league_id
@@ -142,6 +154,7 @@ left join games g on g.competition = l.competition
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
 left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
+left join probable_starters ps on ps.player_id = p.id and ps.day = g.day
 left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = @league_id and re.franchise_id = @franchise_id and re.list = 'main'
 order by p.full_name, p.id, g.starts_at;

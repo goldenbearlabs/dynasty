@@ -31,12 +31,32 @@ func (q *Queries) AddPlayerExternalID(ctx context.Context, arg AddPlayerExternal
 	return err
 }
 
-const clearInjuryDesignations = `-- name: ClearInjuryDesignations :exec
-update players set injury_designation = '', injury_checked_at = now() where competition = $1
+const averageImplied = `-- name: AverageImplied :one
+select coalesce(avg((home_implied + away_implied) / 2), 0)::float8
+from games
+where competition = $1 and status = 'scheduled' and home_implied is not null
 `
 
-func (q *Queries) ClearInjuryDesignations(ctx context.Context, competition string) error {
-	_, err := q.db.Exec(ctx, clearInjuryDesignations, competition)
+// The average side's implied score over the games still to be played with a
+// line: what a team's own implied score is measured against.
+func (q *Queries) AverageImplied(ctx context.Context, competition string) (float64, error) {
+	row := q.db.QueryRow(ctx, averageImplied, competition)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const clearProbableStarters = `-- name: ClearProbableStarters :exec
+delete from probable_starters where competition = $1 and day = $2
+`
+
+type ClearProbableStartersParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+func (q *Queries) ClearProbableStarters(ctx context.Context, arg ClearProbableStartersParams) error {
+	_, err := q.db.Exec(ctx, clearProbableStarters, arg.Competition, arg.Day)
 	return err
 }
 
@@ -564,12 +584,13 @@ func (q *Queries) KeepEarliestEligibility(ctx context.Context, arg KeepEarliestE
 }
 
 const listInjuryPlayers = `-- name: ListInjuryPlayers :many
-select id, full_name from players where competition = $1
+select id, full_name, injury_designation from players where competition = $1
 `
 
 type ListInjuryPlayersRow struct {
-	ID       pgtype.UUID `json:"id"`
-	FullName string      `json:"full_name"`
+	ID                pgtype.UUID `json:"id"`
+	FullName          string      `json:"full_name"`
+	InjuryDesignation string      `json:"injury_designation"`
 }
 
 func (q *Queries) ListInjuryPlayers(ctx context.Context, competition string) ([]ListInjuryPlayersRow, error) {
@@ -581,7 +602,7 @@ func (q *Queries) ListInjuryPlayers(ctx context.Context, competition string) ([]
 	items := []ListInjuryPlayersRow{}
 	for rows.Next() {
 		var i ListInjuryPlayersRow
-		if err := rows.Scan(&i.ID, &i.FullName); err != nil {
+		if err := rows.Scan(&i.ID, &i.FullName, &i.InjuryDesignation); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -931,6 +952,45 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 	return items, nil
 }
 
+const listPreviewGames = `-- name: ListPreviewGames :many
+select g.id, g.provider_id, coalesce(home.name, '')::text as home_name
+from games g left join pro_teams home on home.id = g.home_team_id
+where g.competition = $1::text and g.day = $2::date
+`
+
+type ListPreviewGamesParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+type ListPreviewGamesRow struct {
+	ID         pgtype.UUID `json:"id"`
+	ProviderID string      `json:"provider_id"`
+	HomeName   string      `json:"home_name"`
+}
+
+// A day's games, with what matches them to another feed's: the game's id
+// and the home side's name.
+func (q *Queries) ListPreviewGames(ctx context.Context, arg ListPreviewGamesParams) ([]ListPreviewGamesRow, error) {
+	rows, err := q.db.Query(ctx, listPreviewGames, arg.Competition, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPreviewGamesRow{}
+	for rows.Next() {
+		var i ListPreviewGamesRow
+		if err := rows.Scan(&i.ID, &i.ProviderID, &i.HomeName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProTeams = `-- name: ListProTeams :many
 select competition, abbrev, name, logo_url from pro_teams order by competition, abbrev
 `
@@ -957,6 +1017,52 @@ func (q *Queries) ListProTeams(ctx context.Context) ([]ListProTeamsRow, error) {
 			&i.Abbrev,
 			&i.Name,
 			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectionSeasons = `-- name: ListProjectionSeasons :many
+select ps.player_id, ps.year, ps.games, ps.stats
+from player_seasons ps
+where ps.player_id = any($1::uuid[]) and ps.competition = $2::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = $2::text)
+`
+
+type ListProjectionSeasonsParams struct {
+	PlayerIds   []pgtype.UUID `json:"player_ids"`
+	Competition string        `json:"competition"`
+}
+
+type ListProjectionSeasonsRow struct {
+	PlayerID pgtype.UUID     `json:"player_id"`
+	Year     int32           `json:"year"`
+	Games    int32           `json:"games"`
+	Stats    json.RawMessage `json:"stats"`
+}
+
+// The rostered players' totals for the competition's two latest seasons in
+// its own league, a row per team he played for.
+func (q *Queries) ListProjectionSeasons(ctx context.Context, arg ListProjectionSeasonsParams) ([]ListProjectionSeasonsRow, error) {
+	rows, err := q.db.Query(ctx, listProjectionSeasons, arg.PlayerIds, arg.Competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectionSeasonsRow{}
+	for rows.Next() {
+		var i ListProjectionSeasonsRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.Year,
+			&i.Games,
+			&i.Stats,
 		); err != nil {
 			return nil, err
 		}
@@ -1061,6 +1167,41 @@ func (q *Queries) ListRosteredInactive(ctx context.Context, dynastyID pgtype.UUI
 			&i.FranchiseName,
 			&i.FranchiseSlug,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSeasonLengths = `-- name: ListSeasonLengths :many
+select ps.year, max(ps.games)::int as games
+from player_seasons ps
+where ps.competition = $1::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = $1::text)
+group by ps.year
+`
+
+type ListSeasonLengthsRow struct {
+	Year  int32 `json:"year"`
+	Games int32 `json:"games"`
+}
+
+// How far each of the competition's two latest seasons has run, as the
+// most games any one player has played in it.
+func (q *Queries) ListSeasonLengths(ctx context.Context, competition string) ([]ListSeasonLengthsRow, error) {
+	rows, err := q.db.Query(ctx, listSeasonLengths, competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSeasonLengthsRow{}
+	for rows.Next() {
+		var i ListSeasonLengthsRow
+		if err := rows.Scan(&i.Year, &i.Games); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1181,8 +1322,30 @@ func (q *Queries) MoveTransactions(ctx context.Context, arg MoveTransactionsPara
 	return err
 }
 
+const setGameOdds = `-- name: SetGameOdds :exec
+update games set home_implied = $1, away_implied = $2, home_win = $3 where id = $4
+`
+
+type SetGameOddsParams struct {
+	HomeImplied pgtype.Float8 `json:"home_implied"`
+	AwayImplied pgtype.Float8 `json:"away_implied"`
+	HomeWin     pgtype.Float8 `json:"home_win"`
+	ID          pgtype.UUID   `json:"id"`
+}
+
+// Only the odds change, so the response cache is left alone.
+func (q *Queries) SetGameOdds(ctx context.Context, arg SetGameOddsParams) error {
+	_, err := q.db.Exec(ctx, setGameOdds,
+		arg.HomeImplied,
+		arg.AwayImplied,
+		arg.HomeWin,
+		arg.ID,
+	)
+	return err
+}
+
 const setInjuryDesignation = `-- name: SetInjuryDesignation :exec
-update players set injury_designation = $1 where id = $2
+update players set injury_designation = $1, injury_checked_at = now() where id = $2
 `
 
 type SetInjuryDesignationParams struct {
@@ -1190,8 +1353,32 @@ type SetInjuryDesignationParams struct {
 	ID                pgtype.UUID `json:"id"`
 }
 
+// Only a change is written: any write to players starts a new cache generation.
 func (q *Queries) SetInjuryDesignation(ctx context.Context, arg SetInjuryDesignationParams) error {
 	_, err := q.db.Exec(ctx, setInjuryDesignation, arg.InjuryDesignation, arg.ID)
+	return err
+}
+
+const setProbableStarter = `-- name: SetProbableStarter :exec
+insert into probable_starters (competition, day, player_id, confirmed)
+values ($1, $2, $3, $4)
+on conflict (player_id, day) do update set confirmed = excluded.confirmed
+`
+
+type SetProbableStarterParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Confirmed   bool        `json:"confirmed"`
+}
+
+func (q *Queries) SetProbableStarter(ctx context.Context, arg SetProbableStarterParams) error {
+	_, err := q.db.Exec(ctx, setProbableStarter,
+		arg.Competition,
+		arg.Day,
+		arg.PlayerID,
+		arg.Confirmed,
+	)
 	return err
 }
 

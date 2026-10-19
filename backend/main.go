@@ -34,6 +34,7 @@ import (
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
+	"crossover/internal/sportsday"
 	"crossover/internal/trade"
 	"crossover/internal/waiver"
 	"crossover/internal/web"
@@ -259,6 +260,27 @@ func run(log *slog.Logger) error {
 	}
 	schedule.AddFunc(env("SCHEDULE_SYNC_CRON", "30 4 * * *"), syncSchedule)
 	go syncSchedule()
+	// Injuries, betting lines and probable starters change through the day,
+	// so the sports someone here plays read them often: lines and starters
+	// for the week ahead.
+	syncReports := func() {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			log.Error("list league competitions", "err", err)
+			return
+		}
+		today := sportsday.Today()
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			syncer.SyncInjuries(ctx, c.Key, c.Injuries)
+			syncer.SyncPreviews(ctx, c.Key, c.Previews, today, today.AddDate(0, 0, envInt("PREVIEW_DAYS", 6)))
+		}
+	}
+	schedule.AddFunc(env("REPORTS_SYNC_CRON", "*/30 * * * *"), syncReports)
+	go syncReports()
 	// Stat history: every player's season totals, refreshed with the nightly
 	// sync. The first run for a sport fetches years of it; later runs only
 	// keep the last two seasons current.
@@ -296,7 +318,7 @@ func run(log *slog.Logger) error {
 		Drafts:         drafts,
 		Trades:         trade.NewService(pool),
 		Waivers:        waivers,
-		Lineups:        lineup.NewService(pool),
+		Lineups:        lineup.NewService(pool, registry),
 		Scoring:        scores,
 		Live:           games,
 		Log:            log,

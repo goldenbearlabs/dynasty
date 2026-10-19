@@ -27,7 +27,14 @@ type Competition struct {
 	// fantasy season; the commissioner sets the real dates.
 	Season [2]string `json:"season"`
 
-	Injuries  ingest.InjurySource   `json:"-"`
+	Injuries ingest.InjurySource  `json:"-"`
+	Previews ingest.PreviewSource `json:"-"` // betting lines and probable starters
+
+	// Follows says what a stat's projection moves with when a game has a
+	// betting line: "opponent" (the other side's implied score), "win" or
+	// "loss" (the chance of either), or "none". A stat not listed moves with
+	// the player's own side's implied score.
+	Follows   map[string]string     `json:"-"`
 	Source    ingest.Source         `json:"-"`
 	Games     ingest.GameSource     `json:"-"`
 	Seasons   ingest.SeasonSource   `json:"-"`
@@ -47,12 +54,14 @@ type Registry []Competition
 func NewRegistry(client *ingest.Client) Registry {
 	registry := Registry{cbb(client), nba(client), wnba(client), nhl(client), nfl(client), mlb(client)}
 	paths := map[string]string{"cbb": "basketball/mens-college-basketball", "nba": "basketball/nba", "wnba": "basketball/wnba", "nhl": "hockey/nhl", "nfl": "football/nfl", "mlb": "baseball/mlb"}
+	// ESPN reports injuries, betting lines and probable starters for every sport.
 	for i := range registry {
-		if source, ok := registry[i].Source.(*espn.Source); ok {
-			registry[i].Injuries = source
-		} else {
-			registry[i].Injuries = espn.New(client, espn.League{Path: paths[registry[i].Key], Provider: "espn_" + registry[i].Key})
+		source, ok := registry[i].Source.(*espn.Source)
+		if !ok {
+			source = espn.New(client, espn.League{Path: paths[registry[i].Key], Provider: "espn_" + registry[i].Key})
 		}
+		registry[i].Injuries = source
+		registry[i].Previews = source
 	}
 	return registry
 }

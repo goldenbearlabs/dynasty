@@ -4,6 +4,7 @@
 package lineup
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,18 +15,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"crossover/internal/competition"
 	"crossover/internal/db"
 	"crossover/internal/problem"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
 	"crossover/internal/sportsday"
 )
 
 type Service struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	registry competition.Registry // what each sport's stats move with, for projections
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{pool: pool}
+func NewService(pool *pgxpool.Pool, registry competition.Registry) *Service {
+	return &Service{pool: pool, registry: registry}
 }
 
 // Entry puts one player in one starting slot.
@@ -90,6 +94,7 @@ type Player struct {
 	Positions       []string    `json:"positions"`
 	HeadshotURL     string      `json:"headshot_url"`
 	TeamAbbrev      string      `json:"team_abbrev"`
+	Injury          string      `json:"injury"`      // an injured-list designation, or empty
 	Slot            string      `json:"slot"`        // empty on the bench
 	CountsFrom      string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
 	CountsLast      bool        `json:"counts_last"` // in such a slot, on auto: his last games with a stat count
@@ -109,13 +114,77 @@ type Game struct {
 	AtHome   bool        `json:"at_home"`
 	Points   float64     `json:"points"`
 	Counts   bool        `json:"counts"` // false for a game his slot leaves out
+	// Starter is whether a feed has him starting in goal or on the mound:
+	// confirmed, expected, other (a teammate at his position is), or empty.
+	Starter string `json:"starter"`
+	// Projected is his fantasy points in a game still to be played, from
+	// his recent seasons and the betting line; zero once it starts.
+	Projected float64 `json:"projected"`
+	market    projection.Game
 	// Stats is his stat line, by the competition's stat keys; empty until he plays.
 	Stats json.RawMessage `json:"stats"`
 }
 
 // Get returns the lineup in force on a day.
 func (s *Service) Get(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time) (View, error) {
-	return load(ctx, db.New(s.pool), league, franchiseID, day)
+	q := db.New(s.pool)
+	view, err := load(ctx, q, league, franchiseID, day)
+	if err != nil {
+		return view, err
+	}
+	return view, s.project(ctx, q, league, &view)
+}
+
+// project fills in each game still to be played with the player's
+// projected fantasy points under the league's scoring.
+func (s *Service) project(ctx context.Context, q *db.Queries, league db.League, view *View) error {
+	if len(view.Players) == 0 {
+		return nil
+	}
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return err
+	}
+	c, _ := s.registry.Get(league.Competition)
+	ids := make([]pgtype.UUID, len(view.Players))
+	for i, p := range view.Players {
+		ids[i] = p.PlayerID
+	}
+	rows, err := q.ListProjectionSeasons(ctx, db.ListProjectionSeasonsParams{PlayerIds: ids, Competition: league.Competition})
+	if err != nil {
+		return err
+	}
+	runs, err := q.ListSeasonLengths(ctx, league.Competition)
+	if err != nil {
+		return err
+	}
+	average, err := q.AverageImplied(ctx, league.Competition)
+	if err != nil {
+		return err
+	}
+	lengths := map[int]float64{}
+	for _, r := range runs {
+		lengths[int(r.Year)] = float64(r.Games)
+	}
+	seasons := map[pgtype.UUID][]projection.Season{}
+	for _, r := range rows {
+		season := projection.Season{Year: int(r.Year), Games: float64(r.Games)}
+		if err := json.Unmarshal(r.Stats, &season.Stats); err != nil {
+			return err
+		}
+		seasons[r.PlayerID] = append(seasons[r.PlayerID], season)
+	}
+	for i := range view.Players {
+		p := &view.Players[i]
+		perGame, plays := projection.Baseline(seasons[p.PlayerID], lengths)
+		for j := range p.Games {
+			if g := &p.Games[j]; g.Status == "scheduled" {
+				g.market.Average = average
+				g.Projected = projection.Points(perGame, plays, g.market, rules.Scoring, c.Follows)
+			}
+		}
+	}
+	return nil
 }
 
 // span is the run of days one lineup covers: the day itself, or its week.
@@ -202,7 +271,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			view.Players = append(view.Players, Player{
 				PlayerID: r.PlayerID, FullName: r.FullName, Nickname: r.Nickname, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
 				StarterEligible: rules.CanStart(league.Competition, r.Conference),
-				TeamAbbrev:      r.TeamAbbrev, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], CountsLast: countsLast[r.PlayerID], Games: []Game{},
+				TeamAbbrev:      r.TeamAbbrev, Injury: r.InjuryDesignation, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], CountsLast: countsLast[r.PlayerID], Games: []Game{},
 			})
 		}
 		if !r.GameID.Valid {
@@ -211,7 +280,11 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		p := &view.Players[len(view.Players)-1]
 		p.Games = append(p.Games, Game{
 			GameID: r.GameID, Day: r.GameDay.Time.Format(time.DateOnly), StartsAt: r.StartsAt.Time, Status: r.GameStatus,
-			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true, Stats: r.Stats,
+			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true, Stats: r.Stats, Starter: r.Starter,
+			market: projection.Game{
+				TeamScore: r.TeamImplied, OpponentScore: r.OpponentImplied, Win: r.WinChance,
+				Starter: r.Starter, Injured: r.InjuryDesignation != "",
+			},
 		})
 	}
 	for i := range view.Players {
@@ -453,8 +526,9 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 // AutoSet sets the best lineup it can for each day still to come in the
 // week of day, or for the week itself in a weekly league. A player who has
 // locked stays where he is. Every other place goes to whoever fits it,
-// those with a game still to play first, then by fantasy points in the
-// sport's last season. In a slot that counts only some games, every
+// those with a game still to play first, then by the fantasy points
+// projected for those games, then by fantasy points in the sport's last
+// season. In a slot that counts only some games, every
 // starter who is free to move is put on auto, so his last game of the week
 // that he plays in counts.
 func (s *Service) AutoSet(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time) error {
@@ -510,7 +584,20 @@ func best(view View, rank map[pgtype.UUID]int, now time.Time) []Entry {
 		}
 		return r
 	}
-	players := slices.SortedFunc(slices.Values(view.Players), func(a, b Player) int { return order(a) - order(b) })
+	projected := func(p Player) (n float64) {
+		for _, g := range p.Games {
+			if g.StartsAt.After(now) {
+				n += g.Projected
+			}
+		}
+		return n
+	}
+	players := slices.SortedFunc(slices.Values(view.Players), func(a, b Player) int {
+		if ahead(a) != ahead(b) {
+			return order(a) - order(b)
+		}
+		return cmp.Or(cmp.Compare(projected(b), projected(a)), order(a)-order(b))
+	})
 
 	var entries []Entry
 	taken := map[pgtype.UUID]bool{}

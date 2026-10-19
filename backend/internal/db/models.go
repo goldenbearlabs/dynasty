@@ -115,6 +115,9 @@ type Game struct {
 	HomeScore     int32              `json:"home_score"`
 	AwayScore     int32              `json:"away_score"`
 	Detail        string             `json:"detail"`
+	HomeImplied   pgtype.Float8      `json:"home_implied"`
+	AwayImplied   pgtype.Float8      `json:"away_implied"`
+	HomeWin       pgtype.Float8      `json:"home_win"`
 }
 
 type IngestRun struct {
@@ -242,6 +245,13 @@ type ProTeam struct {
 	Name        string      `json:"name"`
 	LogoUrl     string      `json:"logo_url"`
 	Conference  string      `json:"conference"`
+}
+
+type ProbableStarter struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Confirmed   bool        `json:"confirmed"`
 }
 
 type ProspectRanking struct {

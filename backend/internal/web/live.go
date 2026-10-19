@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -131,7 +132,49 @@ func (s *Server) getMatchup(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, matchup)
+	projected, err := s.projectMatchup(r.Context(), matchup)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, projected)
+}
+
+// projectedMatchup is a matchup with each side's projected final score:
+// its points so far and what its starters are projected to add. The
+// projections are absent once the matchup is final.
+type projectedMatchup struct {
+	scoring.MatchupDetail
+	HomeProjected *float64 `json:"home_projected"`
+	AwayProjected *float64 `json:"away_projected"`
+}
+
+func (s *Server) projectMatchup(ctx context.Context, m scoring.MatchupDetail) (projectedMatchup, error) {
+	out := projectedMatchup{MatchupDetail: m}
+	if m.Final {
+		return out, nil
+	}
+	season, err := s.Queries.GetSeason(ctx, m.Period.SeasonID)
+	if err != nil {
+		return out, err
+	}
+	league, err := s.Queries.GetLeague(ctx, season.LeagueID)
+	if err != nil {
+		return out, err
+	}
+	side := func(franchise pgtype.UUID, points float64) (*float64, error) {
+		if !franchise.Valid {
+			return nil, nil // a bye
+		}
+		ahead, err := s.Lineups.Projected(ctx, league, franchise, m.Period.StartsOn.Time, m.Period.EndsOn.Time)
+		total := points + ahead
+		return &total, err
+	}
+	if out.HomeProjected, err = side(m.Home, m.HomePoints); err != nil {
+		return out, err
+	}
+	out.AwayProjected, err = side(m.Away, m.AwayPoints)
+	return out, err
 }
 
 // setMatchups replaces a period's matchups with the commissioner's own.

@@ -345,13 +345,54 @@ from players p left join pro_teams t on t.id = p.pro_team_id
 where p.id = @id;
 
 -- name: ListInjuryPlayers :many
-select id, full_name from players where competition = @competition;
-
--- name: ClearInjuryDesignations :exec
-update players set injury_designation = '', injury_checked_at = now() where competition = @competition;
+select id, full_name, injury_designation from players where competition = @competition;
 
 -- name: SetInjuryDesignation :exec
-update players set injury_designation = @injury_designation where id = @id;
+-- Only a change is written: any write to players starts a new cache generation.
+update players set injury_designation = @injury_designation, injury_checked_at = now() where id = @id;
+
+-- name: ClearProbableStarters :exec
+delete from probable_starters where competition = @competition and day = @day;
+
+-- name: SetProbableStarter :exec
+insert into probable_starters (competition, day, player_id, confirmed)
+values (@competition, @day, @player_id, @confirmed)
+on conflict (player_id, day) do update set confirmed = excluded.confirmed;
+
+-- name: ListPreviewGames :many
+-- A day's games, with what matches them to another feed's: the game's id
+-- and the home side's name.
+select g.id, g.provider_id, coalesce(home.name, '')::text as home_name
+from games g left join pro_teams home on home.id = g.home_team_id
+where g.competition = @competition::text and g.day = @day::date;
+
+-- name: SetGameOdds :exec
+-- Only the odds change, so the response cache is left alone.
+update games set home_implied = @home_implied, away_implied = @away_implied, home_win = @home_win where id = @id;
+
+-- name: ListProjectionSeasons :many
+-- The rostered players' totals for the competition's two latest seasons in
+-- its own league, a row per team he played for.
+select ps.player_id, ps.year, ps.games, ps.stats
+from player_seasons ps
+where ps.player_id = any(@player_ids::uuid[]) and ps.competition = @competition::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = @competition::text);
+
+-- name: ListSeasonLengths :many
+-- How far each of the competition's two latest seasons has run, as the
+-- most games any one player has played in it.
+select ps.year, max(ps.games)::int as games
+from player_seasons ps
+where ps.competition = @competition::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = @competition::text)
+group by ps.year;
+
+-- name: AverageImplied :one
+-- The average side's implied score over the games still to be played with a
+-- line: what a team's own implied score is measured against.
+select coalesce(avg((home_implied + away_implied) / 2), 0)::float8
+from games
+where competition = @competition and status = 'scheduled' and home_implied is not null;
 
 -- name: ListRankedPlayers :many
 -- One sport's players by fantasy points in its latest season, best first,

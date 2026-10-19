@@ -190,7 +190,7 @@ func (q *Queries) FirstScheduledDay(ctx context.Context, competition string) (pg
 }
 
 const getGame = `-- name: GetGame :one
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games where id = $1
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games where id = $1
 `
 
 func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (Game, error) {
@@ -209,6 +209,9 @@ func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (Game, error) {
 		&i.HomeScore,
 		&i.AwayScore,
 		&i.Detail,
+		&i.HomeImplied,
+		&i.AwayImplied,
+		&i.HomeWin,
 	)
 	return i, err
 }
@@ -610,7 +613,7 @@ func (q *Queries) ListGameLines(ctx context.Context, gameID pgtype.UUID) ([]List
 }
 
 const listGamesInPlay = `-- name: ListGamesInPlay :many
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games
 where competition = $1
   and (status = 'live'
        or (status = 'scheduled' and starts_at between now() - interval '8 hours' and now() + interval '2 minutes'))
@@ -640,6 +643,9 @@ func (q *Queries) ListGamesInPlay(ctx context.Context, competition string) ([]Ga
 			&i.HomeScore,
 			&i.AwayScore,
 			&i.Detail,
+			&i.HomeImplied,
+			&i.AwayImplied,
+			&i.HomeWin,
 		); err != nil {
 			return nil, err
 		}
@@ -652,7 +658,7 @@ func (q *Queries) ListGamesInPlay(ctx context.Context, competition string) ([]Ga
 }
 
 const listGamesNeedingStats = `-- name: ListGamesNeedingStats :many
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games
 where competition = $1
   and starts_at > now() - interval '4 days'
   and (status = 'live'
@@ -686,6 +692,9 @@ func (q *Queries) ListGamesNeedingStats(ctx context.Context, competition string)
 			&i.HomeScore,
 			&i.AwayScore,
 			&i.Detail,
+			&i.HomeImplied,
+			&i.AwayImplied,
+			&i.HomeWin,
 		); err != nil {
 			return nil, err
 		}
@@ -1082,7 +1091,19 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
        coalesce(sl.points, 0)::float8 as points,
-       coalesce(sl.stats, '{}')::jsonb as stats
+       coalesce(sl.stats, '{}')::jsonb as stats,
+       p.injury_designation,
+       -- The market's view of the game from his side: his team's implied
+       -- score, the opponent's, and his team's chance of winning; zero without a line.
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_implied else g.away_implied end, 0)::float8 as team_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.away_implied else g.home_implied end, 0)::float8 as opponent_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_win else 1 - g.home_win end, 0)::float8 as win_chance,
+       -- Whether a feed has him starting that day: confirmed, expected, or
+       -- other when his team has someone else at his position named.
+       (case when ps.player_id is not null then case when ps.confirmed then 'confirmed' else 'expected' end
+             when exists (select 1 from probable_starters o join players op on op.id = o.player_id
+                          where o.day = g.day and op.pro_team_id = p.pro_team_id and op.positions && p.positions) then 'other'
+             else '' end)::text as starter
 from roster_entries re
 join players p on p.id = re.player_id
 join leagues l on l.id = re.league_id
@@ -1093,6 +1114,7 @@ left join games g on g.competition = l.competition
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
 left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
+left join probable_starters ps on ps.player_id = p.id and ps.day = g.day
 left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = $3 and re.franchise_id = $4 and re.list = 'main'
 order by p.full_name, p.id, g.starts_at
@@ -1106,21 +1128,26 @@ type ListRosterGamesParams struct {
 }
 
 type ListRosterGamesRow struct {
-	PlayerID    pgtype.UUID        `json:"player_id"`
-	FullName    string             `json:"full_name"`
-	Positions   []string           `json:"positions"`
-	HeadshotUrl string             `json:"headshot_url"`
-	Nickname    string             `json:"nickname"`
-	TeamAbbrev  string             `json:"team_abbrev"`
-	Conference  string             `json:"conference"`
-	GameID      pgtype.UUID        `json:"game_id"`
-	GameDay     pgtype.Date        `json:"game_day"`
-	StartsAt    pgtype.Timestamptz `json:"starts_at"`
-	GameStatus  string             `json:"game_status"`
-	Opponent    string             `json:"opponent"`
-	AtHome      bool               `json:"at_home"`
-	Points      float64            `json:"points"`
-	Stats       json.RawMessage    `json:"stats"`
+	PlayerID          pgtype.UUID        `json:"player_id"`
+	FullName          string             `json:"full_name"`
+	Positions         []string           `json:"positions"`
+	HeadshotUrl       string             `json:"headshot_url"`
+	Nickname          string             `json:"nickname"`
+	TeamAbbrev        string             `json:"team_abbrev"`
+	Conference        string             `json:"conference"`
+	GameID            pgtype.UUID        `json:"game_id"`
+	GameDay           pgtype.Date        `json:"game_day"`
+	StartsAt          pgtype.Timestamptz `json:"starts_at"`
+	GameStatus        string             `json:"game_status"`
+	Opponent          string             `json:"opponent"`
+	AtHome            bool               `json:"at_home"`
+	Points            float64            `json:"points"`
+	Stats             json.RawMessage    `json:"stats"`
+	InjuryDesignation string             `json:"injury_designation"`
+	TeamImplied       float64            `json:"team_implied"`
+	OpponentImplied   float64            `json:"opponent_implied"`
+	WinChance         float64            `json:"win_chance"`
+	Starter           string             `json:"starter"`
 }
 
 // A franchise's main roster in one league with each player's games in a
@@ -1156,6 +1183,11 @@ func (q *Queries) ListRosterGames(ctx context.Context, arg ListRosterGamesParams
 			&i.AtHome,
 			&i.Points,
 			&i.Stats,
+			&i.InjuryDesignation,
+			&i.TeamImplied,
+			&i.OpponentImplied,
+			&i.WinChance,
+			&i.Starter,
 		); err != nil {
 			return nil, err
 		}

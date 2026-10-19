@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/overall", s.cached(cache.Public, 30*time.Second, s.getOverall))
 	mux.HandleFunc("GET /api/seasons", s.cached(cache.Public, 30*time.Second, s.listSeasons))
 	mux.HandleFunc("GET /api/leagues/{id}/lineup", s.getLineup)
+	mux.HandleFunc("GET /api/leagues/{id}/roster-stats", s.cached(cache.Public, 30*time.Second, s.getRosterStats))
 	mux.HandleFunc("GET /api/leagues/{id}/matchups", s.cached(cache.Public, 30*time.Second, s.listMatchups))
 	mux.HandleFunc("GET /api/leagues/{id}/schedule", s.cached(cache.Public, 30*time.Second, s.getSchedule))
 	mux.HandleFunc("GET /api/leagues/{id}/game-counts", s.cached(cache.Public, 30*time.Second, s.getGameCounts))
