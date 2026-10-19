@@ -44,7 +44,16 @@ type Item struct {
 	PickID   pgtype.UUID `json:"draft_pick_id"`
 }
 
+type Drop struct {
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	LeagueID    pgtype.UUID `json:"league_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	List        string      `json:"list"`
+	Name        string      `json:"name"`
+}
+
 type Offer struct {
+	Drops []Drop `json:"drops"`
 	Note  string `json:"note"`
 	Items []Item `json:"items"`
 }
@@ -105,7 +114,11 @@ func (s *Service) Propose(ctx context.Context, proposer db.Franchise, offer Offe
 				return err
 			}
 		}
-		return nil
+		if err := saveDrops(ctx, q, trade, proposer.ID, offer.Drops, offer.Items); err != nil {
+			return err
+		}
+		trade, err = q.LockTrade(ctx, trade.ID)
+		return err
 	})
 	return trade, err
 }
@@ -114,8 +127,12 @@ func (s *Service) Propose(ctx context.Context, proposer db.Franchise, offer Offe
 // the trade executes at once, or waits for the commissioner in a league
 // that requires approval.
 func (s *Service) Accept(ctx context.Context, tradeID pgtype.UUID, franchise db.Franchise) error {
+	return s.AcceptWithDrops(ctx, tradeID, franchise, nil)
+}
+
+func (s *Service) AcceptWithDrops(ctx context.Context, tradeID pgtype.UUID, franchise db.Franchise, drops []Drop) error {
 	return s.change(ctx, tradeID, func(q *db.Queries, trade db.Trade) error {
-		if trade.Status != "proposed" {
+		if trade.Status != "proposed" && trade.Status != "accepted" {
 			return problem.New("This trade is no longer open.")
 		}
 		parties, err := q.ListTradePartiesOf(ctx, tradeID)
@@ -125,6 +142,19 @@ func (s *Service) Accept(ctx context.Context, tradeID pgtype.UUID, franchise db.
 		i := slices.IndexFunc(parties, func(p db.TradeParty) bool { return p.FranchiseID == franchise.ID })
 		if i < 0 {
 			return problem.New("Your franchise is not part of this trade.")
+		}
+		assets, err := items(ctx, q, tradeID)
+		if err != nil {
+			return err
+		}
+		if drops != nil {
+			if err := saveDrops(ctx, q, trade, franchise.ID, drops, assets); err != nil {
+				return err
+			}
+			trade, err = q.LockTrade(ctx, tradeID)
+			if err != nil {
+				return err
+			}
 		}
 		if err := q.AcceptTrade(ctx, db.AcceptTradeParams{TradeID: tradeID, FranchiseID: franchise.ID}); err != nil {
 			return err
@@ -138,7 +168,7 @@ func (s *Service) Accept(ctx context.Context, tradeID pgtype.UUID, franchise db.
 		if err != nil {
 			return err
 		}
-		needsApproval, err := inspect(ctx, q, trade.DynastyID, items, true)
+		needsApproval, err := inspect(ctx, q, trade.DynastyID, items, true, tradeDrops(trade)...)
 		if err != nil {
 			return err
 		}
@@ -146,6 +176,28 @@ func (s *Service) Accept(ctx context.Context, tradeID pgtype.UUID, franchise db.
 			return q.SetTradeStatus(ctx, db.SetTradeStatusParams{ID: tradeID, Status: "accepted"})
 		}
 		return execute(ctx, q, trade, items, false)
+	})
+}
+
+// UpdateDrops changes only this manager's releases. This stays possible while
+// another manager's selections are stale, so each side can repair its own list.
+func (s *Service) UpdateDrops(ctx context.Context, tradeID pgtype.UUID, franchise db.Franchise, drops []Drop) error {
+	return s.change(ctx, tradeID, func(q *db.Queries, t db.Trade) error {
+		if t.Status != "proposed" && t.Status != "accepted" {
+			return problem.New("This trade is no longer open.")
+		}
+		parties, err := q.ListTradePartiesOf(ctx, tradeID)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(parties, func(p db.TradeParty) bool { return p.FranchiseID == franchise.ID }) {
+			return problem.New("Your franchise is not part of this trade.")
+		}
+		assets, err := items(ctx, q, tradeID)
+		if err != nil {
+			return err
+		}
+		return saveDrops(ctx, q, t, franchise.ID, drops, assets)
 	})
 }
 
@@ -201,7 +253,7 @@ func (s *Service) Approve(ctx context.Context, tradeID pgtype.UUID) error {
 		if err != nil {
 			return err
 		}
-		if _, err := inspect(ctx, q, trade.DynastyID, items, true); err != nil {
+		if _, err := inspect(ctx, q, trade.DynastyID, items, true, tradeDrops(trade)...); err != nil {
 			return err
 		}
 		return execute(ctx, q, trade, items, false)
@@ -261,7 +313,7 @@ func items(ctx context.Context, q *db.Queries, tradeID pgtype.UUID) ([]Item, err
 // giving it, no league's deadline has passed and, when withLimits is set,
 // every roster is legal afterwards. It also reports whether any league
 // involved wants the commissioner's approval.
-func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []Item, withLimits bool) (needsApproval bool, err error) {
+func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []Item, withLimits bool, drops ...Drop) (needsApproval bool, err error) {
 	franchises, err := q.ListFranchises(ctx, dynastyID)
 	if err != nil {
 		return false, err
@@ -342,6 +394,38 @@ func inspect(ctx context.Context, q *db.Queries, dynastyID pgtype.UUID, items []
 					return false, err
 				}
 				after = append(after, roster.Entry{PlayerID: item.PlayerID, List: arriving.List, Prospect: player.Status == "prospect", Rookie: arriving.Rookie, Startup: arriving.Startup, InjuryReserveLocked: injuryLocked, StarterIneligible: !rules[key.league].CanStart(league.Competition, conference)})
+			}
+		}
+		// A release must make room on this exact list, and cannot be a traded asset.
+		for _, list := range []string{settings.ListMain, settings.ListReserve} {
+			limit := rules[key.league].Roster.Main
+			if list == settings.ListReserve {
+				limit = rules[key.league].Roster.Reserve
+			}
+			count := 0
+			for _, entry := range after {
+				if entry.List == list {
+					count++
+				}
+			}
+			selected := []Drop{}
+			for _, d := range drops {
+				if d.LeagueID == key.league && d.FranchiseID == key.franchise && d.List == list {
+					selected = append(selected, d)
+				}
+			}
+			if len(selected) > max(0, count-limit) {
+				return false, problem.New("The selected %s drops are no longer needed. Update the trade's drops.", list)
+			}
+			for _, d := range selected {
+				i := slices.IndexFunc(after, func(e roster.Entry) bool { return e.PlayerID == d.PlayerID && e.List == list })
+				if i < 0 {
+					return false, problem.New("A selected drop is no longer on its original roster list. Update the trade's drops.")
+				}
+				after = slices.Delete(after, i, i+1)
+			}
+			if count-len(selected) > limit {
+				return false, problem.New("Select %d player(s) to drop from the %s list in %s before this trade can complete.", count-limit, list, league.Name)
 			}
 		}
 		if err := roster.Check(rules[key.league].Roster, before, after); err != nil {
@@ -454,6 +538,21 @@ func lockRosters(ctx context.Context, q *db.Queries, items []Item) error {
 // execute moves every item to its new franchise and logs it. The caller has
 // already checked the trade is allowed.
 func execute(ctx context.Context, q *db.Queries, trade db.Trade, items []Item, reversing bool) error {
+	if !reversing {
+		for _, drop := range tradeDrops(trade) {
+			league, err := q.GetLeague(ctx, drop.LeagueID)
+			if err != nil {
+				return err
+			}
+			franchise, err := q.GetFranchise(ctx, drop.FranchiseID)
+			if err != nil {
+				return err
+			}
+			if err := roster.DropIn(ctx, q, roster.Change{League: league, Franchise: franchise, PlayerID: drop.PlayerID}); err != nil {
+				return err
+			}
+		}
+	}
 	for _, item := range items {
 		var err error
 		if item.PlayerID.Valid {
@@ -536,4 +635,52 @@ func (s *Service) List(ctx context.Context, dynastyID pgtype.UUID, viewer *db.Fr
 		}
 	}
 	return views, nil
+}
+
+func tradeDrops(t db.Trade) []Drop {
+	var drops []Drop
+	_ = json.Unmarshal(t.Drops, &drops)
+	return drops
+}
+
+// Each manager controls only their own conditional releases. Nothing is released here.
+func saveDrops(ctx context.Context, q *db.Queries, t db.Trade, owner pgtype.UUID, selected []Drop, items []Item) error {
+	all := []Drop{}
+	for _, d := range tradeDrops(t) {
+		if d.FranchiseID != owner {
+			all = append(all, d)
+		}
+	}
+	seen := map[[2]pgtype.UUID]bool{}
+	for _, d := range selected {
+		if d.FranchiseID != owner || (d.List != settings.ListMain && d.List != settings.ListReserve) {
+			return problem.New("Choose drops from your own main or reserve list.")
+		}
+		key := [2]pgtype.UUID{d.LeagueID, d.PlayerID}
+		if seen[key] {
+			return problem.New("The same player cannot be dropped twice.")
+		}
+		seen[key] = true
+		if !slices.Contains(rosterKeys(items), rosterKey{d.LeagueID, owner}) {
+			return problem.New("A drop must be in a league involved in this trade.")
+		}
+		if slices.ContainsFunc(items, func(i Item) bool { return i.LeagueID == d.LeagueID && i.PlayerID == d.PlayerID }) {
+			return problem.New("A traded player cannot also be dropped.")
+		}
+		entry, err := q.GetRosterEntry(ctx, db.GetRosterEntryParams{LeagueID: d.LeagueID, PlayerID: d.PlayerID})
+		if err != nil || entry.FranchiseID != owner || entry.List != d.List {
+			return problem.New("A selected drop is no longer on your chosen roster list.")
+		}
+		player, err := q.GetPlayer(ctx, d.PlayerID)
+		if err != nil {
+			return err
+		}
+		d.Name = player.FullName
+		all = append(all, d)
+	}
+	raw, err := json.Marshal(all)
+	if err != nil {
+		return err
+	}
+	return q.SetTradeDrops(ctx, db.SetTradeDropsParams{ID: t.ID, Drops: raw})
 }

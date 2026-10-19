@@ -49,6 +49,20 @@ func (s *Server) answerTrade(w http.ResponseWriter, r *http.Request, me db.Franc
 		s.fail(w, r, err)
 		return
 	}
+	if r.PathValue("action") == "accept" || r.PathValue("action") == "drops" {
+		var body struct {
+			Drops []trade.Drop `json:"drops"`
+		}
+		if r.ContentLength != 0 && !readJSON(w, r, &body) {
+			return
+		}
+		if r.PathValue("action") == "drops" {
+			s.done(w, r, s.Trades.UpdateDrops(r.Context(), id, me, body.Drops))
+			return
+		}
+		s.done(w, r, s.Trades.AcceptWithDrops(r.Context(), id, me, body.Drops))
+		return
+	}
 	actions := map[string]func(context.Context, pgtype.UUID, db.Franchise) error{
 		"accept": s.Trades.Accept,
 		"reject": s.Trades.Reject,

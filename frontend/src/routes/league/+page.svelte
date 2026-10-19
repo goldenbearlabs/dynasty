@@ -1,160 +1,85 @@
 <script lang="ts">
-	// The league at a glance: your rosters, every franchise, the drafts, and
-	// what just happened.
+	// League overview: standings and the latest activity across sports.
 	import { invalidateAll } from '$app/navigation';
 	import Activity from '#lib/Activity.svelte';
-	import DraftCard from '#lib/DraftCard.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Standings from '#lib/Standings.svelte';
-	import Crest from '#lib/ui/Crest.svelte';
-	import Meter from '#lib/ui/Meter.svelte';
-	import SportBadge from '#lib/ui/SportBadge.svelte';
+	import Empty from '#lib/ui/Empty.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+	let sport = $state('all');
+	let activityType = $state('all');
+	const filtered = $derived(sport !== 'all' || activityType !== 'all');
+	const activity = $derived(data.activity.filter(item =>
+		(sport === 'all' || item.competition === sport) &&
+		(activityType === 'all' || (activityType === 'roster'
+			? ['add', 'drop', 'claim', 'sign', 'unsigned', 'move', 'graduated', 'released'].includes(item.kind)
+			: item.kind === activityType))));
 
-	const onList = (players: { list: string }[], list: string) => players.filter((p) => p.list === list).length;
+	function clearFilters() { sport = 'all'; activityType = 'all'; }
 
-	// Standings follow the games as they are played.
+	// Standings and activity refresh as games are played.
 	onScoresChange(() => data.dynasty?.leagues.map((l) => l.competition) ?? [], invalidateAll);
 </script>
 
 <svelte:head><title>League · {data.dynasty?.name ?? 'Crossover Dynasty'}</title></svelte:head>
 
 {#if data.dynasty}
-	<div class="stack">
+	<div class="stack overview">
 		<header>
-			<p class="eyebrow">{data.dynasty.leagues.length}-sport dynasty · {data.dynasty.franchises.length} franchises</p>
+			<p class="eyebrow">League overview</p>
 			<h1>{data.dynasty.name}</h1>
 		</header>
 
-		<section class="stack tight">
-			<h2>Standings</h2>
+		<section class="stack tight" aria-labelledby="standings-heading">
+			<h2 id="standings-heading">Standings</h2>
 			<Standings
 				identities={data.dynasty.team_identities}
- tables={data.standings}
+				tables={data.standings}
 				overall={data.overall}
 				franchises={data.dynasty.franchises}
 				leagues={data.dynasty.leagues}
 			/>
 		</section>
 
-		{#if data.mine}
-			<section class="stack tight">
-				<div class="spread">
-					<h2>Your rosters</h2>
-					<a href="/franchise/{data.mine.franchise.slug}">Manage {data.mine.franchise.name}</a>
+		<section class="stack tight" aria-labelledby="activity-heading">
+			<div class="spread activity-header">
+				<h2 id="activity-heading">Recent activity</h2>
+				<div class="filters">
+					<select aria-label="Filter activity by sport" bind:value={sport}>
+						<option value="all">All sports</option>
+						{#each data.dynasty.leagues as league (league.id)}
+							<option value={league.competition}>{league.competition.toUpperCase()}</option>
+						{/each}
+					</select>
+					<select aria-label="Filter activity by type" bind:value={activityType}>
+						<option value="all">All activity</option>
+						<option value="trade">Trades</option>
+						<option value="roster">Roster moves</option>
+						<option value="settings">Rule changes</option>
+					</select>
+					{#if filtered}<button class="quiet small" onclick={clearFilters}>Clear filters</button>{/if}
 				</div>
-				<div class="sports">
-					{#each data.mine.rosters as roster (roster.league_id)}
-						<a class="sport" data-sport={roster.competition} href="/lineup/{roster.competition}">
-							<div class="spread">
-								<SportBadge sport={roster.competition} solid />
-								{#if roster.overage > 0}<span class="pill bad">Over by {roster.overage}</span>{/if}
-							</div>
-							<div class="row"><Crest name={roster.team_name} src={roster.image_url} size={30} /><strong class="league">{roster.team_name}</strong></div><span class="muted small-text">{roster.name}</span>
-							<Meter label="Main" value={onList(roster.players, 'main')} max={roster.limits.main} />
-							<Meter label="Reserve" value={onList(roster.players, 'reserve')} max={roster.limits.reserve} />
-						</a>
-					{/each}
-				</div>
-			</section>
-		{:else}
-			<p class="card signin">
-				<strong>You are not signed in.</strong>
-				<span><a href="/">Sign in</a> to manage a team. You can still look around.</span>
-			</p>
-		{/if}
-
-		<section class="stack tight">
-			<h2>Franchises</h2>
-			<div class="franchises">
-				{#each data.dynasty.franchises as f (f.id)}
-					<a class="franchise" href="/franchise/{f.slug}">
-						<Crest src={f.image_url} name={f.name} size={44} />
-						<div>
-							<strong>{f.name}</strong>
-							<div class="muted small-text">{f.manager_name}</div>
-						</div>
-						<div class="row tags">
-							{#if f.id === data.me?.id}<span class="pill brand">You</span>{/if}
-							{#if f.is_commissioner}<span class="pill gold">Commissioner</span>{/if}
-						</div>
-					</a>
-				{/each}
 			</div>
-		</section>
-
-		{#if data.drafts.length > 0}
-			<section class="stack tight">
-				<div class="spread">
-					<h2>Drafts</h2>
-					<a href="/drafts">All drafts</a>
-				</div>
-				<div class="franchises">
-					{#each data.drafts.slice(0, 3) as draft (draft.id)}<DraftCard {draft} />{/each}
-				</div>
-			</section>
-		{/if}
-
-		<section class="stack tight">
-			<h2>Activity</h2>
-			<Activity items={data.activity} />
+			{#if filtered && activity.length === 0}
+				<Empty icon="clock" title="No matching activity">Try another sport or activity type.</Empty>
+			{:else}
+				<Activity items={activity} />
+			{/if}
 		</section>
 	</div>
 {/if}
 
 <style>
-	header {
-		display: grid;
-		gap: 0.4rem;
-	}
-	a.sport, a.franchise {
-		color: var(--ink);
-		transition: border-color 0.12s;
-	}
-	a.sport:hover, a.franchise:hover {
-		text-decoration: none;
-		background: var(--surface-2);
-	}
-
-	.sports {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
-		gap: 0;
-		border-block: 1px solid var(--rule);
-		background: var(--surface);
-	}
-	.sport {
-		display: grid;
-		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-left: 2px solid var(--sport);
-	}
-	.league {
-		font: 700 1.05rem/1.2 var(--display);
-	}
-
-	.signin {
-		display: grid;
-		gap: 0.2rem;
-	}
-
-	.franchises {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-		gap: 0.4rem;
-	}
-	.franchise {
-		display: grid;
-		grid-template-columns: auto 1fr auto;
-		align-items: center;
-		gap: 0.65rem;
-		padding: 0.65rem 0;
-		border-bottom: 1px solid var(--rule);
-	}
-	.tags {
-		gap: 0.3rem;
-		justify-content: end;
+	header { display: grid; gap: 0.25rem; }
+	.overview { gap: 1.5rem; }
+	.activity-header { gap: 0.65rem; }
+	.filters { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+	.filters select { padding: 0.35rem 0.55rem; font-size: 0.8rem; }
+	@media (max-width: 640px) {
+		.activity-header { align-items: flex-start; }
+		.filters { width: 100%; }
+		.filters select { flex: 1; min-width: 0; }
 	}
 </style>

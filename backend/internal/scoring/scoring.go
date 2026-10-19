@@ -8,6 +8,7 @@ package scoring
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"time"
@@ -50,13 +51,29 @@ type Row struct {
 	PointsAgainst float64 `json:"points_against"`
 }
 
+// ScoredGame is a starter's counted contribution, using the exact scoring
+// windows, selected-game rules and pitcher caps used by the matchup total.
+type ScoredGame struct {
+	GameID    pgtype.UUID        `json:"game_id"`
+	Day       string             `json:"day"`
+	Slot      string             `json:"slot"`
+	Points    float64            `json:"points"`
+	Stats     map[string]float64 `json:"stats"`
+	StartsAt  time.Time          `json:"starts_at"`
+	Status    string             `json:"status"`
+	Home      string             `json:"home"`
+	Away      string             `json:"away"`
+	Positions []string           `json:"positions"`
+}
+
 type PlayerPoints struct {
-	Nickname    string      `json:"nickname"`
-	PlayerID    pgtype.UUID `json:"player_id"`
-	FullName    string      `json:"full_name"`
-	HeadshotURL string      `json:"headshot_url"`
-	Games       int64       `json:"games"`
-	Points      float64     `json:"points"`
+	GameLines   []ScoredGame `json:"game_lines,omitempty"`
+	Nickname    string       `json:"nickname"`
+	PlayerID    pgtype.UUID  `json:"player_id"`
+	FullName    string       `json:"full_name"`
+	HeadshotURL string       `json:"headshot_url"`
+	Games       int64        `json:"games"`
+	Points      float64      `json:"points"`
 }
 
 // Standings returns the table for a league's latest season.
@@ -84,7 +101,7 @@ func (s *Service) Standings(ctx context.Context, league db.League) (Standings, e
 
 // scores returns what each franchise's starters scored over a span of days,
 // by franchise. Days that have not happened yet score nothing.
-func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.Time) (map[pgtype.UUID]Row, error) {
+func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.Time, includeGames ...bool) (map[pgtype.UUID]Row, error) {
 	if today := sportsday.Today(); today.Before(to) {
 		to = today
 	}
@@ -93,7 +110,8 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 		return nil, err
 	}
 	points, err := q.ListLineupPoints(ctx, db.ListLineupPointsParams{
-		LeagueID: league.ID, FromDay: sportsday.Date(from), ToDay: sportsday.Date(to),
+		IncludeGames: len(includeGames) > 0 && includeGames[0],
+		LeagueID:     league.ID, FromDay: sportsday.Date(from), ToDay: sportsday.Date(to),
 		WeekStart: sportsday.Date(sportsday.WeekStart(from, rules.Lineup.WeekStart)),
 	})
 	if err != nil {
@@ -104,8 +122,15 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 		row := byFranchise[p.FranchiseID]
 		row.FranchiseID = p.FranchiseID
 		row.Points += p.Points
+		var games []ScoredGame
+		if len(includeGames) > 0 && includeGames[0] {
+			if err := json.Unmarshal(p.GameLines, &games); err != nil {
+				return nil, err
+			}
+		}
 		row.Players = append(row.Players, PlayerPoints{
-			PlayerID: p.PlayerID, FullName: p.FullName, Nickname: p.Nickname, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
+			GameLines: games,
+			PlayerID:  p.PlayerID, FullName: p.FullName, Nickname: p.Nickname, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
 		})
 		byFranchise[p.FranchiseID] = row
 	}

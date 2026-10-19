@@ -78,6 +78,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, registry competition.Registry,
 
 	setup := dynasty.Setup{
 		Name:       "Dev Dynasty",
+		Settings:   settings.Dynasty{OverallTitle: settings.OverallTitle{Enabled: true, PointsByFinish: []float64{12, 9, 8, 7, 6, 5, 4, 3}}},
 		Franchises: managers,
 		Account:    dynasty.Account{Email: email(0), Password: Password},
 	}

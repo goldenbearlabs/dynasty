@@ -5,7 +5,8 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { getFranchise, proposeTrade, type FranchiseDetail, type List } from '#lib/api.ts';
+	import { getFranchise, proposeTrade, type FranchiseDetail, type List, type TradeDrop } from '#lib/api.ts';
+	import TradeDrops from '#lib/TradeDrops.svelte';
 	import AssetPicker from '#lib/AssetPicker.svelte';
 	import { assetsOf, toItem, type Asset } from '#lib/tradeAssets.ts';
 	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
@@ -28,6 +29,8 @@
 	const receiving = new SvelteSet<string>();
 	let note = $state('');
 	let busy = $state(false);
+	let drops = $state<TradeDrop[]>([]);
+	let dropsReady = $state(false);
 
 	$effect(() => {
 		if (me) getFranchise(me.slug).then((d) => (mine = d), toast.error);
@@ -53,7 +56,7 @@
 		const count = (assets: Asset[], league: string, list: List) =>
 			assets.filter((a) => a.leagueId === league && a.list === list).length;
 
-		return my.rosters.flatMap((roster, i) => {
+		return my.rosters.flatMap((roster) => {
 			const league = roster.league_id;
 			if (![...give, ...get].some((a) => a.leagueId === league)) return [];
 			const sides: Side[] = [];
@@ -62,7 +65,7 @@
 				[their, get, give]
 			] as const) {
 				for (const list of ['main', 'reserve'] as const) {
-					const before = detail.rosters[i].players.filter((p) => p.list === list).length;
+					const before = detail.rosters.find(r => r.league_id === league)!.players.filter((p) => p.list === list).length;
 					const after = before - count(out, league, list) + count(incoming, league, list);
 					if (after !== before) sides.push({ name: detail.franchise.name, list, before, after, max: roster.limits[list] });
 				}
@@ -71,14 +74,15 @@
 		});
 	});
 
+	const offerItems = $derived(me && theirs ? [
+	...give.map(a => toItem(a, me.id, theirs!.franchise.id)),
+	...get.map(a => toItem(a, theirs!.franchise.id, me.id))
+	] : []);
 	async function propose() {
 		if (!me || !theirs) return;
 		busy = true;
 		try {
-			await proposeTrade(note, [
-				...give.map((a) => toItem(a, me.id, theirs!.franchise.id)),
-				...get.map((a) => toItem(a, theirs!.franchise.id, me.id))
-			]);
+			await proposeTrade(note, offerItems, drops);
 			await invalidateAll();
 			toast.good(`Offer sent to ${theirs.franchise.name}.`);
 			await goto('/trades');
@@ -160,14 +164,16 @@
 				</ul>
 				{#if impact.some((l) => l.sides.some((s) => s.after > s.max))}
 					<p class="muted small-text">
-						A side over its limit must make room before the trade can be accepted. You can still send the offer.
+						Each manager chooses drops from their own overfull list. Your partner will choose theirs when accepting.
 					</p>
 				{/if}
 			{/if}
 
+			{#if offerItems.length}<TradeDrops items={offerItems} {franchises} owner={me.id} bind:drops onchange={ready => dropsReady = ready} />{/if}
+
 			<label class="field">Note (optional) <input bind:value={note} placeholder="Say something to sell it" /></label>
 			<div class="row">
-				<button class="primary" disabled={busy || give.length + get.length === 0} onclick={propose}>Send offer</button>
+				<button class="primary" disabled={busy || give.length + get.length === 0 || !dropsReady} onclick={propose}>Send offer</button>
 				<a class="button quiet" href="/trades">Cancel</a>
 			</div>
 		</section>

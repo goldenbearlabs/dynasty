@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -67,7 +68,7 @@ func (q *Queries) AddTradeParty(ctx context.Context, arg AddTradePartyParams) er
 }
 
 const createTrade = `-- name: CreateTrade :one
-insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at
+insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops
 `
 
 type CreateTradeParams struct {
@@ -87,6 +88,7 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade
 		&i.Note,
 		&i.CreatedAt,
 		&i.ResolvedAt,
+		&i.Drops,
 	)
 	return i, err
 }
@@ -338,7 +340,7 @@ func (q *Queries) ListTradePartiesOf(ctx context.Context, tradeID pgtype.UUID) (
 }
 
 const listTrades = `-- name: ListTrades :many
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at from trades where dynasty_id = $1 order by created_at desc limit 200
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops from trades where dynasty_id = $1 order by created_at desc limit 200
 `
 
 func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trade, error) {
@@ -358,6 +360,7 @@ func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trad
 			&i.Note,
 			&i.CreatedAt,
 			&i.ResolvedAt,
+			&i.Drops,
 		); err != nil {
 			return nil, err
 		}
@@ -416,7 +419,7 @@ func (q *Queries) LockDraftPick(ctx context.Context, id pgtype.UUID) (LockDraftP
 }
 
 const lockTrade = `-- name: LockTrade :one
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at from trades where id = $1 for update
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops from trades where id = $1 for update
 `
 
 func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) {
@@ -430,6 +433,7 @@ func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) 
 		&i.Note,
 		&i.CreatedAt,
 		&i.ResolvedAt,
+		&i.Drops,
 	)
 	return i, err
 }
@@ -495,6 +499,20 @@ type SetRosterOwnerParams struct {
 
 func (q *Queries) SetRosterOwner(ctx context.Context, arg SetRosterOwnerParams) error {
 	_, err := q.db.Exec(ctx, setRosterOwner, arg.ToFranchise, arg.LeagueID, arg.PlayerID)
+	return err
+}
+
+const setTradeDrops = `-- name: SetTradeDrops :exec
+update trades set drops = $1 where id = $2
+`
+
+type SetTradeDropsParams struct {
+	Drops json.RawMessage `json:"drops"`
+	ID    pgtype.UUID     `json:"id"`
+}
+
+func (q *Queries) SetTradeDrops(ctx context.Context, arg SetTradeDropsParams) error {
+	_, err := q.db.Exec(ctx, setTradeDrops, arg.Drops, arg.ID)
 	return err
 }
 

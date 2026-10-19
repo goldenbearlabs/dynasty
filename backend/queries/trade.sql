@@ -98,3 +98,6 @@ select exists (
 
 -- name: MoveTradeItems :exec
 update trade_items set player_id = @keep_id where player_id = @duplicate_id;
+
+-- name: SetTradeDrops :exec
+update trades set drops = @drops where id = @id;

@@ -25,7 +25,7 @@
 
 	let name = $state('');
 	let overallTitle = $state(true);
-	let overallPoints = $state('10, 7, 5, 3, 2, 1');
+	let overallPoints = $state('12, 9, 8, 7, 6, 5, 4, 3');
 	let leagues = $state(untrack(() => startingLeagues(data.competitions)));
 	let franchises = $state([
 		{ name: '', manager_name: '' },
@@ -137,6 +137,7 @@
 						<label class="field">
 							Points for finishing 1st, 2nd, 3rd… in each sport
 							<input bind:value={overallPoints} />
+							<span class="muted small-text">All remaining places earn 0 points.</span>
 						</label>
 					{/if}
 				</div>

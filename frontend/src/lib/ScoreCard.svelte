@@ -3,7 +3,7 @@
 	import type { GameSummary } from '#lib/api.ts';
 	import { timeOfDay } from '#lib/ui/time.ts';
 
-	let { game, big = false }: { game: GameSummary; big?: boolean } = $props();
+	let { game, big = false, compact = false }: { game: GameSummary; big?: boolean; compact?: boolean } = $props();
 
 	const started = $derived(game.status !== 'scheduled');
 	const sides = $derived([
@@ -12,7 +12,7 @@
 	]);
 </script>
 
-<div class="game" class:big class:live={game.status === 'live'}>
+<div class="game" class:big class:compact class:live={game.status === 'live'}>
 	<div class="state">
 		{#if game.status === 'live'}
 			<span class="dot" aria-hidden="true"></span><strong>{game.detail || 'Live'}</strong>
@@ -97,6 +97,12 @@
 		width: 2.4rem;
 		height: 2.4rem;
 	}
+	.compact { gap: 0.15rem; }
+	.compact .state { font-size: 0.61rem; letter-spacing: 0; }
+	.compact .side { gap: 0.35rem; font-size: 0.75rem; }
+	.compact img, .compact .logo { width: 1.05rem; height: 1.05rem; }
+	.compact .score { font-size: 0.9rem; }
+	.compact .dot { width: 0.35rem; height: 0.35rem; }
 	@keyframes pulse {
 		50% {
 			opacity: 0.35;

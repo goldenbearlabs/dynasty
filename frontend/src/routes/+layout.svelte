@@ -7,7 +7,7 @@
 
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { watchlist } from '#lib/watchlist.svelte.ts';
 	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
 	import { logOut } from '#lib/api.ts';
@@ -21,6 +21,22 @@
 	let { data, children }: LayoutProps = $props();
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });
+
+	let sidebarCollapsed = $state(false);
+	let wideScreen = $state(false);
+	const collapsed = $derived(wideScreen && sidebarCollapsed);
+	onMount(() => {
+		const media = window.matchMedia('(min-width: 861px)');
+		const resize = () => { wideScreen = media.matches; };
+		resize();
+		media.addEventListener('change', resize);
+		try { sidebarCollapsed = localStorage.getItem('crossover.sidebar.collapsed') === 'true'; } catch { /* Storage may be unavailable. */ }
+		return () => media.removeEventListener('change', resize);
+	});
+	function toggleSidebar() {
+		sidebarCollapsed = !sidebarCollapsed;
+		try { localStorage.setItem('crossover.sidebar.collapsed', String(sidebarCollapsed)); } catch { /* Keep the session preference. */ }
+	}
 
 	type Link = { href: string; label: string; icon: IconName; count?: number };
 
@@ -76,8 +92,13 @@
 {#if bare || !data.dynasty}
 	<main class="bare">{@render children()}</main>
 {:else}
-	<div class="shell">
-		<aside class="rail">
+	<div class="shell" class:collapsed>
+		<button class="sidebar-toggle" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+			title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
+			aria-controls="sidebar-navigation" onclick={toggleSidebar}>
+			<Icon name={collapsed ? 'right' : 'left'} size={15} />
+		</button>
+		<aside class="rail" id="sidebar-navigation" inert={collapsed}>
 			<a class="brand" href="/league">
 				<span class="mark" aria-hidden="true">CD</span>
 				<span class="name">{data.dynasty.name}</span>
@@ -180,6 +201,35 @@
 		display: grid;
 		grid-template-columns: 12.5rem minmax(0, 1fr);
 		min-height: 100dvh;
+		transition: grid-template-columns 180ms ease;
+	}
+
+	.sidebar-toggle { display: none; }
+	@media (min-width: 861px) {
+		.shell.collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+		.rail { width: 12.5rem; transition: transform 180ms ease, visibility 180ms; }
+		.collapsed .rail { transform: translateX(-100%); visibility: hidden; }
+		.sidebar-toggle {
+			display: grid;
+			place-items: center;
+			position: fixed;
+			left: 12.5rem;
+			top: 50dvh;
+			z-index: 15;
+			width: 1.35rem;
+			height: 3.25rem;
+			padding: 0;
+			border-radius: 0 var(--radius-small) var(--radius-small) 0;
+			border-left: 0;
+			background: var(--surface);
+			color: var(--ink-soft);
+			transition: left 180ms ease;
+		}
+		.collapsed .sidebar-toggle { left: 0; }
+		.collapsed main { padding-left: 1.75rem; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.shell, .rail, .sidebar-toggle { transition: none; }
 	}
 
 	/* ---- rail ---- */

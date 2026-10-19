@@ -840,7 +840,7 @@ func (s *Service) Matchup(ctx context.Context, id pgtype.UUID) (MatchupDetail, e
 	if err != nil {
 		return MatchupDetail{}, err
 	}
-	scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time)
+	scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time, true)
 	if err != nil {
 		return MatchupDetail{}, err
 	}

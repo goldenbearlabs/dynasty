@@ -452,11 +452,17 @@ export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff' |
 /** One period of a head-to-head season. */
 export type Matchups = { periods: Period[]; period: Period | null; matchups: Matchup[] };
 
+export type ScoredGame = {
+ game_id: string; day: string; slot: string; points: number; stats: Record<string, number>;
+ starts_at: string; status: string; home: string; away: string; positions: string[];
+};
+export type MatchupScorer = StandingsRow['players'][number] & { game_lines?: ScoredGame[] };
+
 export type MatchupDetail = Matchup & {
 	competition: string;
 	period: Period;
-	home_players: StandingsRow['players'];
-	away_players: StandingsRow['players'];
+	home_players: MatchupScorer[];
+	away_players: MatchupScorer[];
 };
 
 // ---- scores ----
@@ -517,6 +523,7 @@ export type OverallYear = {
 };
 
 export type LineupGame = {
+ game_id?: string;
 	day: string;
 	starts_at: string;
 	status: string;
@@ -574,7 +581,10 @@ export type LineupChange = {
 export type TradeStatus = 'proposed' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'reversed';
 
 /** One asset changing hands, as shown in a trade. */
+export type TradeDrop = { franchise_id: string; league_id: string; player_id: string; list: string; name: string };
+
 export type TradeItem = {
+ league_id: string | null;
 	id: string;
 	from_franchise: string;
 	to_franchise: string;
@@ -590,6 +600,7 @@ export type TradeItem = {
 };
 
 export type Trade = {
+ drops: TradeDrop[];
 	id: string;
 	status: TradeStatus;
 	proposed_by: string;
@@ -609,7 +620,7 @@ export type OfferItem = {
 	draft_pick_id?: string;
 };
 
-export type TradeAnswer = 'accept' | 'reject' | 'cancel';
+export type TradeAnswer = 'accept' | 'reject' | 'cancel' | 'drops';
 export type TradeRuling = 'approve' | 'veto' | 'reverse';
 
 // ---- drafts ----
@@ -948,8 +959,8 @@ export const controlDraft = (id: string, action: DraftAction) => request<void>('
 export const createFutureDrafts = () => request<{ created: number }>('POST', '/admin/drafts/future');
 
 export const getTrades = () => orNull(request<Trade[]>('GET', '/trades')).then((t) => t ?? []);
-export const proposeTrade = (note: string, items: OfferItem[]) => request<Trade>('POST', '/trades', { note, items });
-export const answerTrade = (id: string, answer: TradeAnswer) => request<void>('POST', `/trades/${id}/${answer}`);
+export const proposeTrade = (note: string, items: OfferItem[], drops: TradeDrop[] = []) => request<Trade>('POST', '/trades', { note, items, drops });
+export const answerTrade = (id: string, answer: TradeAnswer, drops?: TradeDrop[]) => request<void>('POST', `/trades/${id}/${answer}`, drops ? { drops } : undefined);
 export const ruleOnTrade = (id: string, ruling: TradeRuling) => request<void>('POST', `/admin/trades/${id}/${ruling}`);
 
 export const getStandings = () => request<Standings[]>('GET', '/standings');

@@ -213,9 +213,20 @@ func TestTradeFlow(t *testing.T) {
 	if onRoster, _ := holdings(ann, "ann"); onRoster["Zt Guard Three"] {
 		t.Fatal("a refused trade still moved a player")
 	}
-	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+nbaLeague.ID+"/roster/drop",
-		map[string]any{"player_id": id["Zt Guard Two"]}, nil)
-	ann.want(http.StatusNoContent, "POST", answer(first.ID, "accept"), nil, nil)
+	// The recipient can release a player as part of acceptance, atomically.
+	drop := func(owner, league, name, list string) map[string]any {
+		return map[string]any{"franchise_id": team[owner], "league_id": league, "player_id": id[name], "list": list}
+	}
+	ann.want(http.StatusUnprocessableEntity, "POST", answer(first.ID, "accept"), map[string]any{"drops": []any{drop("Bob", nbaLeague.ID, "Zt Guard Three", "main")}}, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", answer(first.ID, "accept"), map[string]any{"drops": []any{drop("Ann", nbaLeague.ID, "Zt Guard Two", "reserve")}}, nil)
+	ann.want(http.StatusNoContent, "POST", answer(first.ID, "accept"), map[string]any{"drops": []any{drop("Ann", nbaLeague.ID, "Zt Guard Two", "main")}}, nil)
+	if onRoster, _ := holdings(ann, "ann"); onRoster["Zt Guard Two"] {
+		t.Fatal("the conditional release did not execute")
+	}
+	var waived bool
+	if err := pool.QueryRow(ctx, `select exists (select 1 from waivers where league_id = $1 and player_id = $2)`, nbaLeague.ID, id["Zt Guard Two"]).Scan(&waived); err != nil || !waived {
+		t.Fatalf("conditional release must follow normal waivers: waived=%v err=%v", waived, err)
+	}
 	ann.want(http.StatusUnprocessableEntity, "POST", answer(first.ID, "accept"), nil, nil) // already done
 
 	annHas, annPicks := holdings(ann, "ann")
@@ -325,5 +336,71 @@ func TestTradeFlow(t *testing.T) {
 	// Three assets moved and came back, one moved and came back: 8 entries, 2 of them the pick.
 	if trades != 8 || withPick != 2 {
 		t.Errorf("activity has %d trade entries, %d for picks; want 8 and 2", trades, withPick)
+	}
+
+	// Reserve capacity is independent of main capacity, including a 2-for-1 offer.
+	nbaRules["trades"].(map[string]any)["deadline"] = ""
+	nbaRules["trades"].(map[string]any)["approval"] = "commissioner"
+	ann.want(http.StatusNoContent, "PUT", "/api/leagues/"+nbaLeague.ID+"/settings", nbaRules, nil)
+	var prospects []players.NewPlayer
+	for _, name := range []string{"Zt Reserve A", "Zt Reserve B", "Zt Reserve C", "Zt Reserve D"} {
+		prospects = append(prospects, players.NewPlayer{Competition: "nba", FullName: name, Status: "prospect", Note: marker})
+	}
+	ann.want(http.StatusCreated, "POST", "/api/admin/players", prospects, nil)
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zt+Reserve", nil, &page)
+	for _, p := range page.Players {
+		id[p.FullName] = p.ID
+	}
+	reserve := func(name, owner string) {
+		ann.want(http.StatusNoContent, "POST", "/api/leagues/"+nbaLeague.ID+"/roster/add", map[string]any{"player_id": id[name], "franchise_id": team[owner], "list": "reserve", "force": true}, nil)
+	}
+	reserve("Zt Reserve A", "Ann")
+	reserve("Zt Reserve B", "Bob")
+	reserve("Zt Reserve C", "Bob") // commissioner may place a roster over its limit
+	// Ann gives a main player for two reserves. Her existing reserve must be released;
+	// even then two incoming reserves exceed a size-one list, so enlarge it to two.
+	nbaRules["roster"].(map[string]any)["reserve"] = 2
+	ann.want(http.StatusNoContent, "PUT", "/api/leagues/"+nbaLeague.ID+"/settings", nbaRules, nil)
+	unequal := offer(player("Ann", "Bob", nbaLeague.ID, "Zt Guard One"), player("Bob", "Ann", nbaLeague.ID, "Zt Reserve B"), player("Bob", "Ann", nbaLeague.ID, "Zt Reserve C"))
+	unequal["drops"] = []any{drop("Ann", nbaLeague.ID, "Zt Reserve A", "reserve")}
+	var pending tradeView
+	ann.want(http.StatusCreated, "POST", "/api/trades", unequal, &pending)
+	if held, _ := holdings(ann, "ann"); !held["Zt Reserve A"] {
+		t.Fatal("proposing released a player")
+	}
+	bob.want(http.StatusNoContent, "POST", answer(pending.ID, "accept"), map[string]any{"drops": []any{}}, nil)
+	if held, _ := holdings(ann, "ann"); !held["Zt Reserve A"] || held["Zt Reserve B"] {
+		t.Fatal("players moved before commissioner approval")
+	}
+	ann.want(http.StatusNoContent, "POST", rule(pending.ID, "veto"), nil, nil)
+	if held, _ := holdings(ann, "ann"); !held["Zt Reserve A"] {
+		t.Fatal("vetoed trade released a player")
+	}
+
+	ann.want(http.StatusCreated, "POST", "/api/trades", unequal, &pending)
+	bob.want(http.StatusNoContent, "POST", answer(pending.ID, "accept"), nil, nil)
+	// A stale drop aborts approval, without moving any traded assets.
+	ann.want(http.StatusNoContent, "POST", "/api/leagues/"+nbaLeague.ID+"/roster/drop", map[string]any{"player_id": id["Zt Reserve A"]}, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", rule(pending.ID, "approve"), nil, nil)
+	if held, _ := holdings(bob, "bob"); !held["Zt Reserve B"] || held["Zt Guard One"] {
+		t.Fatal("failed approval partially executed")
+	}
+	// Removing the stale selection is allowed even after all parties accepted.
+	ann.want(http.StatusNoContent, "POST", answer(pending.ID, "drops"), map[string]any{"drops": []any{}}, nil)
+	ann.want(http.StatusNoContent, "POST", rule(pending.ID, "approve"), nil, nil)
+	if held, _ := holdings(ann, "ann"); !held["Zt Reserve B"] || !held["Zt Reserve C"] {
+		t.Fatal("the unequal reserve trade did not execute")
+	}
+
+	// Full reserve list: a main drop cannot make space for an incoming reserve.
+	reserve("Zt Reserve D", "Bob")
+	place(nbaLeague.ID, "Zt Guard Two", "Ann")
+	wrongList := offer(player("Bob", "Ann", nbaLeague.ID, "Zt Reserve D"))
+	bob.want(http.StatusCreated, "POST", "/api/trades", wrongList, &pending)
+	ann.want(http.StatusUnprocessableEntity, "POST", answer(pending.ID, "accept"), map[string]any{"drops": []any{drop("Ann", nbaLeague.ID, "Zt Guard Two", "main")}}, nil)
+	ann.want(http.StatusNoContent, "POST", answer(pending.ID, "accept"), map[string]any{"drops": []any{drop("Ann", nbaLeague.ID, "Zt Reserve B", "reserve")}}, nil)
+	ann.want(http.StatusNoContent, "POST", rule(pending.ID, "approve"), nil, nil)
+	if held, _ := holdings(ann, "ann"); held["Zt Reserve B"] || !held["Zt Reserve D"] {
+		t.Fatal("reserve drop did not execute with trade")
 	}
 }

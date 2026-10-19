@@ -174,7 +174,7 @@ with days as (
   cross join days d
   where f.dynasty_id = (select dynasty_id from leagues where id = @league_id)
 ), started as (
-  select i.franchise_id, e.player_id, g.id as game_id, g.day, sl.stats, l.settings,
+  select i.franchise_id, e.player_id, e.slot, g.id as game_id, g.day, sl.stats, l.settings,
          coalesce((select (def.rule->>'games_per_week')::int
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
@@ -224,20 +224,32 @@ with days as (
            and team.id in (g.home_team_id, g.away_team_id) and ps.conference <> '' limit 1),
         (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
          in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
-)
-select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
-       count(distinct st.game_id) as games,
-       sum(s.value::numeric * r.value::numeric)::float8 as points
-from started st
-join players p on p.id = st.player_id
-left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id = st.player_id
-cross join lateral jsonb_each_text(st.stats) s
-join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
+), counted as (
+  select st.*, (select sum(s.value::numeric * r.value::numeric)
+               from jsonb_each_text(st.stats) s
+               join jsonb_each_text(st.settings->'scoring') r on r.key = s.key) as points
+  from started st
 where st.day >= @from_day::date
   and (st.games_per_week = 0
     or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
     or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
+)
+select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
+       count(distinct st.game_id) as games,
+       sum(st.points)::float8 as points,
+       case when @include_games::boolean then jsonb_agg(jsonb_build_object(
+         'game_id', st.game_id, 'day', st.day, 'slot', st.slot, 'points', st.points,
+         'stats', st.stats, 'starts_at', g.starts_at, 'status', g.status,
+         'home', home.abbrev, 'away', away.abbrev, 'positions', p.positions
+       ) order by g.starts_at, g.id) else '[]'::jsonb end as game_lines
+from counted st
+join players p on p.id = st.player_id
+join games g on g.id = st.game_id
+left join pro_teams home on home.id = g.home_team_id
+left join pro_teams away on away.id = g.away_team_id
+left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id = st.player_id
+where st.points is not null
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc;
 

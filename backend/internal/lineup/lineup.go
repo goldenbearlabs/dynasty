@@ -101,13 +101,14 @@ type Player struct {
 }
 
 type Game struct {
-	Day      string    `json:"day"`
-	StartsAt time.Time `json:"starts_at"`
-	Status   string    `json:"status"`
-	Opponent string    `json:"opponent"`
-	AtHome   bool      `json:"at_home"`
-	Points   float64   `json:"points"`
-	Counts   bool      `json:"counts"` // false for a game his slot leaves out
+	GameID   pgtype.UUID `json:"game_id"`
+	Day      string      `json:"day"`
+	StartsAt time.Time   `json:"starts_at"`
+	Status   string      `json:"status"`
+	Opponent string      `json:"opponent"`
+	AtHome   bool        `json:"at_home"`
+	Points   float64     `json:"points"`
+	Counts   bool        `json:"counts"` // false for a game his slot leaves out
 	// Stats is his stat line, by the competition's stat keys; empty until he plays.
 	Stats json.RawMessage `json:"stats"`
 }
@@ -209,7 +210,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		}
 		p := &view.Players[len(view.Players)-1]
 		p.Games = append(p.Games, Game{
-			Day: r.GameDay.Time.Format(time.DateOnly), StartsAt: r.StartsAt.Time, Status: r.GameStatus,
+			GameID: r.GameID, Day: r.GameDay.Time.Format(time.DateOnly), StartsAt: r.StartsAt.Time, Status: r.GameStatus,
 			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true, Stats: r.Stats,
 		})
 	}

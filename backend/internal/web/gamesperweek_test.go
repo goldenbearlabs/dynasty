@@ -149,6 +149,7 @@ func TestOneGameAWeek(t *testing.T) {
 	}
 	total := func() float64 {
 		t.Helper()
+		assertCountedGameTotals(t, pool, league)
 		var all []struct{ Rows []struct{ Points float64 } }
 		ann.want(http.StatusOK, "GET", "/api/standings", nil, &all)
 		return all[0].Rows[0].Points
@@ -321,6 +322,7 @@ func TestAutoLastGame(t *testing.T) {
 	}
 	total := func() float64 {
 		t.Helper()
+		assertCountedGameTotals(t, pool, league)
 		var all []struct{ Rows []struct{ Points float64 } }
 		ann.want(http.StatusOK, "GET", "/api/standings", nil, &all)
 		return all[0].Rows[0].Points

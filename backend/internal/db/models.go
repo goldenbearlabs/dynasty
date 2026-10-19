@@ -331,6 +331,7 @@ type Trade struct {
 	Note       string             `json:"note"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
+	Drops      json.RawMessage    `json:"drops"`
 }
 
 type TradeBlock struct {

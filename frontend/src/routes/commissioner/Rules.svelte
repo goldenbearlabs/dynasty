@@ -12,7 +12,7 @@
 	const initial = untrack(() => structuredClone($state.snapshot(dynasty)));
 	let name = $state(initial.name);
 	let overall = $state(initial.settings.overall_title);
-	let points = $state(initial.settings.overall_title.points_by_finish.join(', '));
+	let points = $state((initial.settings.overall_title.points_by_finish ?? []).join(', '));
 	let leagues = $state(initial.leagues);
 
 	let saved = $state(''); // id of what was last saved
@@ -81,6 +81,7 @@
 			</label>
 			{#if overall.enabled}
 				<label class="field">Points for finishing 1st, 2nd, 3rd… in each sport <input bind:value={points} /></label>
+				<p class="muted small-text">All remaining places earn 0 points.</p>
 			{/if}
 			{@render saveRow('dynasty', 'Save', saveDynasty)}
 		</div>
