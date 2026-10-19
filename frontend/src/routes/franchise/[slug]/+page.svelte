@@ -23,6 +23,7 @@
 	import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
 	import SeasonRoster from '#lib/SeasonRoster.svelte';
+	import { dropQuestion } from '#lib/dropPlayer.ts';
 	import TradeFlag from '#lib/TradeFlag.svelte';
 	import PlayerNickname from '#lib/PlayerNickname.svelte';
 	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
@@ -254,7 +255,8 @@
 		} else if (mine && list === 'reserve' && days > 0 && player.status !== 'prospect' && player.list !== 'rights') {
 			if (!confirm(`${player.full_name} will be locked on the reserve list for ${days} ${days === 1 ? 'day' : 'days'}. Move him?`)) return;
 		}
-		if (action === 'drop' && !confirm(`${player.list === 'rights' ? 'Release' : 'Drop'} ${player.full_name}?`)) return;
+		const inLeague = leagues.find((l) => l.id === r.league_id);
+		if (action === 'drop' && inLeague && !confirm(dropQuestion(inLeague, player.full_name, player.list === 'rights'))) return;
 		try {
 			await changeRoster(r.league_id, action, { player_id: player.player_id, list, franchise_id: team.id, force: !mine });
 			await invalidateAll();

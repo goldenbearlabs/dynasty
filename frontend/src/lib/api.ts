@@ -101,7 +101,12 @@ export type Dynasty = {
 	franchises: Franchise[];
 };
 
-export type Player = {
+export type ProspectRankingFields = {
+ prospect_rank: number | null; prospect_rank_year: number | null;
+ prospect_rank_source: string; prospect_rank_url: string; prospect_eta: string;
+};
+
+export type Player = ProspectRankingFields & {
 	id: string;
 	competition: string;
 	status: 'prospect' | 'active' | 'inactive';
@@ -233,7 +238,7 @@ export type ProfileGame = { id: string; competition: string; day: string; starts
 export type PlayerGameLog = { games: ProfileGame[]; total: number; page: number; per_page: number };
 export type PlayerProfile = {
  fantasy_production: { season_id: string; year: number; competition: string; franchise_name: string; franchise_slug: string; games: number; points: number }[];
- player: Pick<Player, 'injury_designation' | 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
+ player: ProspectRankingFields & Pick<Player, 'injury_designation' | 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
  seasons: ProfileSeason[]; game_log: PlayerGameLog; timeline: PlayerTimeline;
  ownership: { league_id: string; competition: string; league_name: string; franchise_name: string; franchise_slug: string;
  franchise_id: string; list: string; acquired_via: string; acquired_at: string; reserved_at: string | null; slot: string }[];
@@ -421,8 +426,9 @@ export type Standings = {
 
 // ---- head-to-head ----
 
-/** by_hand: the commissioner set its matchups, so the schedule leaves them alone. */
-export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean; by_hand: boolean };
+/** by_hand: the commissioner set its matchups, so the schedule leaves them alone.
+ * double_games: a long matchup in which slots count twice the games and the pitcher start cap doubles. */
+export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean; by_hand: boolean; double_games: boolean };
 
 export type Matchup = {
 	id: string;
@@ -439,7 +445,7 @@ export type Matchup = {
 export type SchedulePeriod = Period & { matchups: Matchup[] };
 export type GameDayCount = { day: string; games: number };
 export type MatchupPairing = Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'> & Partial<Pick<Matchup, 'bracket' | 'bracket_slot'>>;
-export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff'> & {
+export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff' | 'double_games'> & {
  matchups: MatchupPairing[] | null;
 };
 
@@ -551,6 +557,8 @@ export type Lineup = {
 	locked: string; // why the whole lineup cannot change, or empty
 	/** The week's pitcher starts against the league's cap; null in a league without one. */
 	starts: { limit: number; made: { player_id: string; full_name: string; day: string; innings: number; counts: boolean }[] } | null;
+	/** Set in a matchup the commissioner doubled: twice the games count, and the start cap doubles, over the whole matchup. */
+	doubled: { starts_on: string; ends_on: string } | null;
 };
 
 export type LineupChange = {
@@ -754,7 +762,8 @@ export type Waivers = {
 };
 export type WaiverClaim = { player_id: string; drop_player_id?: string; bid: number; list?: 'main' | 'reserve' };
 
-export type RosterChange = { player_id: string; replacement_id?: string; list?: List; franchise_id?: string; force?: boolean };
+/** drop_player_id, for an add: released to make room, in the same move. */
+export type RosterChange = { player_id: string; replacement_id?: string; drop_player_id?: string; list?: List; franchise_id?: string; force?: boolean };
 /** A franchise's whole reserve list; everyone else it has signed goes to the main roster. */
 export type RosterSplit = { reserve: string[]; franchise_id?: string; force?: boolean };
 
@@ -900,7 +909,7 @@ export const getMergeSuggestions = () => request<MergeSuggestion[]>('GET', '/adm
 export const mergePlayers = (keep_id: string, duplicate_id: string) =>
 	request<void>('POST', '/admin/players/merge', { keep_id, duplicate_id });
 
-export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'schedule' | 'seasons';
+export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'schedule' | 'seasons' | 'prospect-rankings';
 export const startSync = (competition: string, job: SyncJob) =>
 	request<void>('POST', `/admin/sync/${competition}/${job}`);
 export const getIngestRuns = () => request<IngestRun[]>('GET', '/admin/ingest-runs');

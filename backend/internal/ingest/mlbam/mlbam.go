@@ -19,8 +19,9 @@ const (
 )
 
 type Source struct {
-	Base   string // overridable in tests
-	client *ingest.Client
+	Base         string // overridable in tests
+	RankingsBase string // MLB Pipeline GraphQL; overridable in tests
+	client       *ingest.Client
 
 	mu          sync.Mutex
 	roles       map[int]string // pitcher id -> "SP" or "RP"
@@ -29,7 +30,7 @@ type Source struct {
 }
 
 func New(client *ingest.Client) *Source {
-	return &Source{Base: defaultBase, client: client}
+	return &Source{Base: defaultBase, RankingsBase: "https://data-graph.mlb.com/graphql", client: client}
 }
 
 func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {

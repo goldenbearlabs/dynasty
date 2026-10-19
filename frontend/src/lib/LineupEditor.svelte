@@ -17,6 +17,9 @@
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import WatchStar from '#lib/WatchStar.svelte';
 	import TradeFlag from '#lib/TradeFlag.svelte';
+	import { dropPlayer } from '#lib/dropPlayer.ts';
+	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
 
 	type Props = {
 		league: League;
@@ -150,7 +153,9 @@
 	// ---- games ----
 	const begun = (game: LineupGame) => new Date(game.starts_at).getTime() <= Date.now();
 	// How many games a week count in the slot a player is in; 0 is all of them.
-	const limit = (player: LineupPlayer) => lineup!.slots.find((s) => s.name === slotOf(player.player_id))?.games_per_week ?? 0;
+	// A doubled matchup counts twice as many over the whole of it.
+	const limit = (player: LineupPlayer) =>
+		(lineup!.slots.find((s) => s.name === slotOf(player.player_id))?.games_per_week ?? 0) * (lineup!.doubled ? 2 : 1);
 	// Whether a game is one that counts, going by the lineup as it is now arranged.
 	function counts(player: LineupPlayer, game: LineupGame): boolean {
 		const n = limit(player);
@@ -214,6 +219,16 @@
 	});
 	const weekday = (d: string) => new Date(d + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
 	const dayNumber = (d: string) => new Date(d + 'T12:00').getDate();
+
+	// ---- dropping ----
+	// A commissioner dropping someone else's player does so past the rules.
+	const owner = $derived((page.data.me as Franchise | null | undefined)?.id === franchise.id);
+	async function release(player: LineupPlayer) {
+		if (await dropPlayer(league, franchise.id, player.player_id, player.full_name, !owner)) {
+			show(await getLineup(league.id, franchise.id, lineup!.day));
+			await invalidateAll();
+		}
+	}
 
 	// ---- saving ----
 	// Every change saves itself a moment later. A change made while one is
@@ -379,7 +394,8 @@
 				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
 			</span>
 			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}
-				<TradeFlag leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} /></span>
+				<TradeFlag leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} />
+				{#if canEdit}<button class="drop-player" title="Drop {player.full_name}" onclick={() => release(player)}>Drop</button>{/if}</span>
 		</div>
 	</div>
 	<div class="games">{@render games(player, starting)}</div>
@@ -431,6 +447,13 @@
 		</div>
 
 		{#if lineup.locked}<p class="card note small-text"><Icon name="lock" size={14} /> {lineup.locked}</p>{/if}
+		{#if lineup.doubled}
+			<p class="card note doubled small-text">
+				<strong>Double games</strong> · {dayLabel(lineup.doubled.starts_on)} – {dayLabel(lineup.doubled.ends_on)}:
+				{[limited.length > 0 && `${limited.length === lineup.slots.length ? 'each starter' : `each ${limited.map((s) => s.name).join(' and ')}`} counts ${limited[0].games_per_week * 2} games`, lineup.starts && `${lineup.starts.limit} pitcher starts`].filter(Boolean).join(' and ')}
+				over the whole matchup.
+			</p>
+		{/if}
 
 		{#if lineup.players.length === 0}
 			<Empty icon="players" title="Nobody on the main roster">
@@ -440,8 +463,8 @@
 			{#if limited.length > 0 && canEdit}
 				<p class="muted small-text">
 					{limited.length === lineup.slots.length ? 'Each starter' : `Each ${limited.map((s) => s.name).join(' and ')}`}
-					scores in {limited[0].games_per_week === 1 ? 'one game' : `${limited[0].games_per_week} games`} a week. On <strong>Auto</strong> it is his last game of the
-					week that he plays in, so a game he sits out falls back to the one before. Tap a game to count that one instead. Changes save as you make them.
+					scores in {lineup.doubled ? `${limited[0].games_per_week * 2} games this matchup` : limited[0].games_per_week === 1 ? 'one game a week' : `${limited[0].games_per_week} games a week`}. On <strong>Auto</strong> it is his last {lineup.doubled ? 'games of the matchup' : 'game of the week'}
+					that he plays in, so a game he sits out falls back to the one before. Tap a game to count that one instead. Changes save as you make them.
 				</p>
 			{:else if canEdit && !lineup.locked}
 				<p class="muted small-text">
@@ -453,10 +476,10 @@
 			{#if lineup.starts}
 				{@const starts = lineup.starts}
 				<div class="card starts">
-					<Meter label="Pitcher starts this week" value={starts.made.length} max={starts.limit} />
+					<Meter label={lineup.doubled ? 'Pitcher starts this matchup' : 'Pitcher starts this week'} value={starts.made.length} max={starts.limit} />
 					<p class="muted small-text">
 						{#if starts.made.length === 0}
-							None yet. The first {starts.limit} of the week score; any after that score nothing.
+							None yet. The first {starts.limit} of the {lineup.doubled ? 'matchup' : 'week'} score; any after that score nothing.
 						{:else}
 							{#each starts.made as start, i (start.player_id + start.day)}
 								<span class:skipped={!start.counts}>{start.full_name} ({weekday(start.day)}, {start.innings.toFixed(1)} IP)</span>{i < starts.made.length - 1 ? ', ' : '.'}
@@ -574,6 +597,10 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.6rem 0.9rem;
+	}
+	.note.doubled {
+		display: block;
+		border-left: 3px solid var(--gold);
 	}
 	.starts {
 		display: grid;
@@ -901,6 +928,19 @@
 	.pts {
 		text-align: right;
 		font: 700 0.9rem var(--mono);
+	}
+	.drop-player {
+		margin-left: 0.3rem;
+		padding: 0 0.2rem;
+		border: 0;
+		background: none;
+		color: var(--ink-faint);
+		font: 600 0.7rem var(--body);
+		text-decoration: underline;
+		vertical-align: middle;
+	}
+	.drop-player:hover {
+		color: var(--bad);
 	}
 	.labels .pts {
 		font: inherit;

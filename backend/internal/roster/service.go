@@ -138,6 +138,20 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 	})
 }
 
+// AddDrop adds a player and releases another to make room, as one move:
+// the release goes first, onto waivers as any drop does, and if the add is
+// refused neither happens.
+func (s *Service) AddDrop(ctx context.Context, c Change, drop pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		released := c
+		released.PlayerID, released.List = drop, ""
+		if err := DropIn(ctx, q, released); err != nil {
+			return err
+		}
+		return AddIn(ctx, q, c)
+	})
+}
+
 // Drop releases a player. It is always allowed. In a league with waivers he
 // goes on them before anyone can add him.
 func (s *Service) Drop(ctx context.Context, c Change) error {

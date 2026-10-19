@@ -62,6 +62,10 @@ func (s *Syncer) SyncProspects(ctx context.Context, competition string, src Pros
 		if err != nil {
 			return 0, err
 		}
+		if ranked, ok := src.(ProspectRankingSource); ok {
+			count, err := s.syncProspectRankings(ctx, competition, ranked)
+			return len(prospects) + count, err
+		}
 		return len(prospects), nil
 	})
 }

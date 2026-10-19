@@ -58,33 +58,48 @@
 {:else}
 	<div class="stack tight">
 		<Tabs {tabs} bind:value={filter} label="Show" />
-		<ul class="card flush">
-			{#each shown as asset (asset.key)}
-				<li>
-					<label class:chosen={selected.has(asset.key)} class:locked={!asset.tradeable}>
-						<input type="checkbox" checked={selected.has(asset.key)} disabled={!asset.tradeable} onchange={() => toggle(asset.key)} />
-						<TradeAsset {...asset.display} />
-						{#if asset.playerId}
-							{@const m = marks(asset)}
-							<span class="marks">
-								{#if m.block}<span class="mark block" title={m.block.note || 'On the trade block'}>On the block</span>{/if}
-								{#if m.yours}<span class="mark want">Your target</span>{/if}
-								{#if m.theirs}<span class="mark want">They want him</span>{/if}
-							</span>
-						{/if}
-					</label>
-				</li>
-			{/each}
-		</ul>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex (The scroll region needs focus for keyboard scrolling.) -->
+		<div class="asset-scroll card flush" role="region" aria-label="{detail.franchise.name}: tradeable players and draft picks" tabindex="0">
+			<ul>
+				{#each shown as asset (asset.key)}
+					<li>
+						<label class:chosen={selected.has(asset.key)} class:locked={!asset.tradeable}>
+							<input type="checkbox" checked={selected.has(asset.key)} disabled={!asset.tradeable} onchange={() => toggle(asset.key)} />
+							<TradeAsset {...asset.display} />
+							{#if asset.playerId}
+								{@const m = marks(asset)}
+								<span class="marks">
+									{#if m.block}<span class="mark block" title={m.block.note || 'On the trade block'}>On the block</span>{/if}
+									{#if m.yours}<span class="mark want">Your target</span>{/if}
+									{#if m.theirs}<span class="mark want">They want him</span>{/if}
+								</span>
+							{/if}
+						</label>
+					</li>
+				{/each}
+			</ul>
+		</div>
 	</div>
 {/if}
 
 <style>
+	/* Override .card.flush's clipping so every asset remains reachable. */
+	.asset-scroll.card.flush {
+		max-height: min(28rem, 60dvh);
+		min-height: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-gutter: stable;
+		overscroll-behavior-y: contain;
+	}
+	.asset-scroll:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: 2px;
+	}
 	ul {
 		list-style: none;
 		margin: 0;
-		max-height: 28rem;
-		overflow-y: auto;
+		padding: 0;
 	}
 	li + li {
 		border-top: 1px solid var(--rule);

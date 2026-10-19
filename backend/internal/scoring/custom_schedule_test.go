@@ -2,7 +2,9 @@ package scoring
 
 import (
 	"crossover/internal/db"
+	"crossover/internal/settings"
 	"crossover/internal/sportsday"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,7 +37,38 @@ func TestCustomScheduleDates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := validateCustomPeriods(tt.periods, season, tt.kept, 2)
+			_, err := validateCustomPeriods(tt.periods, season, tt.kept, 2, settings.Lineup{})
+			if (err == nil) != tt.valid {
+				t.Fatalf("valid=%v, error=%v", tt.valid, err)
+			}
+		})
+	}
+}
+
+// A doubled matchup in a weekly-lineup league must run whole lineup weeks.
+func TestDoubleGamesWholeWeeks(t *testing.T) {
+	day := func(n int) string { return sportsday.Today().AddDate(0, 0, n).Format(time.DateOnly) }
+	season := db.Season{StartsOn: sportsday.Date(sportsday.Today().AddDate(0, 0, 2)), EndsOn: sportsday.Date(sportsday.Today().AddDate(0, 0, 60))}
+	weekly := settings.Lineup{Period: settings.PeriodWeek, WeekStart: strings.ToLower(sportsday.Today().AddDate(0, 0, 2).Weekday().String())}
+	daily := settings.Lineup{Period: "day", WeekStart: weekly.WeekStart}
+	schedule := func(start, end int) []CustomPeriod {
+		return []CustomPeriod{{StartsOn: day(start), EndsOn: day(end), DoubleGames: true}, {StartsOn: day(30), EndsOn: day(36), IsPlayoff: true}}
+	}
+	tests := []struct {
+		name   string
+		lineup settings.Lineup
+		start  int
+		end    int
+		valid  bool
+	}{
+		{"two whole weeks", weekly, 2, 15, true},
+		{"one and a half weeks", weekly, 2, 12, false},
+		{"off the week start", weekly, 3, 16, false},
+		{"daily lineups, any dates", daily, 3, 12, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := validateCustomPeriods(schedule(tt.start, tt.end), season, nil, 1, tt.lineup)
 			if (err == nil) != tt.valid {
 				t.Fatalf("valid=%v, error=%v", tt.valid, err)
 			}

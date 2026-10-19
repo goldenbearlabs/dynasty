@@ -1,4 +1,5 @@
 <script lang="ts">
+ import ProspectRank from '#lib/ui/ProspectRank.svelte';
  import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
@@ -92,7 +93,7 @@
 			back === 0 ? 'Latest season' : `${back} ${back === 1 ? 'season' : 'seasons'} back`
 		);
 	});
-	const ranked = $derived(order !== 'name');
+	const ranked = $derived(order === 'points' || order === 'index');
 	// Whether the season's figures get columns: always in the full list, on request in the compact one.
 	const columns = $derived(ranked && (!compact || statColumns));
 	// What follows a player's team under his name.
@@ -124,7 +125,7 @@
 			position = ''; // positions belong to a sport
 			page = 1;
 			seasonBack = 0;
-			if (!chose) order = usual();
+			if (!chose || (order === 'prospect_rank' && competition !== 'mlb' && competition !== '')) order = usual();
 		}
 	});
 
@@ -142,7 +143,7 @@
 			max_age: maxAge ?? undefined,
 			page,
 			draft_id: draftId,
-			sort: ranked ? order : undefined,
+			sort: order !== 'name' ? order : undefined,
 			season_back: ranked && seasonBack > 0 ? seasonBack : undefined,
 			available_in: availableOnly ? leagueId : undefined
 		})
@@ -180,7 +181,7 @@
 			<option value="prospect">Prospects</option>
 			<option value="inactive">Inactive</option>
 		</select>
-		{#if byPoints}
+		{#if byPoints || competition === 'mlb'}
 			<select
 				aria-label="Order"
 				bind:value={order}
@@ -189,8 +190,8 @@
 					page = 1;
 				}}
 			>
-				<option value="points">By fantasy points</option>
-				<option value="index">By league index</option>
+				{#if byPoints}<option value="points">By fantasy points</option><option value="index">By league index</option>{/if}
+				{#if competition === 'mlb' || !competition}<option value="prospect_rank">By MLB Pipeline Top 100 rank</option>{/if}
 				<option value="name">By name</option>
 			</select>
 			{#if ranked && seasonChoices.length > 0}
@@ -267,6 +268,7 @@
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />
+												<ProspectRank {player} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
 													>{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}

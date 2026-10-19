@@ -230,7 +230,7 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		MaxAge:      maxAge,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
-		SortBy:      query.Get("sort"),         // "points" or "index": highest first; otherwise by name
+		SortBy:      query.Get("sort"),         // points/index: highest first; prospect_rank: lowest first; otherwise by name
 		SeasonBack:  int32(max(seasonBack, 0)), // 0 is each sport's latest season, 1 the one before
 		PageSize:    playersPerPage,
 		PageOffset:  int32((page - 1) * playersPerPage),

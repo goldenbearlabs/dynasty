@@ -120,6 +120,18 @@ func run(log *slog.Logger) error {
 		return devseed.Run(ctx, pool, registry, log, state)
 	}
 	syncer := ingest.NewSyncer(queries, log)
+	if len(os.Args) > 1 && os.Args[1] == "sync-prospect-rankings" {
+		var failures []error
+		for _, c := range registry {
+			if ranked, ok := c.Prospects.(ingest.ProspectRankingSource); ok {
+				if err := syncer.SyncProspectRankings(ctx, c.Key, ranked); err != nil {
+					failures = append(failures, fmt.Errorf("%s: %w", c.Key, err))
+				}
+			}
+		}
+		return errors.Join(failures...)
+	}
+
 	// Fill missing future schedules immediately without starting another API.
 	if len(os.Args) > 1 && os.Args[1] == "sync-schedules" {
 		played, err := queries.ListLeagueCompetitions(ctx)

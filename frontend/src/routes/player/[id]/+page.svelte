@@ -1,5 +1,8 @@
 <script lang="ts">
+ import ProspectRank from '#lib/ui/ProspectRank.svelte';
  import TradeFlag from '#lib/TradeFlag.svelte';
+ import DropToAdd from '#lib/DropToAdd.svelte';
+ import { dropPlayer } from '#lib/dropPlayer.ts';
  import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
@@ -80,9 +83,20 @@
   catch (e) { if (request === eventRequest) eventsError = e instanceof Error ? e.message : 'History could not load.'; }
   finally { if (request === eventRequest) eventsBusy = false; }
  }
- async function add(list: List) {
-  if (!league || !data.me) return; const playerID = id; adding = true;
-  try { await changeRoster(league.id,'add',{player_id:playerID,list,franchise_id:data.me.id}); toast.good('Player added.'); const p = await getPlayerProfile(playerID); if (id===playerID) apply(p); await invalidateAll(); }
+ // An add to a full list asks who to drop to make room, and does both at once.
+ let makingRoom = $state<List>();
+ const myRoster = $derived(data.myTeam?.rosters.find(r => r.competition === profile?.player.competition));
+ const isFull = (list: List) => !!myRoster && myRoster.players.filter(p => p.list === list).length >= (list === 'reserve' ? myRoster.limits.reserve : myRoster.limits.main);
+ // Dropping your own player, from here: he goes on waivers like any drop.
+ async function dropOwn(franchiseId: string) {
+  if (!league || !profile) return; const playerID = id;
+  if (await dropPlayer(league, franchiseId, playerID, profile.player.full_name)) { const p = await getPlayerProfile(playerID); if (id === playerID) apply(p); await invalidateAll(); }
+ }
+ async function add(list: List, drop?: string) {
+  if (!league || !data.me) return;
+  if (!drop && isFull(list)) { makingRoom = list; return; }
+  const playerID = id; adding = true;
+  try { await changeRoster(league.id,'add',{player_id:playerID,list,drop_player_id:drop,franchise_id:data.me.id}); toast.good(drop ? 'Player added. The player you dropped is on waivers.' : 'Player added.'); const p = await getPlayerProfile(playerID); if (id===playerID) apply(p); await invalidateAll(); }
   catch(e) { toast.error(e); } finally { adding = false; }
  }
  function exportStats() {
@@ -103,9 +117,9 @@
  {:else if profile}
   {@const p = profile.player}
   <header class="hero card">
-   <div class="identity"><Headshot name={p.full_name} src={p.headshot_url} size={88} /><div class="stack tight"><span class="eyebrow">Player dossier · {nameSport(p.competition)}</span><div class="row"><h1>{p.full_name}</h1><WatchStar playerID={p.id} playerName={p.full_name} /></div><InjuryBadge designation={p.injury_designation} />{#if data.me}{#key data.me.id+p.id}<PlayerNickname franchiseID={data.me.id} playerID={p.id} playerName={p.full_name} load />{/key}{/if}<div class="row muted">{p.positions?.join(' / ')} · {#if p.team_abbrev}<TeamLogo competition={p.competition} abbrev={p.team_abbrev} size={32} />{:else}Team unavailable{/if}{#if age !== null} · Age {age}{/if}{#if p.class} · {p.class}{/if}<span class="pill">{human(p.status)}</span></div></div></div>
+   <div class="identity"><Headshot name={p.full_name} src={p.headshot_url} size={88} /><div class="stack tight"><span class="eyebrow">Player dossier · {nameSport(p.competition)}</span><div class="row"><h1>{p.full_name}</h1><WatchStar playerID={p.id} playerName={p.full_name} /></div><InjuryBadge designation={p.injury_designation} /><div class="row"><ProspectRank player={p} />{#if p.prospect_rank != null && p.prospect_eta}<span class="muted small-text">MLB ETA: {p.prospect_eta}</span>{/if}</div>{#if data.me}{#key data.me.id+p.id}<PlayerNickname franchiseID={data.me.id} playerID={p.id} playerName={p.full_name} load />{/key}{/if}<div class="row muted">{p.positions?.join(' / ')} · {#if p.team_abbrev}<TeamLogo competition={p.competition} abbrev={p.team_abbrev} size={32} />{:else}Team unavailable{/if}{#if age !== null} · Age {age}{/if}{#if p.class} · {p.class}{/if}<span class="pill">{human(p.status)}</span></div></div></div>
    <div class="status"><span class="eyebrow">Fantasy status</span>{#if own}<a href="/franchise/{own.franchise_slug}"><strong>{own.franchise_name}</strong></a><span>{human(own.list)} roster{own.slot ? ` · Starting at ${own.slot}` : ' · Not currently starting'}</span>{:else}<strong>{waiver ? 'On waivers' : 'Unrostered'}</strong><span class="muted small-text">{league ? 'Subject to league acquisition rules' : 'No dynasty league for this sport'}</span>{/if}
-    {#if data.me && league}{#if !own && waiver}<a href="/waivers?competition={p.competition}">Review waiver claim →</a>{:else if !own}<div class="row"><button class="small" disabled={adding} onclick={() => add('main')}>Add to main</button><button class="small" disabled={adding} onclick={() => add('reserve')}>Add to reserve</button></div>{:else if own.franchise_id !== data.me.id}<TradeFlag leagueId={own.league_id} playerId={p.id} ownerId={own.franchise_id} name={p.full_name} /> <a href="/trades/new?with={own.franchise_slug}">Build a trade →</a>{:else}<TradeFlag leagueId={own.league_id} playerId={p.id} ownerId={own.franchise_id} name={p.full_name} /> <a href="/franchise/{own.franchise_slug}">Manage on your roster →</a>{/if}{/if}
+    {#if data.me && league}{#if !own && waiver}<a href="/waivers?competition={p.competition}">Review waiver claim →</a>{:else if !own}<div class="row"><button class="small" disabled={adding} onclick={() => add('main')}>Add to main</button><button class="small" disabled={adding} onclick={() => add('reserve')}>Add to reserve</button></div>{:else if own.franchise_id !== data.me.id}<TradeFlag leagueId={own.league_id} playerId={p.id} ownerId={own.franchise_id} name={p.full_name} /> <a href="/trades/new?with={own.franchise_slug}">Build a trade →</a>{:else}<TradeFlag leagueId={own.league_id} playerId={p.id} ownerId={own.franchise_id} name={p.full_name} /> <button class="small quiet danger" onclick={() => dropOwn(own.franchise_id)}>Drop</button> <a href="/franchise/{own.franchise_slug}">Manage on your roster →</a>{/if}{/if}
    </div>
   </header>
   <div class="notice"><strong>{profile.starter_eligible ? 'Meets starting rules' : 'Not eligible to start'}</strong><span>{profile.eligibility_note}</span>{#if p.note}<span>{p.note}</span>{/if}</div>
@@ -140,6 +154,12 @@
   {/if}
  {/if}
 </div>
+{#if makingRoom && myRoster && league && profile}
+ <DropToAdd roster={myRoster} {league} list={makingRoom} adding={profile.player.full_name}
+  onconfirm={(drop) => { const list = makingRoom!; makingRoom = undefined; add(list, drop); }}
+  oncancel={() => (makingRoom = undefined)} />
+{/if}
+
 <style>
  .profile{gap:1.25rem}.hero{display:flex;justify-content:space-between;gap:1.5rem;padding:1.5rem}.identity{display:flex;align-items:center;gap:1.1rem}.status{display:flex;flex-direction:column;gap:.5rem;min-width:220px}.eyebrow{font-size:.7rem;text-transform:uppercase;letter-spacing:.09em;font-weight:700;color:var(--ink-soft)}h1{font-size:clamp(1.7rem,4vw,2.4rem)}h2{font-size:1.2rem}.notice{padding:.8rem 1rem;border:1px solid var(--rule);border-radius:8px;background:var(--brand-soft);display:flex;flex-direction:column;gap:.3rem;font-size:.9rem}.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.6rem}.metric{border:1px solid var(--rule);border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.6rem}.metric strong{font-size:1.7rem;font-variant-numeric:tabular-nums}.two-columns{align-items:start;display:grid;grid-template-columns:1fr 1fr;gap:1rem}.card{padding:1.2rem}.season-label{display:flex;align-items:center;gap:.7rem}.season-label select{max-width:100%}.track{height:6px;background:var(--rule);border-radius:6px;margin:.4rem 0}.track span{display:block;height:100%;background:var(--brand);border-radius:6px}.track .negative{background:#c2255c}.research-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.research-grid>div{border:1px solid var(--rule);padding:1rem;border-radius:8px}.research-grid strong{display:block;font-size:1.6rem;margin:.4rem 0}.table-wrap{overflow:auto}table{width:100%;white-space:nowrap}th,td{text-align:left;padding:.65rem .75rem}th{font-size:.8rem}td{font-variant-numeric:tabular-nums}.text-button{background:none;border:none;padding:0;color:var(--brand);cursor:pointer}.history-item{border-bottom:1px solid var(--rule);padding:.8rem 0}.timeline{list-style:none;padding:0;margin:0}.timeline li{border-left:2px solid var(--brand);padding:.5rem 1rem;margin:.6rem 0}.timeline time{color:var(--ink-soft);font-size:.8rem}@media(max-width:900px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.hero{flex-direction:column}.two-columns{grid-template-columns:1fr}}@media(max-width:600px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.research-grid{grid-template-columns:1fr}.identity{align-items:flex-start}.season-label{flex-direction:column;align-items:flex-start}.spread{flex-wrap:wrap;gap:.7rem}}
 </style>

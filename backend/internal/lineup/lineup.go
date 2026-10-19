@@ -6,9 +6,11 @@ package lineup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -52,10 +54,20 @@ type View struct {
 	// Starts is the week's pitcher starts against the league's cap; nil in
 	// a league without one.
 	Starts *Starts `json:"starts"`
+	// Doubled is set in a matchup the commissioner has doubled: the slots
+	// that count only some games count twice as many, and the pitcher
+	// start cap doubles, all over the whole matchup.
+	Doubled *Doubled `json:"doubled"`
+}
+
+// Doubled is the doubled matchup a lineup falls in.
+type Doubled struct {
+	StartsOn string `json:"starts_on"`
+	EndsOn   string `json:"ends_on"`
 }
 
 // Starts is how many pitcher starts a franchise has used in the week of a
-// lineup. Those beyond the limit, in the order played, score nothing.
+// lineup, or in its doubled matchup. Those beyond the limit, in the order played, score nothing.
 type Starts struct {
 	Limit int     `json:"limit"`
 	Made  []Start `json:"made"`
@@ -114,15 +126,39 @@ func span(rules settings.Lineup, day time.Time) (first, last time.Time) {
 	return day, day
 }
 
+// doubledOn is the doubled matchup a day falls in, if any.
+func doubledOn(ctx context.Context, q *db.Queries, leagueID pgtype.UUID, day time.Time) (db.Period, bool, error) {
+	p, err := q.DoublePeriodOn(ctx, db.DoublePeriodOnParams{LeagueID: leagueID, Day: sportsday.Date(day)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p, false, nil
+	}
+	return p, err == nil, err
+}
+
 func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgtype.UUID, day time.Time) (View, error) {
 	rules, err := settings.Parse[settings.League](league.Settings)
 	if err != nil {
 		return View{}, err
 	}
 	first, last := span(rules.Lineup, day)
+	double, doubled, err := doubledOn(ctx, q, league.ID, day)
+	if err != nil {
+		return View{}, err
+	}
+	mult := 1
+	if doubled {
+		mult = 2
+		if rules.Lineup.Period == settings.PeriodWeek {
+			// One lineup for the whole matchup.
+			first, last = double.StartsOn.Time, double.EndsOn.Time
+		}
+	}
 	view := View{
 		Day: first.Format(time.DateOnly), LastDay: last.Format(time.DateOnly),
 		Slots: rules.Lineup.Slots, Players: []Player{},
+	}
+	if doubled {
+		view.Doubled = &Doubled{StartsOn: double.StartsOn.Time.Format(time.DateOnly), EndsOn: double.EndsOn.Time.Format(time.DateOnly)}
 	}
 	now := time.Now()
 	switch {
@@ -183,13 +219,17 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			p.EligibilityNote = "Outside this league’s starting conferences"
 			p.Slot = ""
 		}
-		settle(p, rules.Lineup, now)
+		settle(p, rules.Lineup, now, mult)
 	}
 	if limit := rules.Lineup.PitcherStartsPerWeek; limit > 0 {
-		week := sportsday.WeekStart(first, rules.Lineup.WeekStart)
+		from := sportsday.WeekStart(first, rules.Lineup.WeekStart)
+		to := from.AddDate(0, 0, 6)
+		if doubled {
+			from, to, limit = double.StartsOn.Time, double.EndsOn.Time, limit*mult
+		}
 		made, err := q.ListWeekStarts(ctx, db.ListWeekStartsParams{
 			LeagueID: league.ID, FranchiseID: franchiseID,
-			WeekStart: sportsday.Date(week), WeekEnd: sportsday.Date(week.AddDate(0, 0, 6)),
+			WeekStart: sportsday.Date(from), WeekEnd: sportsday.Date(to),
 		})
 		if err != nil {
 			return View{}, err
@@ -221,8 +261,10 @@ func gamesCounted(rules settings.Lineup, slot string) int {
 //     game that counts begins, so an earlier game he sat out does not hold him;
 //   - a bench player who could fill such a slot stays free while he has a
 //     game left to count.
-func settle(p *Player, rules settings.Lineup, now time.Time) {
-	limit := gamesCounted(rules, p.Slot)
+//
+// mult is 2 in a doubled matchup, where such a slot counts twice the games.
+func settle(p *Player, rules settings.Lineup, now time.Time, mult int) {
+	limit := gamesCounted(rules, p.Slot) * mult
 	counted := 0
 	if limit > 0 && p.CountsLast {
 		// On auto, his last games of the week in which he recorded a stat.

@@ -18,6 +18,16 @@
  let countsError = $state(false);
  const sportName = $derived(league.competition.toUpperCase());
  const gameCount = (period: CustomPeriod) => gameDays.reduce((total, day) => total + (day.day >= period.starts_on && day.day <= period.ends_on ? day.games : 0), 0);
+ // Doubling only matters where a slot counts some games a week, or pitcher starts are capped.
+ const canDouble = $derived(league.settings.lineup.slots.some((s) => s.games_per_week > 0) || league.settings.lineup.pitcher_starts_per_week > 0);
+ const weekly = $derived(league.settings.lineup.period === 'week');
+ const weekdays = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+ const misaligned = (p: CustomPeriod) => p.double_games && weekly && !!p.starts_on && !!p.ends_on &&
+  (weekdays[new Date(`${p.starts_on}T12:00:00Z`).getUTCDay()] !== league.settings.lineup.week_start || duration(p) % 7 !== 0);
+ const doubleNote = $derived([
+  league.settings.lineup.slots.some((s) => s.games_per_week > 0) && 'each starter counts twice the games',
+  league.settings.lineup.pitcher_starts_per_week > 0 && `pitchers get ${league.settings.lineup.pitcher_starts_per_week * 2} starts`
+ ].filter(Boolean).join(' and '));
  const duration = (period: CustomPeriod) => Math.round((Date.parse(period.ends_on) - Date.parse(period.starts_on)) / 86400000) + 1;
  async function loadCounts() {
   countsLoading = true;
@@ -57,11 +67,11 @@
   return false;
  };
  const stageInvalid = $derived(draft.filter((p) => p.is_playoff).length !== rounds || (!kept.length && !draft.some((p) => !p.is_playoff)) || draft.some((p,i) => !p.is_playoff && draft.slice(0,i).some((prior) => prior.is_playoff)));
- const invalid = $derived(draft.some((p,i) => !p.starts_on || !p.ends_on || p.starts_on > p.ends_on || p.starts_on < first() || p.ends_on > season.ends_on || (i > 0 && p.starts_on <= draft[i-1].ends_on) || duplicate(p) || invalidSlots(p) || p.matchups?.some((m) => !m.home_franchise_id) || p.matchups?.length === 0));
+ const invalid = $derived(draft.some((p,i) => !p.starts_on || !p.ends_on || p.starts_on > p.ends_on || p.starts_on < first() || p.ends_on > season.ends_on || (i > 0 && p.starts_on <= draft[i-1].ends_on) || duplicate(p) || invalidSlots(p) || p.matchups?.some((m) => !m.home_franchise_id) || p.matchups?.length === 0 || misaligned(p)));
 
  async function load() {
   periods = await getSchedule(league.id);
-  draft = periods.filter((p) => p.starts_on > today()).map((p) => ({ starts_on: p.starts_on, ends_on: p.ends_on, is_playoff: p.is_playoff,
+  draft = periods.filter((p) => p.starts_on > today()).map((p) => ({ starts_on: p.starts_on, ends_on: p.ends_on, is_playoff: p.is_playoff, double_games: p.double_games,
    matchups: p.by_hand ? p.matchups.map((m) => ({ home_franchise_id: m.home_franchise_id, away_franchise_id: m.away_franchise_id, bracket: m.bracket, bracket_slot: m.bracket_slot })) : null }));
   length = league.settings.format.matchup_days;
   playoffStart = draft.find((p) => p.is_playoff)?.starts_on ?? '';
@@ -79,14 +89,14 @@
   const next: CustomPeriod[] = [];
   for (let start = first(); start < playoffStart;) {
    const end = [addDays(start,length-1),addDays(playoffStart,-1)].sort()[0];
-   next.push({starts_on:start,ends_on:end,is_playoff:false,matchups:null});
+   next.push({starts_on:start,ends_on:end,is_playoff:false,double_games:false,matchups:null});
    start = addDays(end,1);
   }
   let start = playoffStart;
   for (let i=0; i<rounds; i++) {
    const end = i === rounds-1 ? season.ends_on : addDays(start,length-1);
    if (start > end || end > season.ends_on) { toast.error('The season needs more days for all playoff rounds.'); return; }
-   next.push({starts_on:start,ends_on:end,is_playoff:true,matchups:null});
+   next.push({starts_on:start,ends_on:end,is_playoff:true,double_games:false,matchups:null});
    start=addDays(end,1);
   }
   draft=next; dirty=true;
@@ -111,7 +121,7 @@
  }
  function addPeriod() {
   const start=draft.length ? addDays(draft.at(-1)!.ends_on,1) : first();
-  draft.push({starts_on:start,ends_on:addDays(start,length-1),is_playoff:false,matchups:null}); dirty=true;
+  draft.push({starts_on:start,ends_on:addDays(start,length-1),is_playoff:false,double_games:false,matchups:null}); dirty=true;
  }
 </script>
 
@@ -141,8 +151,11 @@
       <label class="field">First day<input type="date" min={first()} max={season.ends_on} bind:value={period.starts_on} /></label>
       <label class="field">Last day<input type="date" min={period.starts_on} max={season.ends_on} bind:value={period.ends_on} /></label>
       <label class="field">Stage<select bind:value={period.is_playoff}><option value={false}>Regular season</option><option value={true}>Playoffs</option></select></label>
+      {#if canDouble}<label class="double" title="For a long matchup, like two weeks over the holidays: {doubleNote}, over the whole matchup."><input type="checkbox" bind:checked={period.double_games} /> Double games</label>{/if}
       <button class="small quiet" onclick={() => { draft.splice(i,1); dirty=true; }}>Remove period</button>
      </div>
+     {#if period.double_games}<p class="muted small-text">Double games: {doubleNote}, counted across the whole matchup rather than week by week.</p>{/if}
+     {#if misaligned(period)}<p class="bad small-text" role="alert">A double-games matchup must run whole lineup weeks, starting on a {league.settings.lineup.week_start}.</p>{/if}
 
      <div class="row" aria-live="polite" aria-atomic="true">
       {#if countsLoading}<span class="muted small-text">Loading game count…</span>
@@ -202,4 +215,5 @@
  .period { border: 1px solid var(--rule); border-radius: .5rem; padding: .8rem; }
  input[type='number'] { max-width: 8rem; }
  .bad { color: var(--bad); }
+ .double { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 600; white-space: nowrap; }
 </style>

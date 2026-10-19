@@ -34,6 +34,23 @@ type ProspectSource interface {
 	Prospects(ctx context.Context) ([]Player, error)
 }
 
+// ProspectRankingSource supplies a complete published prospect ranking.
+// Rankings use the provider's player IDs and do not change roster status.
+type ProspectRankingSource interface {
+	ProspectRankings(context.Context) (ProspectRankingList, error)
+}
+type ProspectRankingList struct {
+	Source   string
+	Year     int
+	URL      string
+	Rankings []ProspectRanking
+}
+type ProspectRanking struct {
+	Player Player
+	Rank   int
+	ETA    string
+}
+
 // GameSource is a feed of games and what each player did in them.
 type GameSource interface {
 	// Games lists every game on one sports day.

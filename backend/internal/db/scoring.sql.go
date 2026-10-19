@@ -148,6 +148,35 @@ func (q *Queries) DeletePeriodsFrom(ctx context.Context, arg DeletePeriodsFromPa
 	return err
 }
 
+const doublePeriodOn = `-- name: DoublePeriodOn :one
+select p.id, p.season_id, p.seq, p.starts_on, p.ends_on, p.is_playoff, p.by_hand, p.double_games from periods p
+join seasons s on s.id = p.season_id
+where s.league_id = $1 and s.status = 'active' and p.double_games and $2::date between p.starts_on and p.ends_on
+limit 1
+`
+
+type DoublePeriodOnParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+// The doubled matchup a day falls in, in a league's open season, if any.
+func (q *Queries) DoublePeriodOn(ctx context.Context, arg DoublePeriodOnParams) (Period, error) {
+	row := q.db.QueryRow(ctx, doublePeriodOn, arg.LeagueID, arg.Day)
+	var i Period
+	err := row.Scan(
+		&i.ID,
+		&i.SeasonID,
+		&i.Seq,
+		&i.StartsOn,
+		&i.EndsOn,
+		&i.IsPlayoff,
+		&i.ByHand,
+		&i.DoubleGames,
+	)
+	return i, err
+}
+
 const firstScheduledDay = `-- name: FirstScheduledDay :one
 select min(day)::date from games where competition = $1
 `
@@ -256,7 +285,7 @@ func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, erro
 }
 
 const getPeriod = `-- name: GetPeriod :one
-select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where id = $1
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games from periods where id = $1
 `
 
 func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error) {
@@ -270,6 +299,7 @@ func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error)
 		&i.EndsOn,
 		&i.IsPlayoff,
 		&i.ByHand,
+		&i.DoubleGames,
 	)
 	return i, err
 }
@@ -383,7 +413,7 @@ func (q *Queries) InsertMatchup(ctx context.Context, arg InsertMatchupParams) er
 const insertPeriod = `-- name: InsertPeriod :one
 insert into periods (season_id, seq, starts_on, ends_on, is_playoff)
 values ($1, $2, $3, $4, $5)
-returning id, season_id, seq, starts_on, ends_on, is_playoff, by_hand
+returning id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games
 `
 
 type InsertPeriodParams struct {
@@ -411,6 +441,7 @@ func (q *Queries) InsertPeriod(ctx context.Context, arg InsertPeriodParams) (Per
 		&i.EndsOn,
 		&i.IsPlayoff,
 		&i.ByHand,
+		&i.DoubleGames,
 	)
 	return i, err
 }
@@ -789,9 +820,11 @@ func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesPa
 const listLineupPoints = `-- name: ListLineupPoints :many
 
 with days as (
-  select generate_series($2::date, $3::date, interval '1 day')::date as day
+  select d::date as day, w.week_start
+  from (select $2::date as week_start) w
+  cross join generate_series(w.week_start, $3::date, interval '1 day') d
 ), in_force as (
-  select f.id as franchise_id, d.day,
+  select f.id as franchise_id, d.day, d.week_start,
          (select max(n.effective_on) from lineups n
           where n.league_id = $4 and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
   from franchises f
@@ -802,12 +835,15 @@ with days as (
          coalesce((select (def.rule->>'games_per_week')::int
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7
+         case when dp.doubled then 2 else 1 end as mult,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win
                             order by g.starts_at, g.id) as nth,
          e.counts_last,
          exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
          -- Counting back from his last game of the week, among those he recorded a stat in.
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win,
                                          exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
                             order by g.starts_at desc, g.id desc) as nth_last,
          coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
@@ -818,7 +854,7 @@ with days as (
          sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
                    and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
                   then 1 else 0 end)
-           over (partition by i.franchise_id, (g.day - $2::date) / 7
+           over (partition by i.franchise_id, dp.win
                  order by g.starts_at, g.id, e.player_id) as starts_so_far
   from in_force i
   join lineup_entries e on e.league_id = $4 and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
@@ -826,6 +862,14 @@ with days as (
   join leagues l on l.id = $4
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  -- The window it counts in: the doubled matchup it falls in, if any, or its week.
+  cross join lateral (
+    select coalesce((select p.starts_on from periods p join seasons se on se.id = p.season_id
+                     where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
+                     limit 1), g.day - (g.day - i.week_start) % 7) as win,
+           exists (select 1 from periods p join seasons se on se.id = p.season_id
+                   where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on) as doubled
+  ) dp
   where (e.counts_from is null or g.day >= e.counts_from)
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -848,9 +892,9 @@ cross join lateral jsonb_each_text(st.stats) s
 join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
 where st.day >= $1::date
   and (st.games_per_week = 0
-    or (not st.counts_last and st.nth <= st.games_per_week)
-    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week))
-  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
+    or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
+    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc
 `
@@ -883,7 +927,9 @@ type ListLineupPointsRow struct {
 // pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 // in the order they were played, score nothing. Weeks are counted from
 // week_start, the first day of the week from_day falls in, so a span that
-// begins mid-week still knows which games came earlier.
+// begins mid-week still knows which games came earlier. A matchup the
+// commissioner has doubled (double_games) counts as one window in place of
+// its weeks, with twice the games and twice the starts.
 func (q *Queries) ListLineupPoints(ctx context.Context, arg ListLineupPointsParams) ([]ListLineupPointsRow, error) {
 	rows, err := q.db.Query(ctx, listLineupPoints,
 		arg.FromDay,
@@ -948,7 +994,7 @@ func (q *Queries) ListPeriodScores(ctx context.Context, seasonID pgtype.UUID) ([
 
 const listPeriods = `-- name: ListPeriods :many
 
-select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where season_id = $1 order by seq
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games from periods where season_id = $1 order by seq
 `
 
 // ---- head-to-head ----
@@ -969,6 +1015,7 @@ func (q *Queries) ListPeriods(ctx context.Context, seasonID pgtype.UUID) ([]Peri
 			&i.EndsOn,
 			&i.IsPlayoff,
 			&i.ByHand,
+			&i.DoubleGames,
 		); err != nil {
 			return nil, err
 		}
@@ -1401,6 +1448,20 @@ type SetPeriodByHandParams struct {
 
 func (q *Queries) SetPeriodByHand(ctx context.Context, arg SetPeriodByHandParams) error {
 	_, err := q.db.Exec(ctx, setPeriodByHand, arg.ByHand, arg.ID)
+	return err
+}
+
+const setPeriodDoubleGames = `-- name: SetPeriodDoubleGames :exec
+update periods set double_games = $1 where id = $2
+`
+
+type SetPeriodDoubleGamesParams struct {
+	DoubleGames bool        `json:"double_games"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetPeriodDoubleGames(ctx context.Context, arg SetPeriodDoubleGamesParams) error {
+	_, err := q.db.Exec(ctx, setPeriodDoubleGames, arg.DoubleGames, arg.ID)
 	return err
 }
 

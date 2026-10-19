@@ -17,6 +17,7 @@ import (
 func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	var body struct {
 		ReplacementID pgtype.UUID   `json:"replacement_id"`
+		DropPlayerID  pgtype.UUID   `json:"drop_player_id"` // for "add": released to make room, in the same move
 		PlayerID      pgtype.UUID   `json:"player_id"`
 		List          string        `json:"list"`
 		Reserve       []pgtype.UUID `json:"reserve"`      // for "set": the whole reserve list
@@ -66,7 +67,11 @@ func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Fran
 	}
 	switch r.PathValue("action") {
 	case "add":
-		err = s.Roster.Add(ctx, change)
+		if body.DropPlayerID.Valid {
+			err = s.Roster.AddDrop(ctx, change, body.DropPlayerID)
+		} else {
+			err = s.Roster.Add(ctx, change)
+		}
 	case "drop":
 		err = s.Roster.Drop(ctx, change)
 	case "injury-swap":

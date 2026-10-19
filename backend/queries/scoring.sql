@@ -159,11 +159,15 @@ order by p.full_name, p.id, g.starts_at;
 -- pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 -- in the order they were played, score nothing. Weeks are counted from
 -- week_start, the first day of the week from_day falls in, so a span that
--- begins mid-week still knows which games came earlier.
+-- begins mid-week still knows which games came earlier. A matchup the
+-- commissioner has doubled (double_games) counts as one window in place of
+-- its weeks, with twice the games and twice the starts.
 with days as (
-  select generate_series(@week_start::date, @to_day::date, interval '1 day')::date as day
+  select d::date as day, w.week_start
+  from (select @week_start::date as week_start) w
+  cross join generate_series(w.week_start, @to_day::date, interval '1 day') d
 ), in_force as (
-  select f.id as franchise_id, d.day,
+  select f.id as franchise_id, d.day, d.week_start,
          (select max(n.effective_on) from lineups n
           where n.league_id = @league_id and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
   from franchises f
@@ -174,12 +178,15 @@ with days as (
          coalesce((select (def.rule->>'games_per_week')::int
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - @week_start::date) / 7
+         case when dp.doubled then 2 else 1 end as mult,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win
                             order by g.starts_at, g.id) as nth,
          e.counts_last,
          exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
          -- Counting back from his last game of the week, among those he recorded a stat in.
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - @week_start::date) / 7,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win,
                                          exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
                             order by g.starts_at desc, g.id desc) as nth_last,
          coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
@@ -190,7 +197,7 @@ with days as (
          sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
                    and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
                   then 1 else 0 end)
-           over (partition by i.franchise_id, (g.day - @week_start::date) / 7
+           over (partition by i.franchise_id, dp.win
                  order by g.starts_at, g.id, e.player_id) as starts_so_far
   from in_force i
   join lineup_entries e on e.league_id = @league_id and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
@@ -198,6 +205,14 @@ with days as (
   join leagues l on l.id = @league_id
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  -- The window it counts in: the doubled matchup it falls in, if any, or its week.
+  cross join lateral (
+    select coalesce((select p.starts_on from periods p join seasons se on se.id = p.season_id
+                     where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
+                     limit 1), g.day - (g.day - i.week_start) % 7) as win,
+           exists (select 1 from periods p join seasons se on se.id = p.season_id
+                   where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on) as doubled
+  ) dp
   where (e.counts_from is null or g.day >= e.counts_from)
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -220,9 +235,9 @@ cross join lateral jsonb_each_text(st.stats) s
 join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
 where st.day >= @from_day::date
   and (st.games_per_week = 0
-    or (not st.counts_last and st.nth <= st.games_per_week)
-    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week))
-  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
+    or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
+    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc;
 
@@ -379,3 +394,13 @@ where competition = @competition and day = @day and status = 'scheduled' and sta
 -- name: InsertBracketMatchup :exec
 insert into matchups (period_id,home_franchise_id,away_franchise_id,bracket,bracket_slot)
 values (@period_id,@home_franchise_id,@away_franchise_id,@bracket,@bracket_slot);
+
+-- name: DoublePeriodOn :one
+-- The doubled matchup a day falls in, in a league's open season, if any.
+select p.* from periods p
+join seasons s on s.id = p.season_id
+where s.league_id = @league_id and s.status = 'active' and p.double_games and @day::date between p.starts_on and p.ends_on
+limit 1;
+
+-- name: SetPeriodDoubleGames :exec
+update periods set double_games = @double_games where id = @id;

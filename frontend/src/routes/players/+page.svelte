@@ -4,7 +4,9 @@
 	// commissioner can also place a player on any roster.
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
 	import { changeRoster, type List, type Player } from '#lib/api.ts';
+	import DropToAdd from '#lib/DropToAdd.svelte';
 	import PlayerList from '#lib/PlayerList.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -26,16 +28,30 @@
 	let override = $state(false);
 	let version = $state(0);
 
-	async function add(player: Player, list: List) {
+	// An add to a full list of your own asks who to drop to make room.
+	let making = $state<{ player: Player; list: List }>();
+	const full = (player: Player, list: List) => {
+		const roster = data.myTeam?.rosters.find((r) => r.competition === player.competition);
+		if (!roster || override || actingFor !== data.me?.id) return false;
+		return roster.players.filter((p) => p.list === list).length >= (list === 'reserve' ? roster.limits.reserve : roster.limits.main);
+	};
+
+	async function add(player: Player, list: List, drop?: string) {
+		if (!drop && full(player, list)) {
+			making = { player, list };
+			return;
+		}
 		try {
 			await changeRoster(leagueFor(player.competition)!.id, 'add', {
 				player_id: player.id,
 				list,
+				drop_player_id: drop,
 				franchise_id: actingFor,
 				force: override
 			});
-			toast.good(`Added ${player.full_name}.`);
+			toast.good(drop ? `Added ${player.full_name}. The player you dropped is on waivers.` : `Added ${player.full_name}.`);
 			version++;
+			await invalidateAll(); // your rosters, and how full they are
 		} catch (e) {
 			toast.error(e);
 		}
@@ -72,6 +88,25 @@
 
 	<PlayerList {competition} leagueId={leagueFor(competition)?.id} {version} action={data.me ? action : undefined} />
 </div>
+
+{#if making}
+	{@const roster = data.myTeam?.rosters.find((r) => r.competition === making!.player.competition)}
+	{@const league = leagueFor(making.player.competition)}
+	{#if roster && league}
+		<DropToAdd
+			{roster}
+			{league}
+			list={making.list}
+			adding={making.player.full_name}
+			onconfirm={(drop) => {
+				const { player, list } = making!;
+				making = undefined;
+				add(player, list, drop);
+			}}
+			oncancel={() => (making = undefined)}
+		/>
+	{/if}
+{/if}
 
 {#snippet action(player: Player)}
 	{#if player.waiver_until && !override}

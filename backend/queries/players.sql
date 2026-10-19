@@ -131,6 +131,9 @@ with seasons as (
 )
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
@@ -140,6 +143,7 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        coalesce(sc.points, 0)::float8   as season_points,
        coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
@@ -160,7 +164,8 @@ where p.pool_eligible and (@competition::text = '' or p.competition = @competiti
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
                     where dl.draft_id = sqlc.narg('draft_id') and l.competition = p.competition)))
-order by case @sort_by::text
+order by case when @sort_by::text='prospect_rank' then pr.rank end asc nulls last,
+         case @sort_by::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
@@ -294,11 +299,15 @@ select * from leagues where dynasty_id = @dynasty_id and competition = @competit
 -- A player's identity and current ownership for inline draft research.
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
        coalesce(f.name, '')::text as owner_name,
        coalesce(f.slug, '')::text as owner_slug
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries re on re.player_id = p.id
 left join franchises f on f.id = re.franchise_id

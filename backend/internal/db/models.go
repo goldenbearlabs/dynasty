@@ -172,13 +172,14 @@ type Matchup struct {
 }
 
 type Period struct {
-	ID        pgtype.UUID `json:"id"`
-	SeasonID  pgtype.UUID `json:"season_id"`
-	Seq       int32       `json:"seq"`
-	StartsOn  pgtype.Date `json:"starts_on"`
-	EndsOn    pgtype.Date `json:"ends_on"`
-	IsPlayoff bool        `json:"is_playoff"`
-	ByHand    bool        `json:"by_hand"`
+	ID          pgtype.UUID `json:"id"`
+	SeasonID    pgtype.UUID `json:"season_id"`
+	Seq         int32       `json:"seq"`
+	StartsOn    pgtype.Date `json:"starts_on"`
+	EndsOn      pgtype.Date `json:"ends_on"`
+	IsPlayoff   bool        `json:"is_playoff"`
+	ByHand      bool        `json:"by_hand"`
+	DoubleGames bool        `json:"double_games"`
 }
 
 type PeriodScore struct {
@@ -241,6 +242,16 @@ type ProTeam struct {
 	Name        string      `json:"name"`
 	LogoUrl     string      `json:"logo_url"`
 	Conference  string      `json:"conference"`
+}
+
+type ProspectRanking struct {
+	PlayerID  pgtype.UUID        `json:"player_id"`
+	Source    string             `json:"source"`
+	Year      int32              `json:"year"`
+	Rank      int32              `json:"rank"`
+	Eta       string             `json:"eta"`
+	SourceUrl string             `json:"source_url"`
+	SyncedAt  pgtype.Timestamptz `json:"synced_at"`
 }
 
 type Ranking struct {

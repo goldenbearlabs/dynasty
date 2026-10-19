@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"crossover/internal/ingest"
 	"crossover/internal/players"
 	"crossover/internal/scoring"
 )
@@ -22,6 +23,13 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 		go s.Syncer.SyncInjuries(s.Background, c.Key, c.Injuries)
 	case job == "rosters":
 		go s.Syncer.SyncRosters(s.Background, c.Key, c.Source)
+	case job == "prospect-rankings":
+		source, ok := c.Prospects.(ingest.ProspectRankingSource)
+		if !ok {
+			writeError(w, http.StatusNotFound, "no prospect rankings for this competition")
+			return
+		}
+		go s.Syncer.SyncProspectRankings(s.Background, c.Key, source)
 	case job == "prospects" && c.Prospects != nil:
 		go s.Syncer.SyncProspects(s.Background, c.Key, c.Prospects)
 	case job == "seasons":

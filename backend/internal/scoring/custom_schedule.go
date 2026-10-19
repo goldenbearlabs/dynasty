@@ -18,9 +18,12 @@ type CustomPeriod struct {
 	EndsOn    string    `json:"ends_on"`
 	IsPlayoff bool      `json:"is_playoff"`
 	Matchups  []Pairing `json:"matchups"`
+	// DoubleGames doubles, over the whole matchup, the games a slot counts
+	// and the pitcher starts a team may make: for a long holiday matchup.
+	DoubleGames bool `json:"double_games"`
 }
 
-func validateCustomPeriods(input []CustomPeriod, season db.Season, kept []db.Period, rounds int) ([][2]time.Time, error) {
+func validateCustomPeriods(input []CustomPeriod, season db.Season, kept []db.Period, rounds int, lineup settings.Lineup) ([][2]time.Time, error) {
 	if len(input) == 0 || len(input) > 366 {
 		return nil, problem.New("Set between 1 and 366 future matchup periods.")
 	}
@@ -39,6 +42,10 @@ func validateCustomPeriods(input []CustomPeriod, season db.Season, kept []db.Per
 		}
 		if !start.After(sportsday.Today()) || !start.After(previous) || start.Before(season.StartsOn.Time) || end.After(season.EndsOn.Time) {
 			return nil, problem.New("Matchup %d must be in the future, within the season, and after the previous matchup.", i+1)
+		}
+		if p.DoubleGames && lineup.Period == settings.PeriodWeek &&
+			(!sportsday.WeekStart(start, lineup.WeekStart).Equal(start) || int(end.Sub(start).Hours()/24+1.5)%7 != 0) {
+			return nil, problem.New("Matchup %d doubles games, so it must run whole lineup weeks, starting on a %s.", i+1, lineup.WeekStart)
 		}
 		if p.IsPlayoff {
 			playoffs++
@@ -102,7 +109,7 @@ func (s *Service) SetSchedule(ctx context.Context, id pgtype.UUID, input []Custo
 				kept = append(kept, p)
 			}
 		}
-		spans, err := validateCustomPeriods(input, season, kept, scheduleRounds(rules.Format, len(franchises)))
+		spans, err := validateCustomPeriods(input, season, kept, scheduleRounds(rules.Format, len(franchises)), rules.Lineup)
 		if err != nil {
 			return err
 		}
@@ -119,6 +126,11 @@ func (s *Service) SetSchedule(ctx context.Context, id pgtype.UUID, input []Custo
 			period, err := q.InsertPeriod(ctx, db.InsertPeriodParams{SeasonID: id, Seq: seq, StartsOn: sportsday.Date(spans[i][0]), EndsOn: sportsday.Date(spans[i][1]), IsPlayoff: p.IsPlayoff})
 			if err != nil {
 				return err
+			}
+			if p.DoubleGames {
+				if err := q.SetPeriodDoubleGames(ctx, db.SetPeriodDoubleGamesParams{ID: period.ID, DoubleGames: true}); err != nil {
+					return err
+				}
 			}
 			var pairs [][2]pgtype.UUID
 			if p.Matchups != nil {

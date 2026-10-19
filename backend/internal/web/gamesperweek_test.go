@@ -368,4 +368,22 @@ func TestAutoLastGame(t *testing.T) {
 	if p := lineup()["Zqauto Forward"]; p.Slot != "UTIL" {
 		t.Fatalf("auto set moved a locked player: %+v", p)
 	}
+
+	// --- a doubled matchup counts his last two games with a stat -------------
+	sql(`insert into periods (season_id, seq, starts_on, ends_on, is_playoff, double_games)
+	     select id, 1, $2, $3, false, true from seasons where league_id = $1`, league, day(-2), day(11))
+	var doubled struct {
+		First   string `json:"day"`
+		Last    string `json:"last_day"`
+		Doubled *struct {
+			StartsOn string `json:"starts_on"`
+		}
+	}
+	ann.want(http.StatusOK, "GET", lineupURL+"?franchise="+franchise+"&day="+day(0), nil, &doubled)
+	if doubled.Doubled == nil || doubled.First != day(-2) || doubled.Last != day(11) {
+		t.Fatalf("lineup = %+v; want one lineup for the doubled matchup, %s to %s", doubled, day(-2), day(11))
+	}
+	if got, p := total(), lineup()["Zqauto Forward"]; math.Abs(got-19) > 0.001 || p.Points != 19 {
+		t.Fatalf("total = %v, forward %+v in a doubled matchup; want 19, his last two games with a stat", got, p)
+	}
 }

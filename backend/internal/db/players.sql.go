@@ -335,11 +335,15 @@ func (q *Queries) GetPlayerExternalID(ctx context.Context, arg GetPlayerExternal
 const getPlayerProfile = `-- name: GetPlayerProfile :one
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
        coalesce(f.name, '')::text as owner_name,
        coalesce(f.slug, '')::text as owner_slug
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries re on re.player_id = p.id
 left join franchises f on f.id = re.franchise_id
@@ -347,20 +351,25 @@ where p.id = $1
 `
 
 type GetPlayerProfileRow struct {
-	ID                pgtype.UUID `json:"id"`
-	Competition       string      `json:"competition"`
-	Status            string      `json:"status"`
-	InjuryDesignation string      `json:"injury_designation"`
-	FullName          string      `json:"full_name"`
-	Positions         []string    `json:"positions"`
-	BirthDate         pgtype.Date `json:"birth_date"`
-	Class             string      `json:"class"`
-	Note              string      `json:"note"`
-	HeadshotUrl       string      `json:"headshot_url"`
-	TeamAbbrev        string      `json:"team_abbrev"`
-	TeamName          string      `json:"team_name"`
-	OwnerName         string      `json:"owner_name"`
-	OwnerSlug         string      `json:"owner_slug"`
+	ID                 pgtype.UUID `json:"id"`
+	Competition        string      `json:"competition"`
+	Status             string      `json:"status"`
+	InjuryDesignation  string      `json:"injury_designation"`
+	FullName           string      `json:"full_name"`
+	Positions          []string    `json:"positions"`
+	BirthDate          pgtype.Date `json:"birth_date"`
+	Class              string      `json:"class"`
+	Note               string      `json:"note"`
+	HeadshotUrl        string      `json:"headshot_url"`
+	ProspectRank       pgtype.Int4 `json:"prospect_rank"`
+	ProspectRankYear   pgtype.Int4 `json:"prospect_rank_year"`
+	ProspectRankSource string      `json:"prospect_rank_source"`
+	ProspectRankUrl    string      `json:"prospect_rank_url"`
+	ProspectEta        string      `json:"prospect_eta"`
+	TeamAbbrev         string      `json:"team_abbrev"`
+	TeamName           string      `json:"team_name"`
+	OwnerName          string      `json:"owner_name"`
+	OwnerSlug          string      `json:"owner_slug"`
 }
 
 // A player's identity and current ownership for inline draft research.
@@ -378,6 +387,11 @@ func (q *Queries) GetPlayerProfile(ctx context.Context, id pgtype.UUID) (GetPlay
 		&i.Class,
 		&i.Note,
 		&i.HeadshotUrl,
+		&i.ProspectRank,
+		&i.ProspectRankYear,
+		&i.ProspectRankSource,
+		&i.ProspectRankUrl,
+		&i.ProspectEta,
 		&i.TeamAbbrev,
 		&i.TeamName,
 		&i.OwnerName,
@@ -764,6 +778,9 @@ with seasons as (
 )
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
@@ -773,6 +790,7 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        coalesce(sc.points, 0)::float8   as season_points,
        coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
@@ -793,7 +811,8 @@ where p.pool_eligible and ($1::text = '' or p.competition = $1)
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
                     where dl.draft_id = $8 and l.competition = p.competition)))
-order by case $9::text
+order by case when $9::text='prospect_rank' then pr.rank end asc nulls last,
+         case $9::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
@@ -817,25 +836,30 @@ type ListPlayersParams struct {
 }
 
 type ListPlayersRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	Competition       string             `json:"competition"`
-	Status            string             `json:"status"`
-	InjuryDesignation string             `json:"injury_designation"`
-	FullName          string             `json:"full_name"`
-	Positions         []string           `json:"positions"`
-	BirthDate         pgtype.Date        `json:"birth_date"`
-	Class             string             `json:"class"`
-	Note              string             `json:"note"`
-	HeadshotUrl       string             `json:"headshot_url"`
-	EligibleSince     pgtype.Timestamptz `json:"eligible_since"`
-	TeamAbbrev        string             `json:"team_abbrev"`
-	TeamName          string             `json:"team_name"`
-	OwnerName         string             `json:"owner_name"`
-	OwnerSlug         string             `json:"owner_slug"`
-	WaiverUntil       pgtype.Timestamptz `json:"waiver_until"`
-	Season            string             `json:"season"`
-	SeasonPoints      float64            `json:"season_points"`
-	SeasonIndex       float64            `json:"season_index"`
+	ID                 pgtype.UUID        `json:"id"`
+	Competition        string             `json:"competition"`
+	Status             string             `json:"status"`
+	InjuryDesignation  string             `json:"injury_designation"`
+	FullName           string             `json:"full_name"`
+	Positions          []string           `json:"positions"`
+	BirthDate          pgtype.Date        `json:"birth_date"`
+	Class              string             `json:"class"`
+	Note               string             `json:"note"`
+	HeadshotUrl        string             `json:"headshot_url"`
+	EligibleSince      pgtype.Timestamptz `json:"eligible_since"`
+	ProspectRank       pgtype.Int4        `json:"prospect_rank"`
+	ProspectRankYear   pgtype.Int4        `json:"prospect_rank_year"`
+	ProspectRankSource string             `json:"prospect_rank_source"`
+	ProspectRankUrl    string             `json:"prospect_rank_url"`
+	ProspectEta        string             `json:"prospect_eta"`
+	TeamAbbrev         string             `json:"team_abbrev"`
+	TeamName           string             `json:"team_name"`
+	OwnerName          string             `json:"owner_name"`
+	OwnerSlug          string             `json:"owner_slug"`
+	WaiverUntil        pgtype.Timestamptz `json:"waiver_until"`
+	Season             string             `json:"season"`
+	SeasonPoints       float64            `json:"season_points"`
+	SeasonIndex        float64            `json:"season_index"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
@@ -883,6 +907,11 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.Note,
 			&i.HeadshotUrl,
 			&i.EligibleSince,
+			&i.ProspectRank,
+			&i.ProspectRankYear,
+			&i.ProspectRankSource,
+			&i.ProspectRankUrl,
+			&i.ProspectEta,
 			&i.TeamAbbrev,
 			&i.TeamName,
 			&i.OwnerName,
