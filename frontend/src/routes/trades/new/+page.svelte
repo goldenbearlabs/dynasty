@@ -8,6 +8,7 @@
 	import { getFranchise, proposeTrade, type FranchiseDetail, type List } from '#lib/api.ts';
 	import AssetPicker from '#lib/AssetPicker.svelte';
 	import { assetsOf, toItem, type Asset } from '#lib/tradeAssets.ts';
+	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -110,13 +111,24 @@
 		<div class="sides">
 			<section class="stack tight">
 				<h2 class="row"><Crest src={me.image_url} name={me.name} size={28} /> You send</h2>
-				{#if mine}<AssetPicker detail={mine} {franchises} selected={sending} />{:else}<p class="muted">Loading…</p>{/if}
+				{#if mine}<AssetPicker detail={mine} {franchises} selected={sending} counterpart={theirs?.franchise.id} />{:else}<p class="muted">Loading…</p>{/if}
 			</section>
 			<section class="stack tight">
 				<h2 class="row">
 					{#if theirs}<Crest src={theirs.franchise.image_url} name={theirs.franchise.name} size={28} /> {theirs.franchise.name} sends{:else}They send{/if}
 				</h2>
-				{#if theirs}<AssetPicker detail={theirs} {franchises} selected={receiving} />{:else}<p class="muted">Loading…</p>{/if}
+				{#if theirs}
+					{@const wants = tradeMarket.data.wants.filter((w) => w.franchise_id === theirs!.franchise.id)}
+					{#if wants.length}
+						<p class="wants small-text">
+							<strong>Looking for</strong>
+							{#each wants as w (w.league_id)}
+								<span><SportBadge sport={w.competition} /> {w.positions.join(', ')}{#if w.note}{' '}“{w.note}”{/if}</span>
+							{/each}
+						</p>
+					{/if}
+					<AssetPicker detail={theirs} {franchises} selected={receiving} />
+				{:else}<p class="muted">Loading…</p>{/if}
 			</section>
 		</div>
 
@@ -163,6 +175,15 @@
 {/if}
 
 <style>
+	.wants {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.8rem;
+		padding: 0.5rem 0.7rem;
+		border-radius: var(--radius-small);
+		background: var(--surface-2);
+	}
 	.sides {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));

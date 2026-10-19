@@ -46,6 +46,8 @@ func TestHeadToHeadFlow(t *testing.T) {
 	rules.Roster.ReserveEligibility = "anyone"
 	rules.Scoring = map[string]float64{"pts": 1}
 	rules.Format.Type, rules.Format.MatchupDays, rules.Format.PlayoffTeams = "head_to_head", 1, 2
+	noConsolation := false // This fixture covers a single championship final.
+	rules.Format.Consolation = &noConsolation
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
 		Name:     "Head To Head Test",
 		Settings: dynastySettings(10, 7, 5, 3),

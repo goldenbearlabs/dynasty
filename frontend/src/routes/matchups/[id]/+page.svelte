@@ -100,6 +100,8 @@
 </script>
 
 <svelte:head><title>{sides.length ? sides.map((s) => s.identity.name || 'Bye').join(' vs ') : 'Matchup'}</title></svelte:head>
+{#if matchup?.period.is_playoff}<p class="eyebrow">{matchup.bracket === 'consolation' ? 'Consolation bracket' : 'Championship bracket'} · Matchup {matchup.bracket_slot+1}</p>{/if}
+
 
 {#snippet team(side: Side, away: boolean)}
 	<div class="team" class:away class:behind={matchup?.final && side.total < side.other}>

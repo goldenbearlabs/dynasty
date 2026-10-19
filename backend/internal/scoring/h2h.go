@@ -24,6 +24,9 @@ import (
 
 // playoffRounds is how many rounds it takes to get from n teams to one.
 func playoffRounds(teams int) int {
+	if teams < 2 {
+		return 0
+	}
 	return bits.Len(uint(teams - 1))
 }
 
@@ -94,7 +97,7 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 	length := rules.Format.MatchupDays
 	spans := leaguePeriodSpans(start, season.EndsOn.Time, rules, league.Competition)
 	remaining := len(spans)
-	rounds := playoffRounds(min(rules.Format.PlayoffTeams, len(franchises)))
+	rounds := scheduleRounds(rules.Format, len(franchises))
 	regular := remaining - rounds
 	if regular < 1 {
 		return problem.New("%s's season is too short for %d-day matchups and %d playoff rounds. Lengthen it, or change the format.",
@@ -114,12 +117,21 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		if err != nil {
 			return err
 		}
-		pairs, set := byHand[spanKey(period)]
+		custom, set := byHand[spanKey(period)]
+		var pairs [][2]pgtype.UUID
 		switch {
 		case set:
 			if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: period.ID, ByHand: true}); err != nil {
 				return err
 			}
+			pairs = make([][2]pgtype.UUID, len(custom))
+			for i, p := range custom {
+				pairs[i] = [2]pgtype.UUID{p.Home, p.Away}
+			}
+			if err := pairCustom(ctx, q, period, custom, pairs); err != nil {
+				return err
+			}
+			continue
 		case period.IsPlayoff:
 			continue // playoff matchups are set as each round is reached
 		default:
@@ -151,7 +163,7 @@ func spanKey(p db.Period) string {
 
 // pairingsByHand returns the matchups of every period the commissioner set
 // by hand, by the period's days.
-func pairingsByHand(ctx context.Context, q *db.Queries, seasonID pgtype.UUID) (map[string][][2]pgtype.UUID, error) {
+func pairingsByHand(ctx context.Context, q *db.Queries, seasonID pgtype.UUID) (map[string][]Pairing, error) {
 	periods, err := q.ListPeriods(ctx, seasonID)
 	if err != nil {
 		return nil, err
@@ -160,11 +172,12 @@ func pairingsByHand(ctx context.Context, q *db.Queries, seasonID pgtype.UUID) (m
 	if err != nil {
 		return nil, err
 	}
-	set := map[string][][2]pgtype.UUID{}
+	set := map[string][]Pairing{}
 	for _, p := range periods {
 		for _, m := range matchups {
 			if p.ByHand && m.PeriodID == p.ID {
-				set[spanKey(p)] = append(set[spanKey(p)], [2]pgtype.UUID{m.HomeFranchiseID, m.AwayFranchiseID})
+				slot := m.BracketSlot
+				set[spanKey(p)] = append(set[spanKey(p)], Pairing{Home: m.HomeFranchiseID, Away: m.AwayFranchiseID, Bracket: m.Bracket, Slot: &slot})
 			}
 		}
 	}
@@ -174,8 +187,10 @@ func pairingsByHand(ctx context.Context, q *db.Queries, seasonID pgtype.UUID) (m
 // Pairing is one matchup as the commissioner sets it. Without an away side
 // it is a bye.
 type Pairing struct {
-	Home pgtype.UUID `json:"home_franchise_id"`
-	Away pgtype.UUID `json:"away_franchise_id"`
+	Home    pgtype.UUID `json:"home_franchise_id"`
+	Away    pgtype.UUID `json:"away_franchise_id"`
+	Bracket string      `json:"bracket,omitempty"`
+	Slot    *int32      `json:"bracket_slot,omitempty"`
 }
 
 // SetMatchups replaces a period's matchups with the commissioner's own, in
@@ -203,7 +218,7 @@ func (s *Service) SetMatchups(ctx context.Context, periodID pgtype.UUID, pairing
 		if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: period.ID, ByHand: true}); err != nil {
 			return err
 		}
-		return pair(ctx, q, period.ID, pairs)
+		return pairCustom(ctx, q, period, pairings, pairs)
 	})
 }
 
@@ -526,11 +541,12 @@ func (s *Service) AdvancePlayoffs(ctx context.Context) error {
 	return nil
 }
 
-// advance fills in the next playoff round once the period before it is
-// over. The first round takes the top teams from the standings; each later
-// round takes the winners. Teams are re-seeded every round, the best
-// playing the worst, and with an odd number the top seed sits out.
+// advance fills every due round of the championship and consolation
+// brackets independently. Slot order carries winners through a fixed tree.
 func advance(ctx context.Context, q *db.Queries, league db.League, season db.Season) error {
+	if err := q.LockSchedule(ctx, season.ID); err != nil {
+		return err
+	}
 	periods, err := q.ListPeriods(ctx, season.ID)
 	if err != nil {
 		return err
@@ -539,62 +555,88 @@ func advance(ctx context.Context, q *db.Queries, league db.League, season db.Sea
 	if err != nil {
 		return err
 	}
-	in := func(period db.Period) []db.ListSeasonMatchupsRow {
-		var found []db.ListSeasonMatchupsRow
-		for _, m := range matchups {
-			if m.PeriodID == period.ID {
-				found = append(found, m)
-			}
-		}
-		return found
-	}
-
-	next := slices.IndexFunc(periods, func(p db.Period) bool { return p.IsPlayoff && len(in(p)) == 0 })
-	if next < 1 || !finished(periods[next-1]) {
-		return nil // no round is due
-	}
 	rules, err := settings.Parse[settings.League](league.Settings)
 	if err != nil {
 		return err
+	}
+	first := slices.IndexFunc(periods, func(p db.Period) bool { return p.IsPlayoff })
+	if first < 1 || !finished(periods[first-1]) {
+		return nil
 	}
 	standings, err := table(ctx, q, league, &season)
 	if err != nil {
 		return err
 	}
-	seed := func(id pgtype.UUID) int {
-		return slices.IndexFunc(standings, func(r Row) bool { return r.FranchiseID == id })
-	}
-
-	var alive []pgtype.UUID
-	if previous := periods[next-1]; !previous.IsPlayoff {
-		for _, row := range standings[:min(rules.Format.PlayoffTeams, len(standings))] {
-			alive = append(alive, row.FranchiseID)
+	top := min(rules.Format.PlayoffTeams, len(standings))
+	fields := map[string][]pgtype.UUID{championshipBracket: {}, consolationBracket: {}}
+	for i, r := range standings {
+		bracket := championshipBracket
+		if i >= top {
+			bracket = consolationBracket
 		}
-	} else {
-		scored, err := scores(ctx, q, league, previous.StartsOn.Time, previous.EndsOn.Time)
-		if err != nil {
-			return err
-		}
-		for _, m := range in(previous) {
-			alive = append(alive, winner(m.HomeFranchiseID, m.AwayFranchiseID, scored))
-		}
-		slices.SortFunc(alive, func(a, b pgtype.UUID) int { return seed(a) - seed(b) })
+		fields[bracket] = append(fields[bracket], r.FranchiseID)
 	}
-	if len(alive) < 2 {
-		return nil // the final has been played
+	if rules.Format.BottomFirst() {
+		slices.Reverse(fields[consolationBracket])
 	}
-
-	if len(alive)%2 == 1 { // the top seed sits this round out
-		if err := q.InsertMatchup(ctx, db.InsertMatchupParams{PeriodID: periods[next].ID, HomeFranchiseID: alive[0]}); err != nil {
-			return err
+	in := func(period pgtype.UUID, bracket string) []db.ListSeasonMatchupsRow {
+		var found []db.ListSeasonMatchupsRow
+		for _, m := range matchups {
+			if m.PeriodID == period && m.Bracket == bracket {
+				found = append(found, m)
+			}
 		}
-		alive = alive[1:]
+		return found
 	}
-	for i := range len(alive) / 2 {
-		if err := q.InsertMatchup(ctx, db.InsertMatchupParams{
-			PeriodID: periods[next].ID, HomeFranchiseID: alive[i], AwayFranchiseID: alive[len(alive)-1-i],
-		}); err != nil {
-			return err
+	for i := first; i < len(periods); i++ {
+		p := periods[i]
+		if !p.IsPlayoff || p.ByHand || !finished(periods[i-1]) {
+			continue
+		}
+		for _, bracket := range []string{championshipBracket, consolationBracket} {
+			if bracket == consolationBracket && !rules.Format.ConsolationEnabled() {
+				continue
+			}
+			teams := fields[bracket]
+			rounds := playoffRounds(len(teams))
+			offset := len(periods) - first - rounds
+			if rounds == 0 || i-first < offset || len(in(p.ID, bracket)) > 0 {
+				continue
+			}
+			var pairs []bracketPair
+			if i-first == offset {
+				pairs = seededBracket(teams)
+			} else {
+				prev := periods[i-1]
+				previous := in(prev.ID, bracket)
+				scored, err := scores(ctx, q, league, prev.StartsOn.Time, prev.EndsOn.Time)
+				if err != nil {
+					return err
+				}
+				if rules.Format.Reseed {
+					alive := []pgtype.UUID{}
+					for _, m := range previous {
+						alive = append(alive, winner(m.HomeFranchiseID, m.AwayFranchiseID, scored))
+					}
+					slices.SortFunc(alive, func(a, b pgtype.UUID) int { return slices.Index(teams, a) - slices.Index(teams, b) })
+					pairs = seededBracket(alive)
+				} else {
+					pairs = fixedNext(previous, scored)
+					// Home wins a tie, so preserve the better original bracket seed at home.
+					for j, pair := range pairs {
+						if pair.Away.Valid && slices.Index(teams, pair.Away) < slices.Index(teams, pair.Home) {
+							pairs[j].Home, pairs[j].Away = pair.Away, pair.Home
+						}
+					}
+				}
+			}
+			if err := insertBracket(ctx, q, p.ID, bracket, pairs); err != nil {
+				return err
+			}
+			// Make newly generated rounds visible to later due rounds in this call.
+			for _, pair := range pairs {
+				matchups = append(matchups, db.ListSeasonMatchupsRow{PeriodID: p.ID, HomeFranchiseID: pair.Home, AwayFranchiseID: pair.Away, Bracket: bracket, BracketSlot: pair.Slot})
+			}
 		}
 	}
 	return nil
@@ -612,6 +654,10 @@ func winner(home, away pgtype.UUID, scored map[pgtype.UUID]Row) pgtype.UUID {
 // playoffChampion returns the winner of the playoff final, if it has been
 // played, and an invalid id otherwise.
 func playoffChampion(ctx context.Context, q *db.Queries, league db.League, season db.Season) (pgtype.UUID, error) {
+	return bracketChampion(ctx, q, league, season, championshipBracket)
+}
+
+func bracketChampion(ctx context.Context, q *db.Queries, league db.League, season db.Season, bracket string) (pgtype.UUID, error) {
 	periods, err := q.ListPeriods(ctx, season.ID)
 	if err != nil || len(periods) == 0 {
 		return pgtype.UUID{}, err
@@ -626,7 +672,7 @@ func playoffChampion(ctx context.Context, q *db.Queries, league db.League, seaso
 	}
 	var played []db.ListSeasonMatchupsRow
 	for _, m := range matchups {
-		if m.PeriodID == final.ID {
+		if m.PeriodID == final.ID && m.Bracket == bracket {
 			played = append(played, m)
 		}
 	}
@@ -651,12 +697,14 @@ type Matchups struct {
 }
 
 type Matchup struct {
-	ID         pgtype.UUID `json:"id"`
-	Home       pgtype.UUID `json:"home_franchise_id"`
-	Away       pgtype.UUID `json:"away_franchise_id"` // null for a bye
-	HomePoints float64     `json:"home_points"`
-	AwayPoints float64     `json:"away_points"`
-	Final      bool        `json:"final"`
+	ID          pgtype.UUID `json:"id"`
+	Bracket     string      `json:"bracket"`
+	BracketSlot int32       `json:"bracket_slot"`
+	Home        pgtype.UUID `json:"home_franchise_id"`
+	Away        pgtype.UUID `json:"away_franchise_id"` // null for a bye
+	HomePoints  float64     `json:"home_points"`
+	AwayPoints  float64     `json:"away_points"`
+	Final       bool        `json:"final"`
 }
 
 // Matchups returns a period's matchups for a league's latest season. seq
@@ -697,7 +745,7 @@ func (s *Service) Matchups(ctx context.Context, league db.League, seq int) (Matc
 	for _, m := range all {
 		if m.PeriodID == period.ID {
 			view.Matchups = append(view.Matchups, Matchup{
-				ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+				ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID, Bracket: m.Bracket, BracketSlot: m.BracketSlot,
 				HomePoints: scored[m.HomeFranchiseID].Points, AwayPoints: scored[m.AwayFranchiseID].Points,
 				Final: finished(period),
 			})
@@ -762,7 +810,7 @@ func (s *Service) Schedule(ctx context.Context, league db.League) ([]SchedulePer
 		for _, m := range matchups {
 			if m.PeriodID == period.ID {
 				entry.Matchups = append(entry.Matchups, Matchup{
-					ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+					ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID, Bracket: m.Bracket, BracketSlot: m.BracketSlot,
 					HomePoints: points[m.HomeFranchiseID], AwayPoints: points[m.AwayFranchiseID],
 					Final: finished(period),
 				})
@@ -804,7 +852,7 @@ func (s *Service) Matchup(ctx context.Context, id pgtype.UUID) (MatchupDetail, e
 	}
 	return MatchupDetail{
 		Matchup: Matchup{
-			ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+			ID: m.ID, Home: m.HomeFranchiseID, Away: m.AwayFranchiseID, Bracket: m.Bracket, BracketSlot: m.BracketSlot,
 			HomePoints: scored[m.HomeFranchiseID].Points, AwayPoints: scored[m.AwayFranchiseID].Points,
 			Final: finished(period),
 		},

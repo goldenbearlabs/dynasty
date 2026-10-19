@@ -16,6 +16,7 @@
 	import { dayLabel, points, shiftDay, timeOfDay } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 	import WatchStar from '#lib/WatchStar.svelte';
+	import TradeFlag from '#lib/TradeFlag.svelte';
 
 	type Props = {
 		league: League;
@@ -377,7 +378,8 @@
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
 			</span>
-			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}</span>
+			<span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={22} />{#if player.eligibility_note} · {player.eligibility_note}{/if}
+				<TradeFlag leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} /></span>
 		</div>
 	</div>
 	<div class="games">{@render games(player, starting)}</div>

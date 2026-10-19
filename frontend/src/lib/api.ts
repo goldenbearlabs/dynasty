@@ -25,7 +25,12 @@ export type LeagueSettings = {
 		pitcher_starts_per_week: number;
 	};
 	scoring: Record<string, number>;
-	format: { type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number };
+	format: {
+ type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number;
+ standings_by?: 'record' | 'win_percentage' | 'points';
+ tiebreakers?: ('points_for' | 'head_to_head' | 'points_against')[];
+ reseed?: boolean; consolation?: boolean | null; consolation_seeding?: 'bottom_first' | 'top_first';
+ };
 	/** weekly_limit: acquisitions a franchise may make in a week; 0 for no limit. */
 	free_agency: { mode: 'open' | 'closed'; new_entrants_draft_only: boolean; weekly_limit: number };
 	/** What happens to a dropped player: days on waivers, and how claims are ordered. */
@@ -393,6 +398,8 @@ export type Season = {
 };
 
 export type StandingsRow = {
+	points_for: number;
+	points_against: number;
 	franchise_id: string;
 	points: number;
 	/** A head-to-head league's record over its finished regular-season matchups. */
@@ -404,6 +411,7 @@ export type StandingsRow = {
 
 /** One league's table for its latest season, best first. */
 export type Standings = {
+	consolation_champion_id: string | null;
 	league_id: string;
 	competition: string;
 	format: LeagueSettings['format']['type'];
@@ -418,6 +426,8 @@ export type Period = { id: string; seq: number; starts_on: string; ends_on: stri
 
 export type Matchup = {
 	id: string;
+	bracket: 'championship' | 'consolation';
+	bracket_slot: number;
 	home_franchise_id: string;
 	away_franchise_id: string | null; // null for a bye
 	home_points: number;
@@ -428,8 +438,9 @@ export type Matchup = {
 /** A period of a season's schedule; its matchups have no points until it starts. */
 export type SchedulePeriod = Period & { matchups: Matchup[] };
 export type GameDayCount = { day: string; games: number };
+export type MatchupPairing = Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'> & Partial<Pick<Matchup, 'bracket' | 'bracket_slot'>>;
 export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff'> & {
- matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[] | null;
+ matchups: MatchupPairing[] | null;
 };
 
 /** One period of a head-to-head season. */
@@ -814,6 +825,37 @@ export const addLeague = (competition: string) => request<League>('POST', '/admi
 /** A real team, for its logo. */
 export type ProTeam = { competition: string; abbrev: string; name: string; logo_url: string };
 export const getTeams = () => request<ProTeam[]>('GET', '/teams');
+/** A player on the trade market: on a manager's block, or someone a manager wants. */
+export type MarketPlayer = {
+	league_id: string;
+	competition: string;
+	player_id: string;
+	full_name: string;
+	positions: string[];
+	headshot_url: string;
+	team_abbrev: string;
+	list: List;
+};
+export type BlockEntry = MarketPlayer & { franchise_id: string; note: string; added_at: string };
+export type TradeWants = { franchise_id: string; league_id: string; competition: string; positions: string[]; note: string; updated_at: string };
+export type TradeTarget = MarketPlayer & { by_franchise_id: string; owner_franchise_id: string; created_at: string };
+/** The trade market as the signed-in manager sees it. Targets are seen only by whoever set them and the player's owner. */
+export type TradeMarket = {
+	block: BlockEntry[];
+	wants: TradeWants[];
+	/** Players this manager is after. */
+	targets: TradeTarget[];
+	/** This manager's players others are after. */
+	interest: TradeTarget[];
+};
+export const getTradeMarket = () => request<TradeMarket>('GET', '/trade-market');
+export const setTradeBlock = (change: { league_id: string; player_id: string; on: boolean; note?: string }) =>
+	request<void>('PUT', '/trade-market/block', change);
+export const setTradeWants = (change: { league_id: string; positions: string[]; note: string }) =>
+	request<void>('PUT', '/trade-market/wants', change);
+export const setTradeTarget = (change: { league_id: string; player_id: string; on: boolean }) =>
+	request<void>('PUT', '/trade-market/targets', change);
+
 export const getSession = () => request<Session | null>('GET', '/session');
 export const logIn = (credentials: Credentials) => request<void>('POST', '/auth/login', credentials);
 export const logOut = () => request<void>('POST', '/auth/logout');
@@ -932,7 +974,7 @@ export const getSchedule = (leagueId: string) => request<SchedulePeriod[]>('GET'
 export const getGameCounts = (leagueId: string, starts_on: string, ends_on: string) =>
 	request<GameDayCount[]>('GET', `/leagues/${leagueId}/game-counts${query({ starts_on, ends_on })}`);
 export const getMatchup = (id: string) => request<MatchupDetail>('GET', `/matchups/${id}`);
-export const setMatchups = (periodId: string, matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[]) =>
+export const setMatchups = (periodId: string, matchups: MatchupPairing[]) =>
 	request<void>('PUT', `/admin/periods/${periodId}/matchups`, { matchups });
 export const resetMatchups = (periodId: string) => request<void>('DELETE', `/admin/periods/${periodId}/matchups`);
 export const setSchedule = (seasonId: string, periods: CustomPeriod[]) => request<void>('PUT', `/admin/seasons/${seasonId}/schedule`, { periods });

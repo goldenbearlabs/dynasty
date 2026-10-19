@@ -37,7 +37,7 @@
 		if (!view || !period) return '';
 		const regular = view.periods.filter((p) => !p.is_playoff).length;
 		if (!period.is_playoff) return `${league.settings.format.matchup_days === 7 ? 'Week' : 'Matchup'} ${period.seq} of ${regular}`;
-		return period.seq === last ? 'Final' : `Playoffs, round ${period.seq - regular}`;
+		return period.seq === last ? 'Finals' : `Playoffs, round ${period.seq - regular}`;
 	});
 </script>
 
@@ -84,6 +84,7 @@
 								{/if}
 							</div>
 						{/each}
+						{#if period.is_playoff}<span class="pill" class:gold={m.bracket !== 'consolation'}>{m.bracket === 'consolation' ? 'Consolation' : 'Championship'} · Matchup {(m.bracket_slot ?? 0)+1}</span>{/if}
 						{#if m.final}<span class="eyebrow">Final</span>{/if}
 					</a>
 				{/each}

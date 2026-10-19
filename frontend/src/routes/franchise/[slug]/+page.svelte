@@ -23,6 +23,7 @@
 	import LineupEditor from '#lib/LineupEditor.svelte';
 	import Matchups from '#lib/Matchups.svelte';
 	import SeasonRoster from '#lib/SeasonRoster.svelte';
+	import TradeFlag from '#lib/TradeFlag.svelte';
 	import PlayerNickname from '#lib/PlayerNickname.svelte';
 	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
 	import WatchStar from '#lib/WatchStar.svelte';
@@ -567,7 +568,7 @@
 													<Headshot name={player.full_name} src={player.headshot_url} />
 													<div>
 														<div class="row who">
-															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} />
+															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} /><TradeFlag leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} />
 															<InjuryBadge designation={player.injury_designation} />
 																{#if player.class}<span class="pill">{player.class}</span>{/if}
 															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}

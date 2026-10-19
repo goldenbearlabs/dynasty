@@ -102,7 +102,7 @@ func (s *Service) SetSchedule(ctx context.Context, id pgtype.UUID, input []Custo
 				kept = append(kept, p)
 			}
 		}
-		spans, err := validateCustomPeriods(input, season, kept, playoffRounds(min(rules.Format.PlayoffTeams, len(franchises))))
+		spans, err := validateCustomPeriods(input, season, kept, scheduleRounds(rules.Format, len(franchises)))
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,11 @@ func (s *Service) SetSchedule(ctx context.Context, id pgtype.UUID, input []Custo
 			} else if !p.IsPlayoff {
 				pairs = rotation[int(seq-1)%len(rotation)]
 			}
-			if err := pair(ctx, q, period.ID, pairs); err != nil {
+			if p.Matchups != nil {
+				if err := pairCustom(ctx, q, period, p.Matchups, pairs); err != nil {
+					return err
+				}
+			} else if err := pair(ctx, q, period.ID, pairs); err != nil {
 				return err
 			}
 		}

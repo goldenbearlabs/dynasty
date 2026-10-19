@@ -30,6 +30,7 @@
 		scores: 'M4 5h16v14H4zM12 5v14M7 10v4M17 10v4',
 		info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v6M12 7.5h.01',
 		more: 'M5 12h.01M12 12h.01M19 12h.01',
+		target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8M12 12h.01',
 	};
 	export type IconName = keyof typeof paths;
 </script>

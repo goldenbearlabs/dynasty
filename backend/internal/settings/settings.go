@@ -76,10 +76,31 @@ type Slot struct {
 }
 
 type Format struct {
-	Type         string `json:"type"`          // FormatTotalPoints | FormatHeadToHead
-	MatchupDays  int    `json:"matchup_days"`  // head-to-head only
-	PlayoffTeams int    `json:"playoff_teams"` // head-to-head only
+	Type               string   `json:"type"`          // FormatTotalPoints | FormatHeadToHead
+	MatchupDays        int      `json:"matchup_days"`  // head-to-head only
+	PlayoffTeams       int      `json:"playoff_teams"` // head-to-head only
+	StandingsBy        string   `json:"standings_by"`  // record (wins, then fewer losses), win_percentage, points
+	Tiebreakers        []string `json:"tiebreakers"`   // points_for, head_to_head, points_against (higher wins)
+	Reseed             bool     `json:"reseed"`
+	Consolation        *bool    `json:"consolation"`
+	ConsolationSeeding string   `json:"consolation_seeding"` // bottom_first | top_first
+
 }
+
+func (f Format) ConsolationEnabled() bool { return f.Consolation == nil || *f.Consolation }
+func (f Format) Ranking() string {
+	if f.StandingsBy == "" {
+		return "record"
+	}
+	return f.StandingsBy
+}
+func (f Format) TieRules() []string {
+	if f.Tiebreakers == nil {
+		return []string{"points_for", "head_to_head", "points_against"}
+	}
+	return f.Tiebreakers
+}
+func (f Format) BottomFirst() bool { return f.ConsolationSeeding != "top_first" }
 
 type FreeAgency struct {
 	Mode string `json:"mode"` // FreeAgencyOpen | FreeAgencyClosed
@@ -229,6 +250,18 @@ func (l League) Validate(c Catalog) error {
 			between("format.matchup_days", l.Format.MatchupDays, 1, 31),
 			between("format.playoff_teams", l.Format.PlayoffTeams, 2, 64),
 		)
+	}
+	checks = append(checks, oneOf("format.standings_by", l.Format.Ranking(), "record", "win_percentage", "points"))
+	if l.Format.ConsolationSeeding != "" {
+		checks = append(checks, oneOf("format.consolation_seeding", l.Format.ConsolationSeeding, "bottom_first", "top_first"))
+	}
+	seenTies := map[string]bool{}
+	for _, rule := range l.Format.TieRules() {
+		checks = append(checks, oneOf("format.tiebreakers", rule, "points_for", "head_to_head", "points_against"))
+		if seenTies[rule] {
+			checks = append(checks, fmt.Errorf("format.tiebreakers cannot repeat %s", rule))
+		}
+		seenTies[rule] = true
 	}
 	if l.Trades.Deadline != "" {
 		if _, err := time.Parse(time.DateOnly, l.Trades.Deadline); err != nil {

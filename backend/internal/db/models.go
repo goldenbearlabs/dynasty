@@ -167,6 +167,8 @@ type Matchup struct {
 	PeriodID        pgtype.UUID `json:"period_id"`
 	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
 	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
 }
 
 type Period struct {
@@ -320,6 +322,14 @@ type Trade struct {
 	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
 }
 
+type TradeBlock struct {
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Note        string             `json:"note"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
+}
+
 type TradeItem struct {
 	ID            pgtype.UUID `json:"id"`
 	TradeID       pgtype.UUID `json:"trade_id"`
@@ -334,6 +344,21 @@ type TradeParty struct {
 	TradeID     pgtype.UUID        `json:"trade_id"`
 	FranchiseID pgtype.UUID        `json:"franchise_id"`
 	AcceptedAt  pgtype.Timestamptz `json:"accepted_at"`
+}
+
+type TradeTarget struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type TradeWant struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	Positions   []string           `json:"positions"`
+	Note        string             `json:"note"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Transaction struct {

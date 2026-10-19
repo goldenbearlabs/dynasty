@@ -125,8 +125,8 @@
 				['Two formats.', 'Head to head: you play one franchise each matchup and are ranked by your record. Total points: most points over the season wins.'],
 				['The schedule builds itself.', 'Starting a head-to-head season creates a round-robin schedule and the playoff rounds. It is rebuilt if the dates, the rules or the franchises change, keeping matchups that have begun, and is frozen once the playoffs start.'],
 				['Weeks line up.', 'In a weekly league a matchup covers the same days as the lineup. A stretch of fewer than four days at the start or end of a season joins the week next to it.'],
-				['Standings.', 'Head-to-head leagues rank by the share of matchups won, a tie counting half, then by points. Using the share keeps a team that has had a bye comparable.'],
-				['Playoffs.', 'The top teams qualify. They are re-seeded every round, the best playing the worst left. If the number is not a power of two, the top seeds sit out the first round. A tied playoff matchup goes to the better seed.'],
+				['Standings.', 'By default, head-to-head leagues rank by wins, then fewer losses. Tiebreakers are points for, head-to-head record among tied teams, then points against; higher points against is better. These rules are customizable.'],
+				['Playoffs.', 'By default, the top eight qualify for a fixed championship bracket. In a 14-team league, the bottom six play a separate consolation bracket, with teams 13 and 14 receiving first-round byes. Winners advance in both brackets. The commissioner can customize playoff size, seeding and reseeding. A tied playoff matchup goes to the higher bracket seed.'],
 				['The commissioner can step in.', 'On the Matchups page the commissioner can set any matchup that is not over by hand, in the regular season or the playoffs, and choose who has a bye. Matchups set this way are marked, survive a rebuilt schedule, and can be handed back to the automatic ones.'],
 				['Champions.', 'The winner of the playoff final, or first place in a total-points league, is champion when the commissioner closes the season. A tie for first has to be settled by the commissioner naming one.']
 			]
@@ -354,6 +354,8 @@
 					{#if g.rules.format.type === 'head_to_head'}
 						<li><strong>Head to head</strong>, {g.rules.format.matchup_days === 7 ? 'one-week' : `${g.rules.format.matchup_days}-day`} matchups</li>
 						<li>{g.rules.format.playoff_teams} teams make the playoffs</li>
+						<li>{g.rules.format.reseed ? 'Brackets reseed each round' : 'Fixed brackets; no reseeding'}</li>
+						{#if g.rules.format.consolation !== false}<li>Non-playoff teams play a consolation bracket; {g.rules.format.consolation_seeding === 'top_first' ? 'highest non-playoff' : 'lowest standings'} get top seeds and byes</li>{/if}
 					{:else}
 						<li><strong>Total points</strong>: most over the season wins</li>
 					{/if}

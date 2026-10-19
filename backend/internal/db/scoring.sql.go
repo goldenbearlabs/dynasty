@@ -238,7 +238,7 @@ func (q *Queries) GetGameSummary(ctx context.Context, id pgtype.UUID) (GetGameSu
 }
 
 const getMatchup = `-- name: GetMatchup :one
-select id, period_id, home_franchise_id, away_franchise_id from matchups where id = $1
+select id, period_id, home_franchise_id, away_franchise_id, bracket, bracket_slot from matchups where id = $1
 `
 
 func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, error) {
@@ -249,6 +249,8 @@ func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, erro
 		&i.PeriodID,
 		&i.HomeFranchiseID,
 		&i.AwayFranchiseID,
+		&i.Bracket,
+		&i.BracketSlot,
 	)
 	return i, err
 }
@@ -290,6 +292,30 @@ func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error)
 		&i.RosterDeadline,
 	)
 	return i, err
+}
+
+const insertBracketMatchup = `-- name: InsertBracketMatchup :exec
+insert into matchups (period_id,home_franchise_id,away_franchise_id,bracket,bracket_slot)
+values ($1,$2,$3,$4,$5)
+`
+
+type InsertBracketMatchupParams struct {
+	PeriodID        pgtype.UUID `json:"period_id"`
+	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
+	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
+}
+
+func (q *Queries) InsertBracketMatchup(ctx context.Context, arg InsertBracketMatchupParams) error {
+	_, err := q.db.Exec(ctx, insertBracketMatchup,
+		arg.PeriodID,
+		arg.HomeFranchiseID,
+		arg.AwayFranchiseID,
+		arg.Bracket,
+		arg.BracketSlot,
+	)
+	return err
 }
 
 const insertLineup = `-- name: InsertLineup :exec
@@ -1079,10 +1105,10 @@ func (q *Queries) ListRosterGames(ctx context.Context, arg ListRosterGamesParams
 }
 
 const listSeasonMatchups = `-- name: ListSeasonMatchups :many
-select m.id, m.period_id, m.home_franchise_id, m.away_franchise_id, p.seq, p.is_playoff from matchups m
+select m.id, m.period_id, m.home_franchise_id, m.away_franchise_id, m.bracket, m.bracket_slot, p.seq, p.is_playoff from matchups m
 join periods p on p.id = m.period_id
 where p.season_id = $1
-order by p.seq, m.id
+order by p.seq, m.bracket, m.bracket_slot, m.id
 `
 
 type ListSeasonMatchupsRow struct {
@@ -1090,6 +1116,8 @@ type ListSeasonMatchupsRow struct {
 	PeriodID        pgtype.UUID `json:"period_id"`
 	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
 	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
 	Seq             int32       `json:"seq"`
 	IsPlayoff       bool        `json:"is_playoff"`
 }
@@ -1108,6 +1136,8 @@ func (q *Queries) ListSeasonMatchups(ctx context.Context, seasonID pgtype.UUID) 
 			&i.PeriodID,
 			&i.HomeFranchiseID,
 			&i.AwayFranchiseID,
+			&i.Bracket,
+			&i.BracketSlot,
 			&i.Seq,
 			&i.IsPlayoff,
 		); err != nil {

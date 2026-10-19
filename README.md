@@ -330,3 +330,5 @@ to its filtered watchlist. Watching a player does not change their roster or
 draft status. Saved entries follow the canonical player when duplicates merge.
 
 Schedule imports cover at least 365 days ahead, or the end of an active fantasy season when later. Startup, nightly refreshes and commissioner schedule syncs use the same horizon. `SCHEDULE_DAYS` can extend it beyond a year. Only games published by the sport's feed can be imported; unreleased fixtures become available on subsequent refreshes.
+
+Head-to-head leagues default to eight championship playoff teams with a fixed bracket. In a 14-team league, the other six play a separate consolation bracket; teams 13 and 14 receive first-round byes, and winners advance. Standings default to wins, then fewer losses, followed by points for, head-to-head record among tied teams, and points against (higher first). Commissioner rules can change playoff size, reseeding, consolation participation/seeding, standings ranking and tiebreaker order. Both brackets finish in the season's final period, and only the championship bracket determines the league title.

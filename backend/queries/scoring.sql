@@ -334,7 +334,7 @@ update periods set by_hand = @by_hand where id = @id;
 select m.*, p.seq, p.is_playoff from matchups m
 join periods p on p.id = m.period_id
 where p.season_id = @season_id
-order by p.seq, m.id;
+order by p.seq, m.bracket, m.bracket_slot, m.id;
 
 -- name: GetMatchup :one
 select * from matchups where id = @id;
@@ -375,3 +375,7 @@ delete from games where competition = @competition and provider_id = @provider_i
 -- placeholders the feed may have since dropped.
 select provider_id from games
 where competition = @competition and day = @day and status = 'scheduled' and starts_at < now() - interval '1 day';
+
+-- name: InsertBracketMatchup :exec
+insert into matchups (period_id,home_franchise_id,away_franchise_id,bracket,bracket_slot)
+values (@period_id,@home_franchise_id,@away_franchise_id,@bracket,@bracket_slot);

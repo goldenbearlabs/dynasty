@@ -40,6 +40,7 @@
 					<span><strong>{teamIdentity(champion,identities,league?.id).name}</strong> won the {table.season.year} title.</span>
 				</p>
 			{/if}
+			{#if table.consolation_champion_id}<p class="card">{teamIdentity(franchise(table.consolation_champion_id),identities,league?.id).name} won the consolation bracket.</p>{/if}
 			<div class="panel scroll" data-sport={table.competition}>
 				<table>
 					<thead>
@@ -48,7 +49,8 @@
 							<th>Franchise</th>
 							{#if headToHead}<th class="num">Record</th>{/if}
 							<th class="wide">Top scorer</th>
-							<th class="num">Points</th>
+							<th class="num">{headToHead ? 'Points for' : 'Points'}</th>
+						{#if headToHead}<th class="num">Points against</th>{/if}
 						</tr>
 					</thead>
 					<tbody>
@@ -58,6 +60,7 @@
 								<td class="rank">{i + 1}</td>
 								<td>
 									<a class="who" href="/franchise/{f?.slug}">
+										{#if headToHead && league}<span class="pill">{i < league.settings.format.playoff_teams ? 'Playoffs' : league.settings.format.consolation !== false ? 'Consolation' : 'Out'}</span>{/if}
 										<Crest name={teamIdentity(f,identities,league?.id).name} src={teamIdentity(f,identities,league?.id).image_url} size={28} />
  <strong>{teamIdentity(f,identities,league?.id).name}</strong>
 									</a>
@@ -68,7 +71,8 @@
 								<td class="wide muted small-text">
 									{#if row.players[0]}{row.players[0].nickname ? `${row.players[0].full_name} “${row.players[0].nickname}”` : row.players[0].full_name} · {points(row.players[0].points)}{/if}
 								</td>
-								<td class="num" class:total={!headToHead}>{points(row.points)}</td>
+								<td class="num" class:total={!headToHead}>{points(headToHead ? row.points_for : row.points)}</td>
+								{#if headToHead}<td class="num">{points(row.points_against)}</td>{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -76,7 +80,7 @@
 			</div>
 			<p class="muted small-text">
 				{table.season.year} season, {table.season.status === 'complete' ? 'final' : 'in progress'}. Only starters score.
-				{#if headToHead}Ranked by record, then points.{/if}
+				{#if headToHead && league}Ranked by {league.settings.format.standings_by === 'win_percentage' ? 'win percentage' : league.settings.format.standings_by === 'points' ? 'points for' : 'wins, then fewer losses'}; tiebreakers: {(league.settings.format.tiebreakers ?? ['points_for','head_to_head','points_against']).map((r) => r === 'points_for' ? 'points for' : r === 'head_to_head' ? 'head-to-head' : 'points against (higher first)').join(', ')}.{/if}
 			</p>
 			{#if headToHead && league}
 				{#key league.id}<Matchups {league} {franchises} {identities} />{/key}

@@ -6,15 +6,29 @@
 	import TradeAsset from '#lib/TradeAsset.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
-	import { assetsOf } from './tradeAssets.ts';
+	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
+	import { assetsOf, type Asset } from './tradeAssets.ts';
 
 	type Props = {
 		detail: FranchiseDetail;
 		franchises: Franchise[];
 		/** Keys of the assets chosen; toggled in place. */
 		selected: SvelteSet<string>;
+		/** The other side of the trade, to show which of these players they want. */
+		counterpart?: string;
 	};
-	let { detail, franchises, selected }: Props = $props();
+	let { detail, franchises, selected, counterpart }: Props = $props();
+
+	// What the trade market says about a player: on his owner's block, a
+	// target of yours, or one the other side has marked as a target.
+	function marks(asset: Asset) {
+		if (!asset.leagueId || !asset.playerId) return {};
+		return {
+			block: tradeMarket.data.block.find((b) => b.league_id === asset.leagueId && b.player_id === asset.playerId),
+			yours: tradeMarket.targeted(asset.leagueId, asset.playerId),
+			theirs: !!counterpart && tradeMarket.interestIn(asset.leagueId, asset.playerId).includes(counterpart)
+		};
+	}
 
 	const assets = $derived(assetsOf(detail, franchises));
 	let filter = $state('');
@@ -25,8 +39,15 @@
 			.map((r) => ({ value: r.competition, label: r.competition.toUpperCase(), sport: r.competition })),
 		...(detail.picks.length > 0 ? [{ value: 'picks', label: 'Picks' }] : [])
 	]);
+	// Players the trade market has something to say about come first.
+	const marked = (a: Asset) => {
+		const m = marks(a);
+		return m.block || m.yours || m.theirs ? 0 : 1;
+	};
 	const shown = $derived(
-		assets.filter((a) => filter === '' || (filter === 'picks' ? a.pickId !== undefined : a.sport === filter && !a.pickId))
+		assets
+			.filter((a) => filter === '' || (filter === 'picks' ? a.pickId !== undefined : a.sport === filter && !a.pickId))
+			.toSorted((a, b) => marked(a) - marked(b))
 	);
 
 	const toggle = (key: string) => (selected.has(key) ? selected.delete(key) : selected.add(key));
@@ -43,6 +64,14 @@
 					<label class:chosen={selected.has(asset.key)} class:locked={!asset.tradeable}>
 						<input type="checkbox" checked={selected.has(asset.key)} disabled={!asset.tradeable} onchange={() => toggle(asset.key)} />
 						<TradeAsset {...asset.display} />
+						{#if asset.playerId}
+							{@const m = marks(asset)}
+							<span class="marks">
+								{#if m.block}<span class="mark block" title={m.block.note || 'On the trade block'}>On the block</span>{/if}
+								{#if m.yours}<span class="mark want">Your target</span>{/if}
+								{#if m.theirs}<span class="mark want">They want him</span>{/if}
+							</span>
+						{/if}
 					</label>
 				</li>
 			{/each}
@@ -72,6 +101,27 @@
 	}
 	label.chosen {
 		background: var(--brand-soft);
+	}
+	.marks {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: end;
+		gap: 0.25rem;
+		margin-left: auto;
+	}
+	.mark {
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		font: 600 0.65rem/1.4 var(--body);
+		white-space: nowrap;
+	}
+	.mark.block {
+		background: color-mix(in srgb, var(--gold) 16%, transparent);
+		color: var(--gold);
+	}
+	.mark.want {
+		background: color-mix(in srgb, var(--bad) 14%, transparent);
+		color: var(--bad);
 	}
 	label.locked {
 		opacity: 0.55;

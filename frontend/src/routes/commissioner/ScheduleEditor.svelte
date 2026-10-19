@@ -30,7 +30,8 @@
  const today = sportsToday;
  const kept = $derived(periods.filter((p) => p.starts_on <= today()));
  const locked = $derived(kept.some((p) => p.is_playoff));
- const rounds = $derived(Math.ceil(Math.log2(Math.min(league.settings.format.playoff_teams, teams.length))));
+ const bracketRounds = (n: number) => n < 2 ? 0 : Math.ceil(Math.log2(n));
+ const rounds = $derived(Math.max(bracketRounds(Math.min(league.settings.format.playoff_teams, teams.length)), league.settings.format.consolation !== false ? bracketRounds(Math.max(0,teams.length-league.settings.format.playoff_teams)) : 0));
  const addDays = (day: string, count: number) => {
   const date = new Date(`${day}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + count);
@@ -42,13 +43,26 @@
   const picked = (p.matchups ?? []).flatMap((m) => [m.home_franchise_id, m.away_franchise_id]).filter(Boolean);
   return new Set(picked).size !== picked.length;
  };
+ const invalidSlots = (period: CustomPeriod) => {
+  if (!period.is_playoff || !period.matchups) return false;
+  const next: Record<string,number> = {};
+  const used = new Set<string>();
+  for (const pair of period.matchups) {
+   const bracket=pair.bracket ?? 'championship';
+   const slot=pair.bracket_slot ?? next[bracket] ?? 0;
+   const key=`${bracket}/${slot}`;
+   if (!Number.isInteger(slot) || slot < 0 || slot > 63 || used.has(key)) return true;
+   used.add(key); next[bracket]=Math.max(next[bracket] ?? 0, slot+1);
+  }
+  return false;
+ };
  const stageInvalid = $derived(draft.filter((p) => p.is_playoff).length !== rounds || (!kept.length && !draft.some((p) => !p.is_playoff)) || draft.some((p,i) => !p.is_playoff && draft.slice(0,i).some((prior) => prior.is_playoff)));
- const invalid = $derived(draft.some((p,i) => !p.starts_on || !p.ends_on || p.starts_on > p.ends_on || p.starts_on < first() || p.ends_on > season.ends_on || (i > 0 && p.starts_on <= draft[i-1].ends_on) || duplicate(p) || p.matchups?.some((m) => !m.home_franchise_id) || p.matchups?.length === 0));
+ const invalid = $derived(draft.some((p,i) => !p.starts_on || !p.ends_on || p.starts_on > p.ends_on || p.starts_on < first() || p.ends_on > season.ends_on || (i > 0 && p.starts_on <= draft[i-1].ends_on) || duplicate(p) || invalidSlots(p) || p.matchups?.some((m) => !m.home_franchise_id) || p.matchups?.length === 0));
 
  async function load() {
   periods = await getSchedule(league.id);
   draft = periods.filter((p) => p.starts_on > today()).map((p) => ({ starts_on: p.starts_on, ends_on: p.ends_on, is_playoff: p.is_playoff,
-   matchups: p.by_hand ? p.matchups.map((m) => ({ home_franchise_id: m.home_franchise_id, away_franchise_id: m.away_franchise_id })) : null }));
+   matchups: p.by_hand ? p.matchups.map((m) => ({ home_franchise_id: m.home_franchise_id, away_franchise_id: m.away_franchise_id, bracket: m.bracket, bracket_slot: m.bracket_slot })) : null }));
   length = league.settings.format.matchup_days;
   playoffStart = draft.find((p) => p.is_playoff)?.starts_on ?? '';
   dirty = false;
@@ -92,7 +106,7 @@
  }
  function customize(period: CustomPeriod) {
   const original = periods.find((p) => p.starts_on === period.starts_on && p.ends_on === period.ends_on);
-  period.matchups = original?.matchups.length ? original.matchups.map((m) => ({home_franchise_id:m.home_franchise_id,away_franchise_id:m.away_franchise_id})) : [{home_franchise_id:'',away_franchise_id:null}];
+  period.matchups = original?.matchups.length ? original.matchups.map((m) => ({home_franchise_id:m.home_franchise_id,away_franchise_id:m.away_franchise_id,bracket:m.bracket,bracket_slot:m.bracket_slot})) : [{home_franchise_id:'',away_franchise_id:null}];
   dirty=true;
  }
  function addPeriod() {
@@ -141,12 +155,16 @@
       {/if}
      </div>
      {#if period.matchups === null}
-      <div class="row"><span class="muted small-text">{period.is_playoff ? 'Automatically seed from standings / previous round winners.' : 'Automatic round-robin opponents.'}</span>
+      <div class="row"><span class="muted small-text">{period.is_playoff ? 'Automatically set championship and consolation brackets from standings / previous round winners.' : 'Automatic round-robin opponents.'}</span>
        <button class="small" onclick={() => customize(period)}>Set opponents</button>
       </div>
      {:else}
       {#each period.matchups as pair, j (j)}
        <div class="row">
+        {#if period.is_playoff}
+         <label class="field">Bracket<select value={pair.bracket ?? 'championship'} onchange={(e) => { pair.bracket=e.currentTarget.value as 'championship' | 'consolation'; delete pair.bracket_slot; dirty=true; }}><option value="championship">Championship</option><option value="consolation">Consolation</option></select></label>
+         <label class="field">Bracket position<input type="number" min="1" max="64" value={(pair.bracket_slot ?? period.matchups!.filter((m) => (m.bracket ?? 'championship') === (pair.bracket ?? 'championship')).indexOf(pair))+1} onchange={(e) => {pair.bracket_slot=Number(e.currentTarget.value)-1; dirty=true;}} /></label>
+        {/if}
         <select aria-label="Home team for period {kept.length+i+1}, matchup {j+1}" bind:value={pair.home_franchise_id}>
          <option value="" disabled>Choose team…</option>{#each teams as team (team.id)}<option value={team.id}>{team.name}</option>{/each}
         </select>
@@ -166,7 +184,7 @@
      {/if}
     </div>
    {/each}
-   {#if invalid}<p class="bad small-text" role="alert">Check dates and opponents. Periods must be in order, within the season, and cannot overlap.</p>{/if}
+   {#if invalid}<p class="bad small-text" role="alert">Check dates, opponents and bracket positions. Periods must be in order, within the season, and cannot overlap. Each bracket position can be used only once.</p>{/if}
    {#if stageInvalid}<p class="bad small-text" role="alert">Include regular-season play followed by exactly {rounds} playoff rounds.</p>{/if}
    <div class="row">
     <button class="small" onclick={addPeriod}>Add period</button>

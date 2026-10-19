@@ -82,13 +82,18 @@ func (c Competition) Catalog(otherLeagues []string) settings.Catalog {
 // defaults are the rules every sport starts from; each sport then sets its
 // own roster, lineup, scoring and draft length.
 func defaults() settings.League {
+	consolation := true
 	return settings.League{
 		// A free agent can be added to either list. Once the season starts,
 		// whoever is on reserve stays there until it ends.
 		Roster: settings.Roster{ReserveEligibility: settings.ReserveAnyone, ReserveLockSeason: true},
 		Lineup: settings.Lineup{Period: settings.PeriodDay, WeekStart: "monday", Lock: settings.LockGameStart},
 		// Head to head, a week at a time: the format the scoring was balanced for.
-		Format: settings.Format{Type: settings.FormatHeadToHead, MatchupDays: 7, PlayoffTeams: 6},
+		Format: settings.Format{
+			Type: settings.FormatHeadToHead, MatchupDays: 7, PlayoffTeams: 8,
+			StandingsBy: "record", Tiebreakers: []string{"points_for", "head_to_head", "points_against"},
+			Consolation: &consolation, ConsolationSeeding: "bottom_first",
+		},
 		FreeAgency: settings.FreeAgency{
 			Mode:                 settings.FreeAgencyOpen,
 			NewEntrantsDraftOnly: true,

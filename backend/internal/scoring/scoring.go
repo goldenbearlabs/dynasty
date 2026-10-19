@@ -32,9 +32,10 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // Standings is a league's table for one season, best first.
 type Standings struct {
-	Season *db.Season `json:"season"` // nil until the commissioner starts one
-	Format string     `json:"format"` // settings.FormatTotalPoints | settings.FormatHeadToHead
-	Rows   []Row      `json:"rows"`
+	ConsolationChampionID pgtype.UUID `json:"consolation_champion_id"`
+	Season                *db.Season  `json:"season"` // nil until the commissioner starts one
+	Format                string      `json:"format"` // settings.FormatTotalPoints | settings.FormatHeadToHead
+	Rows                  []Row       `json:"rows"`
 }
 
 type Row struct {
@@ -42,9 +43,11 @@ type Row struct {
 	Points      float64        `json:"points"`
 	Players     []PlayerPoints `json:"players"` // who scored them, best first
 	// A head-to-head league's record over its finished regular-season matchups.
-	Wins   int `json:"wins"`
-	Losses int `json:"losses"`
-	Ties   int `json:"ties"`
+	Wins          int     `json:"wins"`
+	Losses        int     `json:"losses"`
+	Ties          int     `json:"ties"`
+	PointsFor     float64 `json:"points_for"`
+	PointsAgainst float64 `json:"points_against"`
 }
 
 type PlayerPoints struct {
@@ -72,6 +75,9 @@ func (s *Service) Standings(ctx context.Context, league db.League) (Standings, e
 	case err == nil:
 		standings.Season = &season
 		standings.Rows, err = table(ctx, q, league, &season)
+		if err == nil && rules.Format.Type == settings.FormatHeadToHead && rules.Format.ConsolationEnabled() {
+			standings.ConsolationChampionID, err = bracketChampion(ctx, q, league, season, consolationBracket)
+		}
 	}
 	return standings, err
 }
@@ -107,9 +113,15 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 }
 
 // table ranks every franchise for a season: by points, or in a
-// head-to-head league by record and then points. Without a season everyone
+// head-to-head league by its configured record and tiebreakers. Without a season everyone
 // has zero.
 func table(ctx context.Context, q *db.Queries, league db.League, season *db.Season) ([]Row, error) {
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return nil, err
+	}
+	var results []result
+
 	franchises, err := q.ListFranchises(ctx, league.DynastyID)
 	if err != nil {
 		return nil, err
@@ -137,11 +149,16 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 			r := row(id)
 			r.Points, r.Players = s.Points, s.Players
 		}
-		results, err := regularSeasonResults(ctx, q, league, *season)
+		results, err = regularSeasonResults(ctx, q, league, *season)
 		if err != nil {
 			return nil, err
 		}
 		for _, result := range results {
+			home, away := row(result.Home), row(result.Away)
+			home.PointsFor += result.HomePoints
+			home.PointsAgainst += result.AwayPoints
+			away.PointsFor += result.AwayPoints
+			away.PointsAgainst += result.HomePoints
 			switch home, away := row(result.Home), row(result.Away); {
 			case result.HomePoints > result.AwayPoints:
 				home.Wins++
@@ -156,13 +173,7 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 		}
 	}
 
-	slices.SortStableFunc(rows, func(a, b Row) int {
-		return cmp.Or(
-			cmp.Compare(share(b), share(a)),
-			cmp.Compare(b.Points, a.Points),
-			cmp.Compare(names[a.FranchiseID], names[b.FranchiseID]),
-		)
-	})
+	rankStandings(rows, results, rules.Format, names)
 	return rows, nil
 }
 

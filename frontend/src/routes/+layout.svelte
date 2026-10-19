@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import { watchlist } from '#lib/watchlist.svelte.ts';
+	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
 	import { logOut } from '#lib/api.ts';
 	import favicon from '#lib/assets/favicon.svg';
 	import Crest from '#lib/ui/Crest.svelte';
@@ -19,6 +20,7 @@
 
 	let { data, children }: LayoutProps = $props();
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
+	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });
 
 	type Link = { href: string; label: string; icon: IconName; count?: number };
 
