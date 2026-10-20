@@ -525,10 +525,10 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 
 // AutoSet sets the best lineup it can for each day still to come in the
 // week of day, or for the week itself in a weekly league. A player who has
-// locked stays where he is. Every other place goes to whoever fits it,
-// those with a game still to play first, then by the fantasy points
-// projected for those games, then by fantasy points in the sport's last
-// season. In a slot that counts only some games, every
+// locked stays where he is. The other places go to as many players with a
+// game still to play as can fill them, then to the rest; where more play
+// than fit, the higher projections for those games start, then those with
+// more fantasy points in the sport's last season. In a slot that counts only some games, every
 // starter who is free to move is put on auto, so his last game of the week
 // that he plays in counts.
 func (s *Service) AutoSet(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time) error {
@@ -612,25 +612,54 @@ func best(view View, rank map[pgtype.UUID]int, now time.Time) []Entry {
 			filled[p.Slot]++
 		}
 	}
+	// The open seats, slot by slot.
+	var seats []settings.Slot
 	for _, slot := range view.Slots {
-		for filled[slot.Name] < slot.Count {
-			i := slices.IndexFunc(players, func(p Player) bool {
-				switch {
-				case taken[p.PlayerID] || p.Locked || !p.StarterEligible || !Fits(p.Positions, slot):
-					return false
-				case slot.GamesPerWeek > 0 && p.Slot != slot.Name:
-					// Coming into a slot that counts some games: he needs one still to play.
-					return ahead(p)
-				}
-				return true
-			})
-			if i < 0 {
-				break
+		for range slot.Count - filled[slot.Name] {
+			seats = append(seats, slot)
+		}
+	}
+	fits := func(p Player, slot settings.Slot) bool {
+		switch {
+		case p.Locked || !p.StarterEligible || !Fits(p.Positions, slot):
+			return false
+		case slot.GamesPerWeek > 0 && p.Slot != slot.Name:
+			// Coming into a slot that counts some games: he needs one still to play.
+			return ahead(p)
+		}
+		return true
+	}
+	// Seat the players best first. When the seats he fits are full, one
+	// who fits elsewhere moves over for him, so a player who could fill
+	// two slots never keeps the only one another fits; nobody seated is
+	// ever unseated, so those with a game to come start ahead of the rest
+	// and, among them, the higher projections.
+	sitter := make([]int, len(seats)) // index into players, or -1
+	for i := range sitter {
+		sitter[i] = -1
+	}
+	var seat func(p int, tried []bool) bool
+	seat = func(p int, tried []bool) bool {
+		for s, slot := range seats {
+			if tried[s] || !fits(players[p], slot) {
+				continue
 			}
-			p := players[i]
-			taken[p.PlayerID] = true
-			filled[slot.Name]++
-			entries = append(entries, Entry{Slot: slot.Name, PlayerID: p.PlayerID, Auto: slot.GamesPerWeek > 0})
+			tried[s] = true
+			if sitter[s] < 0 || seat(sitter[s], tried) {
+				sitter[s] = p
+				return true
+			}
+		}
+		return false
+	}
+	for p := range players {
+		if !taken[players[p].PlayerID] {
+			seat(p, make([]bool, len(seats)))
+		}
+	}
+	for s, p := range sitter {
+		if p >= 0 {
+			entries = append(entries, Entry{Slot: seats[s].Name, PlayerID: players[p].PlayerID, Auto: seats[s].GamesPerWeek > 0})
 		}
 	}
 	return entries
