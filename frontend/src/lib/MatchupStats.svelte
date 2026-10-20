@@ -1,13 +1,16 @@
 <script lang="ts">
-	import type { MatchupRow } from '#lib/matchupView.ts';
+	import type { GameSummary } from '#lib/api.ts';
+	import type { MatchupGame, MatchupRow } from '#lib/matchupView.ts';
 	import { columnValue, hockeyScoringColumns, statColumns, statValue, sumStats } from '#lib/statLine.ts';
 	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
 	import Icon from '#lib/ui/Icon.svelte';
-	import { dayLabel, points, timeOfDay } from '#lib/ui/time.ts';
+	import { dayLabel, points, sportsToday, timeOfDay } from '#lib/ui/time.ts';
 
 	// picking: whether the league's slots count only some games, so a game is picked and can be looked into.
-	let { rows, sport, scoring, showOther = false, picking = true }: { rows: MatchupRow[]; sport: string; scoring: Record<string, number>; showOther?: boolean; picking?: boolean } = $props();
+	// scores: the real games by id, for the clock and score of each.
+	let { rows, sport, scoring, showOther = false, picking = true, scores = {} }: { rows: MatchupRow[]; sport: string; scoring: Record<string, number>; showOther?: boolean; picking?: boolean; scores?: Record<string, GameSummary> } = $props();
 	let expanded = $state<string[]>([]);
+	let benchClosed = $state<string[]>([]); // groups whose bench is collapsed
 	const columns = (positions: string[]) => sport === 'nhl' ? hockeyScoringColumns(positions.includes('G'), scoring) : sport === 'nfl' ? [
 		['pass_yds','PYD','Passing yards'], ['pass_td','PTD','Passing touchdowns'], ['interceptions','INT','Interceptions'],
 		['rush_yds','RYD','Rushing yards'], ['rush_td','RTD','Rushing touchdowns'],
@@ -34,14 +37,27 @@
 		return { line: sumStats(games.map(g => g.stats)), played: games.some(g => Object.keys(g.stats ?? {}).length > 0) };
 	};
 	const shortDate = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+	const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined,{weekday:'short'});
+	// Where a game stands: its start time, or the score with the clock once it starts.
+	function gameState(game: MatchupGame): string {
+		const live = game.gameId ? scores[game.gameId] : undefined;
+		const status = live?.status ?? game.status;
+		if (!live || status === 'scheduled') return `${game.day === sportsToday() ? '' : `${weekday(game.day)} `}${timeOfDay(game.starts_at)}`;
+		// From the player's side when known, otherwise away – home as the game is listed.
+		const [ours, theirs] = game.at_home === undefined ? [live.away_score, live.home_score] : game.at_home ? [live.home_score, live.away_score] : [live.away_score, live.home_score];
+		const result = status === 'final' && game.at_home !== undefined ? ours > theirs ? 'W ' : ours < theirs ? 'L ' : 'T ' : '';
+		return `${result}${ours}–${theirs} · ${live.detail || (status === 'final' ? 'Final' : 'Live')}`;
+	}
 	function gameSummary(row: MatchupRow): string {
 		const games = visible(row);
 		const auto = !row.bench && row.selection.startsWith('Auto');
-		if (games.length === 1) return `${shortDate(games[0].day)} ${games[0].opponent}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
-		if (games.length > 1) return `${games.length} games${auto ? ' · Auto' : ''}`;
+		if (games.length === 1) return `${games[0].opponent} · ${gameState(games[0])}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
+		const playing = games.find(g => g.gameId && scores[g.gameId]?.status === 'live');
+		if (games.length > 1) return `${games.length} games${playing ? ` · ${playing.opponent} ${gameState(playing)}` : ''}${auto ? ' · Auto' : ''}`;
 		return row.bench ? 'No game in this view' : auto ? 'Auto · waiting for a game' : 'No selected game';
 	}
 	function toggle(id: string) { expanded = expanded.includes(id) ? expanded.filter(p => p !== id) : [...expanded,id]; }
+	function toggleBench(key: string) { benchClosed = benchClosed.includes(key) ? benchClosed.filter(k => k !== key) : [...benchClosed,key]; }
 </script>
 
 {#each groups as group (group.key)}
@@ -53,7 +69,9 @@
 			<tbody>
 				<tr class="section-row"><th colspan={group.columns.length+2}>Starting lineup</th></tr>
 				{#each group.rows as row, index (row.id)}
-					{#if row.bench && (index === 0 || !group.rows[index-1].bench)}<tr class="section-row"><th colspan={group.columns.length+2}>Bench · {group.rows.filter(p => p.bench).length}</th></tr>{/if}
+					{@const benchOpen = !benchClosed.includes(group.key)}
+					{#if row.bench && (index === 0 || !group.rows[index-1].bench)}<tr class="section-row"><th colspan={group.columns.length+2}><button class="bench-toggle" aria-expanded={benchOpen} onclick={() => toggleBench(group.key)}><Icon name={benchOpen ? 'down' : 'right'} size={11} /> Bench · {group.rows.filter(p => p.bench).length}</button></th></tr>{/if}
+					{#if !row.bench || benchOpen}
 					{@const stats = statsFor(row)}
 					{@const open = expanded.includes(row.id)}
 					<tr class="player-row" class:bench-row={row.bench}>
@@ -62,17 +80,18 @@
 							<div class="game-summary" class:flat={!picking} title={`${gameSummary(row)}${row.earlier ? ' · Started earlier' : ''}`}>{row.empty ? 'No starter selected' : gameSummary(row)}{#if row.earlier} · Earlier{/if}</div>
 						</th>
 						{#each group.columns as col (col.key)}<td class="num" title={col.title}>{stats.played ? statValue(columnValue(stats.line,col)) : '—'}</td>{/each}
-						<td class="num fp player-points">{#if row.empty}—{:else if row.points || !row.projected}{points(row.points)}{/if}{#if row.projected}<span class="proj" title="Projected for games still to come, from recent seasons and the betting line">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}</td>
+						<td class="num fp player-points" title={row.bench ? 'Bench points, not counted toward the matchup' : undefined}>{#if row.empty}—{:else if row.points || !row.projected}{points(row.points)}{/if}{#if row.projected}<span class="proj" title="Projected for games still to come, from recent seasons and the betting line">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}</td>
 					</tr>
 					{#if open && picking}
 						{#each visible(row) as game, i (i)}
 							{@const played = Object.keys(game.stats ?? {}).length > 0}
 							<tr class="game-line" class:uncounted={!game.counted}>
-								<td class="player-cell game-cell"><div>{#if game.gameId}<a href="/game/{game.gameId}" title={dayLabel(game.day)}>{shortDate(game.day)} {game.opponent}</a>{:else}{shortDate(game.day)} {game.opponent}{/if}</div><small class:counted={game.counted}>{game.label.replace('Selected · Awaiting scored stats','Awaiting scored stats')}{game.status === 'live' ? ' · Live' : game.status === 'final' ? ' · Final' : ` · ${timeOfDay(game.starts_at)}`}</small></td>
+								<td class="player-cell game-cell"><div>{#if game.gameId}<a href="/game/{game.gameId}" title={dayLabel(game.day)}>{shortDate(game.day)} {game.opponent}</a>{:else}{shortDate(game.day)} {game.opponent}{/if}</div><small class:counted={game.counted}>{game.label.replace('Selected · Awaiting scored stats','Awaiting scored stats')}{` · ${gameState(game)}`}</small></td>
 								{#each group.columns as col (col.key)}<td class="num">{played ? statValue(columnValue(game.stats,col)) : '—'}</td>{/each}
-								<td class="num fp">{game.counted ? points(game.points) : game.projected ? '' : '—'}{#if game.projected}<span class="proj" title="Projected">{points(game.projected)}</span>{/if}</td>
+								<td class="num fp">{game.counted || (row.bench && played) ? points(game.points) : game.projected ? '' : '—'}{#if game.projected}<span class="proj" title="Projected">{points(game.projected)}</span>{/if}</td>
 							</tr>
 						{:else}<tr class="game-line"><td colspan={group.columns.length+2} class="no-games">No games in this view.</td></tr>{/each}
+					{/if}
 					{/if}
 				{/each}
 			</tbody>
@@ -82,7 +101,9 @@
 
 <style>
 	.section-row th { padding:.25rem .45rem; background:var(--surface-2); color:var(--ink-soft); text-align:left; font-size:.58rem; }
+	.bench-toggle { display:inline-flex; align-items:center; gap:.25rem; padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 	.bench-row .slot { color:var(--ink-faint); }
+	.bench-row .fp { color:var(--ink-soft); font-weight:500; }
 	.stat-scroll { overflow-x: auto; scrollbar-width: thin; }
 	table { width: 100%; font-size: .72rem; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 	th, td { padding: .4rem .25rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getLineup, getMatchup, type Franchise, type League, type Lineup, type MatchupDetail, type TeamIdentity } from '#lib/api.ts';
+	import { getLineup, getMatchup, getScores, type Franchise, type GameSummary, type League, type Lineup, type MatchupDetail, type TeamIdentity } from '#lib/api.ts';
 	import { matchupRows } from '#lib/matchupView.ts';
 	import MatchupStats from '#lib/MatchupStats.svelte';
 	import { teamIdentity } from '#lib/identity.ts';
@@ -22,6 +22,8 @@
 	let lineupError = $state('');
 	let revision = $state(0);
 	let attempt = $state(0);
+	let scores = $state<Record<string, GameSummary>>({}); // the real games in view, by id, for their clock and score
+	let shownLineups = ''; // which matchup and day the lineups on screen belong to
 	const weekly = $derived(league.settings.lineup.period === 'week');
 	const pickedGames = $derived(league.settings.lineup.slots.some(s => (s.games_per_week ?? 0) > 0));
 
@@ -49,10 +51,12 @@
 		void revision;
 		if (!current || current.id !== id || !selected) return;
 		let active = true;
-		loadingLineups = true;
+		// A score update refreshes the lineups in place, so the page neither flickers nor jumps to the top.
+		const key = `${current.id}/${selected}`;
+		if (key !== shownLineups) loadingLineups = true;
 		Promise.all([current.home_franchise_id, current.away_franchise_id].map(f =>
 			f ? getLineup(leagueId, f, selected) : undefined)).then(found => {
-			if (active) { lineups = found; loadingLineups = false; lineupError = ''; }
+			if (active) { lineups = found; shownLineups = key; loadingLineups = false; lineupError = ''; }
 		}, e => { if (active) { loadingLineups = false; lineupError = String(e); } });
 		return () => { active = false; };
 	});
@@ -68,6 +72,22 @@
 		identity: side.id ? teamIdentity(franchises.find(f => f.id === side.id), identities, league.id) : { name: 'Bye', image_url: '' },
 		rows: matchupRows(side.scored, side.lineup, matchup!.period, wholePeriod, day, weekly)
 	})) : []);
+	// The scoreboards of the days in view give each game's clock and score; they reload with every score change.
+	const scoreDays = $derived([...new Set(sides.flatMap(s => s.rows.flatMap(r => r.games.map(g => g.day))))].sort().join(','));
+	$effect(() => {
+		const days = scoreDays;
+		const competition = league.competition;
+		void revision;
+		if (!days) return;
+		let active = true;
+		Promise.all(days.split(',').map(d => getScores(competition, d).catch(() => undefined))).then(boards => {
+			if (!active) return;
+			const found: Record<string, GameSummary> = {};
+			for (const board of boards) for (const game of board?.games ?? []) found[game.id] = game;
+			scores = found;
+		});
+		return () => { active = false; };
+	});
 	const windowStart = $derived(weekly ? lineups.find(Boolean)?.day ?? day : day);
 	const windowEnd = $derived(weekly ? lineups.find(Boolean)?.last_day ?? day : day);
 	const dates = $derived.by(() => {
@@ -123,12 +143,12 @@
 		<div class="teams" hidden={loadingLineups} aria-busy={loadingLineups}>
 			{#each sides as side, index (index)}
 				<section class="card flush team-panel">
-					<header class="spread"><strong>{side.identity.name}</strong><span class="scope-score">{side.id ? points(side.rows.reduce((n,p) => n+p.points,0)) : '—'} <small>{wholePeriod ? 'total FP' : weekly ? side.lineup?.doubled ? 'matchup FP' : 'week FP' : 'day FP'}</small></span></header>
+					<header class="spread"><strong>{side.identity.name}</strong><span class="scope-score">{side.id ? points(side.rows.reduce((n,p) => n+p.games.reduce((m,g) => g.counted ? m+g.points : m,0),0)) : '—'} <small>{wholePeriod ? 'total FP' : weekly ? side.lineup?.doubled ? 'matchup FP' : 'week FP' : 'day FP'}</small></span></header>
 					{#if side.lineup?.starts && !wholePeriod}<p class="cap small-text">Pitcher starts: {side.lineup.starts.made.filter(s => s.counts).length} / {side.lineup.starts.limit}{side.lineup.doubled ? ' · shared across double matchup' : ' this week'}</p>{/if}
 					{#if !side.id}<p class="empty muted">No opponent this round.</p>
 					{:else if side.rows.length === 0}<p class="empty muted">No starters or scored contributions for this view.</p>
 					{:else}
-						<MatchupStats rows={side.rows} sport={league.competition} scoring={league.settings.scoring} {showOther} picking={pickedGames} />
+						<MatchupStats rows={side.rows} sport={league.competition} scoring={league.settings.scoring} {showOther} picking={pickedGames} {scores} />
 					{/if}
 				</section>
 			{/each}

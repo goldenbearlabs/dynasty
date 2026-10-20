@@ -59,8 +59,8 @@ export function timeLeft(until: string, now = Date.now()): string {
 /** "7:30 PM" */
 export const timeOfDay = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-/** Fantasy points to one decimal place. */
-export const points = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+/** Fantasy points to two decimal places, since scoring rules can award quarter points. */
+export const points = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** The server's sports day: US Eastern time, with a 5am rollover. */
 export function sportsToday(): string {

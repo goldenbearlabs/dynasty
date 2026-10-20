@@ -4,11 +4,14 @@ export type MatchupGame = {
 	day: string; starts_at: string; status: string; opponent: string;
 	stats: Record<string, number>; points: number; counted: boolean;
 	label: string; gameId?: string;
+	/** Whether his team is at home; unknown for a scored game no longer on his lineup. */
+	at_home?: boolean;
 	/** Projected fantasy points if it is still to be played and will count; otherwise 0. */
 	projected: number;
 };
 export type MatchupRow = {
 	id: string; name: string; headshot: string; positions: string[]; slot: string;
+	/** Counted fantasy points; for a bench player, what his games would have been worth. */
 	points: number; games: MatchupGame[]; selection: string; earlier: boolean;
 	/** Projected fantasy points from the games in view still to be played that will count. */
 	projected: number;
@@ -41,7 +44,7 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 			const selected = g.counts && !capped;
 			return {
 				...g, opponent: `${g.at_home ? 'vs' : '@'} ${g.opponent}`, counted: !!line,
-				points: line?.points ?? 0, gameId: line?.game_id ?? g.game_id,
+				points: line?.points ?? (benched ? g.points : 0), gameId: line?.game_id ?? g.game_id,
 				projected: g.status === 'scheduled' && !benched && !capped && (g.counts || g === autoGame) ? g.projected : 0,
 				label: line ? 'Counted' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : player?.counts_last && !hasStats && g.status !== 'final'
 					? 'Auto candidate' : selected ? (g.status === 'scheduled' ? 'Selected' : 'Selected · Awaiting scored stats') : 'Not selected'
@@ -55,7 +58,7 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 		return {
 			id, name: player?.full_name ?? contribution!.full_name, headshot: player?.headshot_url ?? contribution!.headshot_url,
 			positions: player?.positions ?? official[0]?.positions ?? [], slot: benched ? 'BN' : player?.slot ?? official[0]?.slot ?? '',
-			points: official.reduce((total, game) => total + game.points, 0), games,
+			points: benched ? games.reduce((total, game) => total + game.points, 0) : official.reduce((total, game) => total + game.points, 0), games,
 			projected: games.reduce((total, game) => total + game.projected, 0),
 			selection: player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
 			bench: benched,
