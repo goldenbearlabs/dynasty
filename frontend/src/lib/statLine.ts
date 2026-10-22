@@ -90,13 +90,29 @@ export const statAbbreviations: Record<string, string> = {
 	pts: 'PTS', reb: 'REB', ast: 'AST', stl: 'STL', blk: 'BLK', tpm: '3PM', tpa: '3PA', tov: 'TO', fgm: 'FGM', fga: 'FGA', ftm: 'FTM', fta: 'FTA',
 	goals: 'G', assists: 'A', shots: 'SOG', hits: 'HIT', blocks: 'BLK', pp_points: 'PPP', pp_goals: 'PPG', plus_minus: '+/-', pim: 'PIM', saves: 'SV', goals_against: 'GA', goalie_wins: 'W', shutouts: 'SO',
 	pass_yds: 'PYD', pass_td: 'PTD', interceptions: 'INT', rush_yds: 'RYD', rush_td: 'RTD', receptions: 'REC', rec_yds: 'RECYD', rec_td: 'RECTD', fumbles_lost: 'FUM',
+	dd: 'DD', td: 'TD', pts40: '40+', pts50: '50+', bat_tb: 'TB', pit_l: 'L', pit_hld: 'HLD',
 	bat_ab: 'AB', bat_h: 'H', bat_r: 'R', bat_hr: 'HR', bat_rbi: 'RBI', bat_sb: 'SB', bat_bb: 'BB', bat_so: 'K', pit_ip: 'IP', pit_h: 'H', pit_er: 'ER', pit_bb: 'BB', pit_so: 'K', pit_w: 'W', pit_sv: 'SV', pit_gs: 'GS'
 };
 
-/** The stats that scored, as "2 G, 1 A, 4 SOG": every one that is not zero
- * and is worth points under the league's scoring, in the scoring's order. */
-export const scoringLine = (line: Record<string, number>, scoring: Record<string, number>) =>
+/** The order stats read in, left to right, whatever order the league's scoring lists them:
+ * PTS-REB-AST-STL-BLK-3PM-TO-DD-TD; yards, catches, touchdowns; G-A-SOG-HIT-BLK. */
+const statOrder = [
+	'pts', 'reb', 'ast', 'stl', 'blk', 'tpm', 'tov', 'dd', 'td', 'pts40', 'pts50',
+	'pass_yds', 'rush_yds', 'rec_yds', 'receptions', 'pass_td', 'rush_td', 'rec_td', 'interceptions', 'fumbles_lost',
+	'goals', 'assists', 'shots', 'hits', 'blocks', 'pp_points', 'pp_goals', 'plus_minus', 'pim',
+	'goalie_wins', 'saves', 'goals_against', 'shutouts',
+	'bat_h', 'bat_r', 'bat_hr', 'bat_rbi', 'bat_sb', 'bat_bb', 'bat_so', 'bat_tb',
+	'pit_ip', 'pit_w', 'pit_l', 'pit_sv', 'pit_hld', 'pit_so', 'pit_h', 'pit_er', 'pit_bb'
+];
+const rank = (key: string) => {
+	const i = statOrder.indexOf(key);
+	return i < 0 ? statOrder.length : i;
+};
+
+/** The stats that scored, in the sport's usual order: every one that is not
+ * zero and is worth points under the league's scoring. */
+export const scoringStats = (line: Record<string, number>, scoring: Record<string, number>) =>
 	Object.keys(scoring)
 		.filter((key) => scoring[key] !== 0 && line[key])
-		.map((key) => `${statValue(line[key])} ${statAbbreviations[key] ?? key.toUpperCase()}`)
-		.join(', ');
+		.sort((a, b) => rank(a) - rank(b))
+		.map((key) => ({ key, value: statValue(line[key]), label: statAbbreviations[key] ?? key.toUpperCase() }));

@@ -331,8 +331,9 @@ Session, private manager/admin routes, writes and live streams are not cached.
 Keys include a database namespace, generation, route/query or dataset selection,
 and a cache format version (`v1`); bump the version if cached JSON semantics change.
 
-Each signed-in manager has an **Inbox**, with an unread badge in the main
-navigation and a direct tab on mobile. It saves league roster moves (including
+Each signed-in manager has a mail icon in the top bar, with a red unread count.
+It opens a notification overlay on desktop and mobile without leaving the current
+page. Escape, the close button or clicking outside dismisses it. It saves league roster moves (including
 waiver status and clearing time), trade offers sent to you, and other managers
 targeting your players. Notifications support type and unread filters,
 pagination, mark read/unread and mark all read. Opening a notification marks it

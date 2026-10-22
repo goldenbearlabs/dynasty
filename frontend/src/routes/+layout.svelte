@@ -16,6 +16,7 @@
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon, { type IconName } from '#lib/ui/Icon.svelte';
 	import Toaster from '#lib/ui/Toaster.svelte';
+	import NotificationCenter from '#lib/NotificationCenter.svelte';
 	import LiveScores from '#lib/LiveScores.svelte';
 	import type { LayoutProps } from './$types';
 
@@ -56,7 +57,6 @@
 	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
 	const links = $derived<Link[]>([
 		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
-		...(data.me ? [{ href: '/inbox', label: 'Inbox', icon: 'bell', count: inbox.unread } as Link] : []),
 		{ href: '/league', label: 'League', icon: 'home' },
 		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
@@ -177,6 +177,7 @@
 		{/if}
 
 		<div class="page">
+ {#if data.me}<div class="notification-toolbar"><span>{data.dynasty.name}</span><NotificationCenter accountId={data.me.id} /></div>{/if}
 			{#if !path.startsWith('/draft/')}
 				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me} />
 			{/if}
@@ -198,6 +199,10 @@
 <Toaster />
 
 <style>
+ .notification-toolbar { position:sticky; top:0; z-index:25; display:flex; align-items:center; justify-content:space-between; gap:1rem; min-height:3.6rem; padding:.4rem 1.25rem; background:var(--surface); border-bottom:1px solid var(--rule); }
+ .notification-toolbar > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:700 .85rem var(--display); color:var(--ink-soft); }
+ @media(max-width:640px) { .notification-toolbar { padding:.4rem 1rem; } }
+
 	.bare {
 		max-width: 52rem;
 		margin: 0 auto;

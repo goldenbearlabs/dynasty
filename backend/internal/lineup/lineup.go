@@ -120,7 +120,10 @@ type Game struct {
 	// Projected is his fantasy points in a game still to be played, from
 	// his recent seasons and the betting line; zero once it starts.
 	Projected float64 `json:"projected"`
-	market    projection.Game
+	// Expected is the same projection for any game, kept once it starts, so
+	// a finished game can be held up against what was expected of it.
+	Expected float64 `json:"expected"`
+	market   projection.Game
 	// Stats is his stat line, by the competition's stat keys; empty until he plays.
 	Stats json.RawMessage `json:"stats"`
 }
@@ -178,10 +181,19 @@ func (s *Service) project(ctx context.Context, q *db.Queries, league db.League, 
 		p := &view.Players[i]
 		perGame, plays := projection.Baseline(seasons[p.PlayerID], lengths)
 		for j := range p.Games {
-			if g := &p.Games[j]; g.Status == "scheduled" {
-				g.market.Average = average
+			g := &p.Games[j]
+			g.market.Average = average
+			if g.Status == "scheduled" {
 				g.Projected = projection.Points(perGame, plays, g.market, rules.Scoring, c.Follows)
+				g.Expected = g.Projected
+				continue
 			}
+			// Once a game is under way, what was expected of him given that he
+			// plays: today's injury list does not undo it, and a part-timer
+			// or a goalie is not marked down for the games he might have sat.
+			before := g.market
+			before.Injured, before.Starter = false, "confirmed"
+			g.Expected = projection.Points(perGame, plays, before, rules.Scoring, c.Follows)
 		}
 	}
 	return nil

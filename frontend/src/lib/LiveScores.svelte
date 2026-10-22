@@ -12,7 +12,6 @@
 	} = $props();
 	let boards = $state<Record<string, Scoreboard>>({});
 	let details = $state<Record<string, GameDetail>>({});
-	let connections = $state<LiveSocket<Scoreboard>[]>([]);
 	let mineOnly = $state(false);
 	let sport = $state('all');
 	let status = $state('all');
@@ -44,7 +43,6 @@
 		const opened = keys.map((sport) => new LiveSocket<Scoreboard>(`/scores/${sport}/ws`, (board) => {
 			boards = { ...boards, [sport]: board };
 		}));
-		connections = opened;
 		return () => opened.forEach((socket) => socket.close());
 	});
 
@@ -75,16 +73,11 @@
 		(sport === 'all' || game.competition === sport) &&
 		(status === 'all' || game.status === status)));
 	const filtered = $derived((mineOnly && signedIn) || sport !== 'all' || status !== 'all');
-	const connected = $derived(connections.length > 0 && connections.every((s) => s.connected));
 	const loaded = $derived(sports.every((sport) => boards[sport]));
-	const liveCount = $derived(games.filter((g) => g.game.status === 'live').length);
 </script>
 
 <section class="scorebar" class:compact aria-label="Today's games and your players">
 	<div class="toolbar">
-		<div class="label"><span class="signal" class:connected aria-hidden="true"></span>
-			<strong>Game day</strong><span class="status">{connected || !sports.length ? (liveCount ? `${liveCount} live` : 'Today') : loaded ? 'Reconnecting…' : 'Connecting…'}</span>
-		</div>
 		<div class="controls">
 			<select aria-label="Filter games by sport" bind:value={sport}>
 				<option value="all">All sports</option>
@@ -144,13 +137,9 @@
 
 <style>
 	.scorebar { background: var(--surface); border-bottom: 1px solid var(--rule); min-width: 0; }
-	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--rule); }
-	.label, .controls { display: flex; align-items: center; gap: 0.4rem; }
+	.toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; padding: 0.35rem 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--rule); }
+	.controls { display: flex; align-items: center; gap: 0.4rem; }
 	.controls { flex-wrap: wrap; }
-	.label strong { font: 750 0.9rem var(--display); white-space: nowrap; }
-	.status { color: var(--ink-soft); font-size: 0.72rem; }
-	.signal { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
-	.signal.connected { background: var(--good); }
 	.controls select, .view-option { min-height: 1.8rem; padding: 0.2rem 0.45rem; font-size: 0.72rem; }
 	.view-option { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--ink-soft); }
 	.view-option[aria-pressed='true'] { color: var(--brand); background: var(--brand-soft); border-color: var(--brand); }
@@ -177,7 +166,7 @@
 	.empty { padding: 0.55rem 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
 	@media (max-width: 640px) {
 		.toolbar { padding: 0.4rem 0.85rem; }
-		.status, .arrows { display: none; }
+		.arrows { display: none; }
 		.controls { gap: 0.35rem; }
 		.controls { width: 100%; }
 		.all-scores { display: none; }

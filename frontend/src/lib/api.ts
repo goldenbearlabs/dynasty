@@ -568,6 +568,8 @@ export type LineupGame = {
 	starter: '' | 'confirmed' | 'expected' | 'other';
 	/** Projected fantasy points in a game still to be played, from his recent seasons and the betting line. */
 	projected: number;
+	/** The same projection for any game, kept once it starts: what was expected of him, given that he plays. */
+	expected?: number;
 	/** His stat line by the competition's stat keys; empty until he plays. */
 	stats: Record<string, number>;
 };

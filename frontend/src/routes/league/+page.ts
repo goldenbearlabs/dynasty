@@ -1,7 +1,8 @@
 import { getActivity, getOverall, getStandings } from '#lib/api.ts';
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async ({ parent }) => {
+export const load: PageLoad = async ({ parent, depends }) => {
+	depends('app:league-overview');
 	const { dynasty } = await parent();
 	if (!dynasty) return { activity: [], standings: [], overall: [] };
 

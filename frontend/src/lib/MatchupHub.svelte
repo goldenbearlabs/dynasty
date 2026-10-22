@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { getMatchups, type Franchise, type League, type Matchups, type TeamIdentity } from '#lib/api.ts';
+	import { getMatchups, getSchedule, type Franchise, type League, type Matchups, type SchedulePeriod, type TeamIdentity } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import { teamIdentity } from '#lib/identity.ts';
 	import MatchupView from '#lib/MatchupView.svelte';
@@ -38,6 +38,22 @@
 	const period = $derived(view?.period);
 	const matchups = $derived(view?.matchups ?? []);
 	const index = $derived(matchups.findIndex(m => m.id === selected));
+	// The whole season's pairings, so each week in the picker can name the viewer's opponent.
+	let schedule = $state<SchedulePeriod[]>([]);
+	$effect(() => {
+		const id = league.id;
+		schedule = [];
+		if (mine) getSchedule(id).then((s) => (schedule = s), () => {});
+	});
+	function weekLabel(p: { seq: number; starts_on: string; ends_on: string; is_playoff: boolean; double_games: boolean }) {
+		const week = `${p.is_playoff ? 'Playoffs · ' : ''}Week ${p.seq}`;
+		const m = schedule.find((s) => s.seq === p.seq)?.matchups.find((m) => m.home_franchise_id === mine || m.away_franchise_id === mine);
+		const extra = p.double_games ? ' · Double games' : '';
+		if (!mine || !schedule.length) return `${week} · ${dayLabel(p.starts_on)} – ${dayLabel(p.ends_on)}${extra}`;
+		if (!m) return `${week}${p.is_playoff ? '' : ' – No matchup'}${extra}`;
+		const opponent = m.home_franchise_id === mine ? m.away_franchise_id : m.home_franchise_id;
+		return `${week} – ${opponent ? `vs ${identity(opponent).name}` : 'Bye'}${extra}`;
+	}
 	const identity = (id: string | null) => id ? teamIdentity(franchises.find(f => f.id === id), identities, league.id) : { name: 'Bye', image_url: '' };
 	function move(by: number) {
 		const next = matchups[index + by];
@@ -74,7 +90,7 @@
 			<nav class="row" aria-label="Matchup period">
 				<button aria-label="Previous matchup period" disabled={period.seq <= 1} onclick={() => changePeriod(period.seq-1)}><Icon name="left" size={16} /></button>
 				<select aria-label="Matchup period" value={period.seq} onchange={e => changePeriod(Number(e.currentTarget.value))}>
-					{#each view.periods as p (p.id)}<option value={p.seq}>{p.is_playoff ? 'Playoffs' : 'Matchup'} {p.seq} · {dayLabel(p.starts_on)} – {dayLabel(p.ends_on)}{p.double_games ? ' · Double games' : ''}</option>{/each}
+					{#each view.periods as p (p.id)}<option value={p.seq}>{weekLabel(p)}</option>{/each}
 				</select>
 				<button aria-label="Next matchup period" disabled={period.seq >= (view.periods.at(-1)?.seq ?? 0)} onclick={() => changePeriod(period.seq+1)}><Icon name="right" size={16} /></button>
 			</nav>
@@ -98,7 +114,6 @@
 					<span class="small-text muted" aria-live="polite">{index+1} of {matchups.length} · Swipe to browse</span>
 					<button aria-label="Next matchup" disabled={index >= matchups.length-1} onclick={() => move(1)}><Icon name="right" size={16} /></button>
 				</div>
-				<a class="small-text" href="/matchups/{selected}">Matchup link <Icon name="link" size={13} /></a>
 			</div>
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions: This focusable carousel region supports arrow keys as an alternative to swiping. -->
 			<div class="swipe-area" role="region" aria-label="Selected matchup; left and right arrow keys browse matchups" tabindex="0"

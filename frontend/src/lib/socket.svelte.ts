@@ -51,9 +51,12 @@ export class LiveSocket<T> {
  * set up, since it ties the connections to that component's life.
  */
 export function onScoresChange(sports: () => string[], refresh: () => void) {
+	// Fresh page data can contain a new array for the same sports. Keep the
+	// subscriptions alive unless the actual set of sports changes.
+	const sportKey = $derived([...new Set(sports())].sort().join(','));
 	$effect(() => {
 		let timer: ReturnType<typeof setTimeout>;
-		const sockets = sports().map((sport) => {
+		const sockets = sportKey.split(',').filter(Boolean).map((sport) => {
 			let first = true;
 			return new LiveSocket(`/scores/${sport}/ws`, () => {
 				// The first message is only the snapshot of where things stand.

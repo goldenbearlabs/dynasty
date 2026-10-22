@@ -1,7 +1,7 @@
 <script lang="ts">
 	// League overview: standings and the latest activity across sports.
 	import { getOdds, type Odds } from '#lib/api.ts';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidate } from '$app/navigation';
 	import Activity from '#lib/Activity.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Standings from '#lib/Standings.svelte';
@@ -10,10 +10,16 @@
 
 	let { data }: PageProps = $props();
 	let odds = $state<Odds>();
+	let oddsDynasty = '';
 	$effect(() => {
 		const dynasty = data.dynasty?.id;
 		void data.standings;
-		odds = undefined;
+		// Keep the last odds visible during a score refresh so columns stay put.
+		// A different dynasty must never inherit the previous one's odds.
+		if (oddsDynasty !== (dynasty ?? '')) {
+			oddsDynasty = dynasty ?? '';
+			odds = undefined;
+		}
 		let active = true;
 		if (dynasty) getOdds().then(value => { if (active) odds = value; }, () => {});
 		return () => { active = false; };
@@ -29,8 +35,11 @@
 
 	function clearFilters() { sport = 'all'; activityType = 'all'; }
 
-	// Standings and activity refresh as games are played.
-	onScoresChange(() => data.dynasty?.leagues.map((l) => l.competition) ?? [], invalidateAll);
+	// Refresh this page's scores without reloading shared league/session data.
+	onScoresChange(
+		() => data.dynasty?.leagues.map((l) => l.competition) ?? [],
+		() => { void invalidate('app:league-overview'); }
+	);
 </script>
 
 <svelte:head><title>League · {data.dynasty?.name ?? 'Crossover Dynasty'}</title></svelte:head>
@@ -76,7 +85,8 @@
 			{#if filtered && activity.length === 0}
 				<Empty icon="clock" title="No matching activity">Try another sport or activity type.</Empty>
 			{:else}
-				<Activity items={activity} />
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex: the feed scrolls with the keyboard too -->
+				<div class="activity-scroll" role="region" aria-label="Recent activity" tabindex="0"><Activity items={activity} /></div>
 			{/if}
 		</section>
 	</div>
@@ -88,6 +98,8 @@
 	.activity-header { gap: 0.65rem; }
 	.filters { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
 	.filters select { padding: 0.35rem 0.55rem; font-size: 0.8rem; }
+	/* The feed scrolls in its own box rather than running down the page. */
+	.activity-scroll { max-height: min(30rem, 70dvh); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: var(--radius); scrollbar-width: thin; }
 	@media (max-width: 640px) {
 		.activity-header { align-items: flex-start; }
 		.filters { width: 100%; }

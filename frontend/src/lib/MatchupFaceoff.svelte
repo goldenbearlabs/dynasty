@@ -6,7 +6,7 @@
 	// stands.
 	import type { GameSummary } from '#lib/api.ts';
 	import { gameSummary, rowStats, type MatchupRow } from '#lib/matchupView.ts';
-	import { scoringLine } from '#lib/statLine.ts';
+	import { scoringStats } from '#lib/statLine.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { points } from '#lib/ui/time.ts';
 
@@ -28,6 +28,9 @@
 		Array.from({ length: Math.max(a.length, b.length) }, (_, i) => ({ a: a[i], b: b[i], slot: a[i]?.slot ?? b[i]?.slot ?? '' }));
 	const starters = $derived(pair(left.rows.filter((r) => !r.bench), right.rows.filter((r) => !r.bench)));
 	const bench = $derived(pair(left.rows.filter((r) => r.bench), right.rows.filter((r) => r.bench)));
+	const live = (row: MatchupRow) => row.games.some((g) => g.gameId && scores[g.gameId]?.status === 'live');
+	// Over or under what was expected, once the games behind his points are over.
+	const verdict = (row: MatchupRow) => (!row.settled || !row.pregame ? '' : row.points > row.pregame ? 'over' : row.points < row.pregame ? 'under' : '');
 </script>
 
 <!-- One side's cells: name then points on the left, points then name on the right. -->
@@ -38,20 +41,28 @@
 		{:else if row.empty}<span class="muted">Empty</span>
 		{:else}
 			{@const stats = rowStats(row)}
-			{@const line = stats.played ? scoringLine(stats.line, scoring) : ''}
+			{@const line = stats.played ? scoringStats(stats.line, scoring) : []}
 			<a href="/player/{row.id}" class="name">{row.name}</a>
-			{#if line}<span class="line">{line}</span>{/if}
-			<span class="state">{gameSummary(row, scores, false, picking)}{#if row.earlier} · Earlier{/if}</span>
+			{#if line.length}<span class="line">{#each line as stat (stat.key)}<span class="stat"><b>{stat.value}</b>{stat.label}</span>{/each}</span>{/if}
+			<span class="state" class:live={live(row)}>{gameSummary(row, scores, false, picking)}{#if row.earlier} · Earlier{/if}</span>
 		{/if}
 	</div>
 	{#if side === 'a'}{@render fp(row, side)}{/if}
 {/snippet}
 
 {#snippet fp(row: MatchupRow | undefined, side: 'a' | 'b')}
-	<div class="fp {side}" class:none={!row || row.empty || (!row.points && !row.projected)}>
+	<div class="fp {side}" class:none={!row || row.empty || (!row.started && !row.points && !row.upcoming)}>
 		{#if row && !row.empty}
-			{#if row.points || !row.projected}{points(row.points)}{/if}
-			{#if row.projected}<span class="proj" title="Projected for games still to come">{row.points ? '+' : ''}{points(row.projected)}</span>{/if}
+			{#if !row.started && !row.points && row.upcoming}
+				<!-- Nothing of his counts yet: what his next start is projected for, not a zero. -->
+				<span class="ahead" title="Projected for his next start">{points(row.upcoming)}</span>
+			{:else if !row.started && !row.points}
+				– <!-- no game of his in view -->
+			{:else}
+				<span class={verdict(row)} title={verdict(row) ? `Projected ${points(row.pregame)} before the game` : undefined}>{points(row.points)}</span>
+				{#if row.settled && row.pregame}<span class="proj" title="Projected before the game">proj {points(row.pregame)}</span>{/if}
+				{#if row.projected}<span class="proj" title="Projected for games still to come">+{points(row.projected)}</span>{/if}
+			{/if}
 		{:else if row?.empty}–{/if}
 	</div>
 {/snippet}
@@ -80,6 +91,7 @@
 
 <style>
 	.faceoff {
+		container-type: inline-size;
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -115,19 +127,67 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	/* Three tiers: the name, the stats that scored, where his game stands. */
 	.name {
 		color: var(--ink);
-		font-size: 0.78rem;
-		font-weight: 650;
+		font: 700 0.84rem/1.3 var(--body);
+		letter-spacing: -0.005em;
 	}
 	.line {
-		font: 600 0.6rem var(--mono);
-		color: var(--ink);
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 0.5rem;
+		margin-top: 0.1rem;
 		white-space: normal;
 	}
-	.state {
-		font-size: 0.58rem;
+	.who.b .line {
+		justify-content: flex-end;
+	}
+	.stat {
+		white-space: nowrap;
+		font: 500 0.6rem/1.45 var(--body);
+		letter-spacing: 0.03em;
 		color: var(--ink-soft);
+	}
+	.stat b {
+		margin-right: 0.15rem;
+		font: 700 0.74rem var(--body);
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0;
+		color: var(--ink);
+	}
+	.state {
+		margin-top: 0.1rem;
+		font-size: 0.64rem;
+		color: var(--ink-faint);
+	}
+	.state.live {
+		color: var(--bad);
+		font-weight: 600;
+	}
+	/* Wide enough: the stats sit on the name's line. */
+	@container (min-width: 46rem) {
+		.who {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: baseline;
+			column-gap: 0.7rem;
+		}
+		.who.b {
+			flex-direction: row-reverse;
+		}
+		.who > .name {
+			flex: none;
+			max-width: 60%;
+		}
+		.line {
+			flex: 1 1 0;
+			min-width: 0;
+			margin-top: 0;
+		}
+		.state {
+			flex-basis: 100%;
+		}
 	}
 	.fp {
 		font: 750 0.85rem var(--mono);
@@ -140,8 +200,22 @@
 		color: var(--ink-faint);
 		font-weight: 500;
 	}
-	.proj {
+	.fp > span {
 		display: block;
+	}
+	.over {
+		color: var(--good);
+	}
+	.under {
+		color: var(--bad);
+	}
+	/* A projection standing in for points not yet scored. */
+	.ahead {
+		font-style: italic;
+		font-weight: 550;
+		color: var(--ink-soft);
+	}
+	.proj {
 		font: italic 500 0.6rem var(--body);
 		color: var(--ink-soft);
 	}
@@ -170,13 +244,16 @@
 			padding: 0.45rem 0.9rem;
 		}
 		.name {
-			font-size: 0.9rem;
+			font-size: 0.95rem;
 		}
-		.line {
-			font-size: 0.7rem;
+		.stat {
+			font-size: 0.66rem;
+		}
+		.stat b {
+			font-size: 0.82rem;
 		}
 		.state {
-			font-size: 0.68rem;
+			font-size: 0.7rem;
 		}
 		.fp {
 			font-size: 1rem;
@@ -195,8 +272,8 @@
 		}
 	}
 	.bench .fp {
-		color: var(--ink-soft);
 		font-weight: 550;
+		opacity: 0.8;
 	}
 	.bench-head {
 		border-top: 1px solid var(--rule);

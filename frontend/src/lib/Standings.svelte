@@ -39,7 +39,75 @@
 		((page.data.dynasty as Dynasty | null)?.settings.overall_title.points_by_finish ?? []).map((p, i) => `${p} for ${i + 1}${['st', 'nd', 'rd'][i] ?? 'th'}`)
 	);
 	const record = (r: { wins: number; losses: number; ties: number }) => `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`;
+	// A record as a share of games won, ties counting half, to sort by.
+	const share = (r: { wins: number; losses: number; ties: number }) => {
+		const games = r.wins + r.losses + r.ties;
+		return games ? (r.wins + r.ties / 2) / games : 0;
+	};
+
+	// ---- sorting: a click on a heading sorts by it, a second click flips it ----
+	type Sort = { key: string; desc: boolean };
+	let sort = $state<Sort>({ key: 'place', desc: false });
+	$effect(() => {
+		void shown;
+		sort = { key: 'place', desc: false }; // each table opens in standings order
+	});
+	// Places and finishes read best-first going up; everything else going down.
+	const ascendingFirst = (key: string) => key === 'place' || key === 'name' || key.startsWith('finish:');
+	function sortBy(key: string) {
+		sort = sort.key === key ? { key, desc: !sort.desc } : { key, desc: !ascendingFirst(key) };
+	}
+	function sorted<T>(rows: T[], value: (row: T, place: number, key: string) => number | string): { row: T; place: number }[] {
+		const list = rows.map((row, i) => ({ row, place: i + 1 }));
+		if (sort.key === 'place' && !sort.desc) return list;
+		const { key, desc } = sort;
+		return list.toSorted((a, b) => {
+			const x = value(a.row, a.place, key), y = value(b.row, b.place, key);
+			const order = typeof x === 'string' ? x.localeCompare(y as string) : x - (y as number);
+			return (desc ? -order : order) || a.place - b.place;
+		});
+	}
+	const nameOf = (id: string, leagueId?: string) => teamIdentity(franchise(id), identities, leagueId).name;
+	const leagueRows = $derived(
+		table
+			? sorted(table.rows, (r, place, key) =>
+					({
+						place,
+						name: nameOf(r.franchise_id, league?.id),
+						record: share(r),
+						points: headToHead ? r.points_for : r.points,
+						against: r.points_against,
+						playoffs: playoffOdds(r.franchise_id)?.playoffs ?? 0
+					})[key] ?? place
+				)
+			: []
+	);
+	const overallRows = $derived(
+		latest
+			? sorted(latest.rows, (r, place, key) =>
+					key.startsWith('finish:')
+						? (r.finishes[key.slice(7)] ?? 99)
+						: (({
+								place,
+								name: franchise(r.franchise_id)?.name ?? '',
+								record: share(r),
+								adjusted: r.adjusted_points,
+								points: r.points,
+								title: titleOdds(r.franchise_id)?.title ?? 0
+							})[key] ?? place)
+				)
+			: []
+	);
 </script>
+
+<!-- A heading that sorts its column. -->
+{#snippet heading(key: string, label: string, cls = 'num', title = '')}
+	<th class={cls} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'} title={title || undefined}>
+		<button class="sort" class:on={sort.key === key} onclick={() => sortBy(key)}>
+			{label}{#if sort.key === key}<span class="arrow" aria-hidden="true">{sort.desc ? '▼' : '▲'}</span>{/if}
+		</button>
+	</th>
+{/snippet}
 
 <div class="stack tight">
 	<Tabs {tabs} bind:value={() => shown || tables[0]?.competition || '', (v) => (shown = v)} label="Standings" />
@@ -60,20 +128,20 @@
 				<table>
 					<thead>
 						<tr>
-							<th class="rank">#</th>
-							<th>Franchise</th>
-							{#if headToHead}<th class="num">Record</th>{/if}
-							<th class="num">{headToHead ? 'Points for' : 'Points'}</th>
-							{#if headToHead}<th class="num wide">Points against</th>{/if}
-							{#if leagueOdds}<th class="num" title="Chance of a playoff place, from simulating the rest of the season">Playoffs</th>{/if}
+							{@render heading('place', '#', 'rank')}
+							{@render heading('name', 'Franchise', '')}
+							{#if headToHead}{@render heading('record', 'Record')}{/if}
+							{@render heading('points', headToHead ? 'Points for' : 'Points')}
+							{#if headToHead}{@render heading('against', 'Points against', 'num wide')}{/if}
+							{#if leagueOdds}{@render heading('playoffs', 'Playoffs', 'num', 'Chance of a playoff place, from simulating the rest of the season')}{/if}
 						</tr>
 					</thead>
 					<tbody>
-						{#each table.rows as row, i (row.franchise_id)}
+						{#each leagueRows as { row, place } (row.franchise_id)}
 							{@const f = franchise(row.franchise_id)}
 							{@const chance = playoffOdds(row.franchise_id)}
-							<tr class:cut={i === cutoff - 1 && i < table.rows.length - 1}>
-								<td class="rank">{i + 1}</td>
+							<tr class:cut={sort.key === 'place' && !sort.desc && place === cutoff && place < table.rows.length}>
+								<td class="rank">{place}</td>
 								<td>
 									<a class="who" href="/franchise/{f?.slug}">
 										<Crest name={teamIdentity(f,identities,league?.id).name} src={teamIdentity(f,identities,league?.id).image_url} size={28} />
@@ -108,20 +176,20 @@
 			<table>
 				<thead>
 					<tr>
-						<th class="rank">#</th>
-						<th>Franchise</th>
-						{#each tables as t (t.league_id)}<th class="num wide">{t.competition}</th>{/each}
-						<th class="num">Record</th>
-						<th class="num" title="Points for above each league's median, added up across leagues">Adj. PF</th>
-						<th class="num">Points</th>
-						{#if odds && !latest.final}<th class="num" title="Chance of winning the overall title, from the simulated seasons">Title</th>{/if}
+						{@render heading('place', '#', 'rank')}
+						{@render heading('name', 'Franchise', '')}
+						{#each tables as t (t.league_id)}{@render heading(`finish:${t.competition}`, t.competition, 'num wide')}{/each}
+						{@render heading('record', 'Record')}
+						{@render heading('adjusted', 'Adj. PF', 'num', "Points for above each league's median, added up across leagues")}
+						{@render heading('points', 'Points')}
+						{#if odds && !latest.final}{@render heading('title', 'Title', 'num', 'Chance of winning the overall title, from the simulated seasons')}{/if}
 					</tr>
 				</thead>
 				<tbody>
-					{#each latest.rows as row, i (row.franchise_id)}
+					{#each overallRows as { row, place } (row.franchise_id)}
 						{@const f = franchise(row.franchise_id)}
 						<tr>
-							<td class="rank">{i + 1}</td>
+							<td class="rank">{place}</td>
 							<td>
 								<a class="who" href="/franchise/{f?.slug}">
 									<Crest src={f?.image_url} name={f?.name ?? ''} size={28} />
@@ -177,6 +245,26 @@
 	}
 	th.num {
 		text-align: right;
+	}
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		letter-spacing: inherit;
+		text-transform: inherit;
+		cursor: pointer;
+	}
+	.sort:hover,
+	.sort.on {
+		color: var(--ink);
+	}
+	.arrow {
+		font-size: 0.6em;
 	}
 	/* The playoff cutoff: a line under the last team in. */
 	tr.cut td {

@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	// Line icons drawn on a 24px grid. Add one by adding its path data here.
 	const paths = {
+		mail: 'M3 5h18v14H3zM3 5l9 7 9-7',
 		bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
 		star: 'm12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9Z',
 		home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',

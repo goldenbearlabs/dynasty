@@ -10,6 +10,8 @@ export type MatchupGame = {
 	at_home?: boolean;
 	/** Projected fantasy points if it is still to be played and will count; otherwise 0. */
 	projected: number;
+	/** What was expected of him in it, before it started, whether or not it counts. */
+	expected: number;
 };
 export type MatchupRow = {
 	id: string; name: string; headshot: string; positions: string[]; slot: string;
@@ -17,6 +19,13 @@ export type MatchupRow = {
 	points: number; games: MatchupGame[]; selection: string; earlier: boolean;
 	/** Projected fantasy points from the games in view still to be played that will count. */
 	projected: number;
+	/** Whether any game behind his points has started. */
+	started: boolean;
+	/** What was expected of him in the games behind his points; with settled, once they are all final. */
+	pregame: number;
+	settled: boolean;
+	/** Before any game of his counts: the projection of his next start, to show in place of a zero. */
+	upcoming: number;
 	bench?: boolean;
 	empty?: boolean;
 };
@@ -48,20 +57,30 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 				...g, opponent: `${g.at_home ? 'vs' : '@'} ${g.opponent}`, counted: !!line,
 				points: line?.points ?? (benched ? g.points : 0), gameId: line?.game_id ?? g.game_id,
 				projected: g.status === 'scheduled' && !benched && !capped && (g.counts || g === autoGame) ? g.projected : 0,
+				expected: g.expected ?? 0,
 				label: line ? 'Counted' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : player?.counts_last && !hasStats && g.status !== 'final'
 					? 'Auto candidate' : selected ? (g.status === 'scheduled' ? 'Selected' : 'Selected · Awaiting scored stats') : 'Not selected'
 			};
 		});
 		for (const line of official) {
 			if (raw.some(g => matches(g, line))) continue;
-			games.push({ ...line, gameId: line.game_id, opponent: `${line.away} @ ${line.home}`, counted: true, label: 'Counted', projected: 0 });
+			games.push({ ...line, gameId: line.game_id, opponent: `${line.away} @ ${line.home}`, counted: true, label: 'Counted', projected: 0, expected: 0 });
 		}
 		games.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+		// The games behind his points: those that count, or on the bench every one he played.
+		const scoring = games.filter((g) => g.status !== 'scheduled' && (benched ? Object.keys(g.stats ?? {}).length > 0 : g.counted));
+		const projected = games.reduce((total, game) => total + game.projected, 0);
+		const next = games.find((g) => g.status === 'scheduled' && (g.label.startsWith('Selected') || g.label === 'Auto candidate'))
+			?? games.find((g) => g.status === 'scheduled');
 		return {
+			started: scoring.length > 0,
+			pregame: scoring.reduce((total, game) => total + game.expected, 0),
+			settled: scoring.length > 0 && scoring.every((g) => g.status === 'final'),
+			upcoming: projected || (!benched && next ? next.expected : 0),
 			id, name: player?.full_name ?? contribution!.full_name, headshot: player?.headshot_url ?? contribution!.headshot_url,
 			positions: player?.positions ?? official[0]?.positions ?? [], slot: benched ? 'BN' : player?.slot ?? official[0]?.slot ?? '',
 			points: benched ? games.reduce((total, game) => total + game.points, 0) : official.reduce((total, game) => total + game.points, 0), games,
-			projected: games.reduce((total, game) => total + game.projected, 0),
+			projected,
 			selection: player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
 			bench: benched,
 			earlier: !player || (benched && official.length > 0)
@@ -73,7 +92,7 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 		for(let i=0; i<slot.count; i++) {
 			const row = rows.find(row => !row.bench && !row.earlier && row.slot === slot.name && !used.has(row.id));
 			if(row) { ordered.push(row); used.add(row.id); }
-			else ordered.push({id:`empty-${slot.name}-${i}`, name:'Empty', headshot:'', positions:slot.positions, slot:slot.name, points:0, projected:0, games:[], selection:'', earlier:false, empty:true});
+			else ordered.push({id:`empty-${slot.name}-${i}`, name:'Empty', headshot:'', positions:slot.positions, slot:slot.name, points:0, projected:0, started:false, pregame:0, settled:false, upcoming:0, games:[], selection:'', earlier:false, empty:true});
 		}
 	}
 	return [...ordered,...rows.filter(row => !used.has(row.id) && !row.bench),...rows.filter(row => row.bench)];

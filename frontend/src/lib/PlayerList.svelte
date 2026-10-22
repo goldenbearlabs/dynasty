@@ -534,11 +534,11 @@
 													>{:else}<a href="/player/{player.id}"
 														><strong>{player.full_name}</strong></a
 													>{/if}
+												<ProspectRank id={player.id} ranking={player} />
 												<WatchStar playerID={player.id} playerName={player.full_name} />
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />
-												<ProspectRank id={player.id} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
 													>{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
