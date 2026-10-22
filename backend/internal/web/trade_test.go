@@ -193,7 +193,7 @@ func TestTradeFlow(t *testing.T) {
 	var first tradeView
 	bob.want(http.StatusCreated, "POST", "/api/trades", blockbuster, &first)
 
-	// An open offer is private to its parties (and the commissioner).
+	// An unaccepted offer is private to its parties.
 	count := func(b *browser) int {
 		t.Helper()
 		var trades []tradeView

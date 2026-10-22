@@ -174,6 +174,21 @@ type Matchup struct {
 	BracketSlot     int32       `json:"bracket_slot"`
 }
 
+type Notification struct {
+	ID          int64              `json:"id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Kind        string             `json:"kind"`
+	Title       string             `json:"title"`
+	Body        string             `json:"body"`
+	Href        string             `json:"href"`
+	Competition string             `json:"competition"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	WaiverUntil pgtype.Timestamptz `json:"waiver_until"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ReadAt      pgtype.Timestamptz `json:"read_at"`
+}
+
 type Period struct {
 	ID          pgtype.UUID `json:"id"`
 	SeasonID    pgtype.UUID `json:"season_id"`

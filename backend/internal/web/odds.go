@@ -30,7 +30,7 @@ func (s *Server) getOdds(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
-		run, err := s.Scoring.Odds(r.Context(), d, s.Lineups.Projected)
+		run, err := s.Scoring.Odds(r.Context(), d)
 		if err != nil {
 			s.fail(w, r, err)
 			return

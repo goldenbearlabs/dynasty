@@ -29,7 +29,7 @@
 	const cutoff = $derived(headToHead && league ? league.settings.format.playoff_teams : 0);
 
 	// Simulated chances, shown while a season is still being played.
-	const percent = (p: number) => (p >= 0.995 && p < 1 ? '>99%' : p > 0 && p < 0.005 ? '<1%' : `${Math.round(p * 100)}%`);
+	const percent = (p: number) => `${(p * 100).toFixed(1)}%`;
 	const leagueOdds = $derived(
 		table?.season?.status === 'active' && headToHead ? odds?.leagues.find((l) => l.league_id === table.league_id) : undefined
 	);
@@ -86,7 +86,7 @@
 								<td class="num" class:total={!headToHead}>{points(headToHead ? row.points_for : row.points)}</td>
 								{#if headToHead}<td class="num wide">{points(row.points_against)}</td>{/if}
 								{#if leagueOdds}
-									<td class="num odds" title={chance ? `Projected ${chance.wins.toFixed(1)}-${chance.losses.toFixed(1)}` : undefined}>{chance ? percent(chance.playoffs) : '–'}</td>
+									<td class="num odds" title={chance ? `${chance.clinched ? 'Clinched. ' : chance.eliminated ? 'Eliminated. ' : ''}Projected ${chance.wins.toFixed(1)}-${chance.losses.toFixed(1)}` : undefined}>{chance ? percent(chance.playoffs) : '–'}</td>
 								{/if}
 							</tr>
 						{/each}
@@ -96,7 +96,7 @@
 			<p class="muted small-text">
 				{table.season.year} season, {table.season.status === 'complete' ? 'final' : 'in progress'}. Only starters score.
 				{#if cutoff}The line marks the playoff cutoff.{/if}
-				{#if leagueOdds}Playoff chances come from playing out the rest of the season thousands of times, using each team's record, schedule and projected points.{/if}
+				{#if leagueOdds}Playoff chances come from playing out the rest of the season thousands of times: results so far are fixed, and the matchups further out are less certain. Only a clinched or eliminated team shows 100% or 0%.{/if}
 				{#if headToHead && league}Ranked by {league.settings.format.standings_by === 'win_percentage' ? 'win percentage' : league.settings.format.standings_by === 'points' ? 'points for' : 'wins, then fewer losses'}; tiebreakers: {(league.settings.format.tiebreakers ?? ['points_for','head_to_head','points_against']).map((r) => r === 'points_for' ? 'points for' : r === 'head_to_head' ? 'head-to-head' : 'points against (higher first)').join(', ')}.{/if}
 			</p>
 			{#if headToHead && league}

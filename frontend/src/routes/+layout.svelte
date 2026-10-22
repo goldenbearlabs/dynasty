@@ -8,6 +8,7 @@
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, untrack } from 'svelte';
+	import { inbox } from '#lib/inbox.svelte.ts';
 	import { watchlist } from '#lib/watchlist.svelte.ts';
 	import { tradeMarket } from '#lib/tradeMarket.svelte.ts';
 	import { logOut } from '#lib/api.ts';
@@ -20,18 +21,23 @@
 
 	let { data, children }: LayoutProps = $props();
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
+	$effect(() => { const id = data.me?.id || ''; untrack(() => inbox.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });
 
 	let sidebarCollapsed = $state(false);
 	let wideScreen = $state(false);
 	const collapsed = $derived(wideScreen && sidebarCollapsed);
 	onMount(() => {
+		const refreshInbox = () => { if (document.visibilityState === 'visible') void inbox.refresh(); };
+		const inboxTimer = setInterval(refreshInbox, 20000);
+		window.addEventListener('focus', refreshInbox);
+		document.addEventListener('visibilitychange', refreshInbox);
 		const media = window.matchMedia('(min-width: 861px)');
 		const resize = () => { wideScreen = media.matches; };
 		resize();
 		media.addEventListener('change', resize);
 		try { sidebarCollapsed = localStorage.getItem('crossover.sidebar.collapsed') === 'true'; } catch { /* Storage may be unavailable. */ }
-		return () => media.removeEventListener('change', resize);
+		return () => { media.removeEventListener('change', resize); clearInterval(inboxTimer); window.removeEventListener('focus', refreshInbox); document.removeEventListener('visibilitychange', refreshInbox); };
 	});
 	function toggleSidebar() {
 		sidebarCollapsed = !sidebarCollapsed;
@@ -50,6 +56,7 @@
 	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
 	const links = $derived<Link[]>([
 		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
+		...(data.me ? [{ href: '/inbox', label: 'Inbox', icon: 'bell', count: inbox.unread } as Link] : []),
 		{ href: '/league', label: 'League', icon: 'home' },
 		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
@@ -70,7 +77,7 @@
 	const TABS = 4;
 	const more = $derived(links.slice(TABS));
 	let moreOpen = $state(false);
-	afterNavigate(() => (moreOpen = false));
+	afterNavigate(() => { moreOpen = false; void inbox.refresh(); });
 
 	// The landing page, the setup wizard and invite links stand alone.
 	const bare = $derived(!data.dynasty || path === '/' || path.startsWith('/join/'));

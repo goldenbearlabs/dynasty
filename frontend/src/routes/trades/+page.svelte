@@ -24,6 +24,8 @@
 	const of = (view: Exclude<View, 'market'>) => data.trades.filter((t) => statuses[view].includes(t.status));
 
 	let view = $state<View>(untrack(() => (page.url.searchParams.get('view') === 'block' ? 'market' : 'open')));
+	const requested = $derived(page.url.searchParams.get('trade'));
+	const focused = $derived(data.trades.find(t => t.id === requested));
 	const tabs = $derived([
 		{ value: 'market' as View, label: 'Trade block', count: tradeMarket.data.interest.length || undefined },
 		{ value: 'open' as View, label: 'Open offers', count: of('open').length },
@@ -44,7 +46,12 @@
 		<h1>Trades</h1>
 		{#if data.me}<a class="button primary" href="/trades/new"><Icon name="plus" size={16} /> New trade</a>{/if}
 	</div>
-	<Tabs {tabs} bind:value={view} label="Trades" />
+	{#if requested}
+ <a class="small-text" href="/trades">← All trades</a>
+ {#if focused}<TradeCard trade={focused} franchises={data.dynasty?.franchises ?? []} me={data.me} onchange={invalidateAll} />
+ {:else}<Empty icon="trade" title="Offer unavailable">This offer is unavailable to your account.</Empty>{/if}
+ {:else}
+ <Tabs {tabs} bind:value={view} label="Trades" />
 
 	{#if view === 'market'}
 		{#if data.dynasty}<Market dynasty={data.dynasty} me={data.me} rosters={data.myTeam?.rosters ?? []} competitions={data.competitions} />{/if}
@@ -55,4 +62,5 @@
 		<Empty icon="trade" title="Nothing here">{empty[view]}</Empty>
 	{/each}
 	{/if}
+ {/if}
 </div>

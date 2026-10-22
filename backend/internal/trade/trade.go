@@ -596,9 +596,9 @@ type View struct {
 	Items   []db.ListTradeItemsRow `json:"items"`
 }
 
-// List returns the trades a viewer may see: completed trades are public,
-// and open or abandoned offers are shown only to their parties and to
-// commissioners. viewer is nil for someone not signed in.
+// List returns completed and fully accepted trades publicly. Unaccepted
+// offers, including abandoned ones, are private to their parties even when
+// another viewer is a commissioner.
 func (s *Service) List(ctx context.Context, dynastyID pgtype.UUID, viewer *db.Franchise) ([]View, error) {
 	q := db.New(s.pool)
 	trades, err := q.ListTrades(ctx, dynastyID)
@@ -627,9 +627,10 @@ func (s *Service) List(ctx context.Context, dynastyID pgtype.UUID, viewer *db.Fr
 				view.Items = append(view.Items, i)
 			}
 		}
-		public := trade.Status == "executed" || trade.Status == "reversed"
-		involved := viewer != nil && (viewer.IsCommissioner ||
-			slices.ContainsFunc(view.Parties, func(p db.TradeParty) bool { return p.FranchiseID == viewer.ID }))
+		public := trade.Status == "executed" || trade.Status == "reversed" ||
+			(len(view.Parties) > 1 && !slices.ContainsFunc(view.Parties, func(p db.TradeParty) bool { return !p.AcceptedAt.Valid }))
+		involved := viewer != nil && viewer.DynastyID == dynastyID &&
+			slices.ContainsFunc(view.Parties, func(p db.TradeParty) bool { return p.FranchiseID == viewer.ID })
 		if public || involved {
 			views = append(views, view)
 		}

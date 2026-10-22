@@ -12,6 +12,7 @@ import (
 
 // listTrades returns the trades the viewer may see.
 func (s *Server) listTrades(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	d, err := s.Queries.GetDynasty(r.Context())
 	if err != nil {
 		s.fail(w, r, err)

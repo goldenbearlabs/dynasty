@@ -547,7 +547,7 @@ export type OverallYear = {
 
 /** Simulated chances, 0 to 1: a playoff place in each league, and the overall title. */
 export type Odds = {
-	leagues: { league_id: string; competition: string; rows: { franchise_id: string; playoffs: number; wins: number; losses: number; place: number }[] }[];
+	leagues: { league_id: string; competition: string; rows: { franchise_id: string; playoffs: number; clinched: boolean; eliminated: boolean; wins: number; losses: number; place: number }[] }[];
 	overall: { franchise_id: string; title: number; points: number }[];
 };
 
@@ -1058,3 +1058,17 @@ export const orderWatchlist = (player_ids: string[]) => request<void>('PUT', '/w
 
 export const getRosterPerformance = (leagueId: string, franchiseId: string, window: string, season?: string, day?: string) =>
  request<RosterPerformance>('GET', `/leagues/${leagueId}/roster-stats${query({franchise:franchiseId,window,season,day})}`);
+
+export type NotificationKind = 'roster' | 'trade' | 'target';
+export type InboxNotification = {
+ id: number; kind: NotificationKind; title: string; body: string; href: string;
+ competition: string; player_id: string | null; league_id: string | null;
+ waiver_until: string | null; current_waiver_until: string | null;
+ created_at: string; read_at: string | null;
+};
+export type NotificationSummary = { unread: number; latest_id: number };
+export type NotificationPage = { notifications: InboxNotification[]; total: number; page: number; per_page: number };
+export const getNotifications = (filter: { page?: number; kind?: string; unread?: string } = {}) => request<NotificationPage>('GET', `/notifications${query(filter)}`);
+export const getNotificationSummary = () => request<NotificationSummary>('GET', '/notifications/summary');
+export const readNotification = (id: number, read: boolean) => request<void>('PATCH', `/notifications/${id}`, { read });
+export const readAllNotifications = (through_id: number) => request<void>('POST', '/notifications/read', { through_id });

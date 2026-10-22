@@ -19,25 +19,33 @@ import (
 )
 
 // Playoff odds. Each league's regular season is played out many times from
-// where it stands: the record so far, the matchup in progress, and the
-// schedule still to come. A team's score in a matchup is drawn around what
-// it should score, which blends what it has scored per day so far with what
-// its lineup is projected to score, leaning on the projection early and on
-// the results as they build up. Pairing the leagues' runs gives the chance
-// of each franchise taking the overall title.
-
-// Projector is what a franchise's starters are projected to add between
-// two days, from today on.
-type Projector func(ctx context.Context, league db.League, franchiseID pgtype.UUID, from, to time.Time) (float64, error)
+// where it stands. What has happened is fixed: finished matchups, and the
+// points already scored in the one in progress. What is to come is drawn
+// around what each team has scored a day so far, pulled hard toward the
+// league's average until there are weeks of results to go on. Nobody's
+// lineup today is used: rosters, lineups and schedules change.
+//
+// The uncertainty is deliberately wide. Each run gives every team its own
+// strength for the season, which then drifts week by week, so the matchups
+// furthest out are the least certain. Pairing the leagues' runs gives the
+// chance of each franchise taking the overall title.
 
 const (
 	simulations = 5000
-	// projectionDays is how many days of results count as much as the
-	// projection does.
-	projectionDays = 14.0
-	// spread is how far a week's score strays from what was expected, as a
-	// share of it, until there are results enough to measure it.
-	spread = 0.22
+	// priorDays is how many days of the league's average a team's own
+	// results are weighed against: early on everyone looks alike.
+	priorDays = 28.0
+	// strengthSpread is how far a team's true strength may sit from what
+	// its results say before any are in, as a share of it. It narrows as
+	// results come in.
+	strengthSpread = 0.15
+	// drift is how far a team's strength wanders from one week to the next.
+	drift = 0.05
+	// spread is how far one week's score strays from what was expected, as
+	// a share of it.
+	spread = 0.25
+	// floor and ceiling bound a chance that is not settled for certain.
+	floor, ceiling = 0.001, 0.999
 )
 
 type Odds struct {
@@ -53,10 +61,14 @@ type LeagueOdds struct {
 
 type TeamOdds struct {
 	FranchiseID pgtype.UUID `json:"franchise_id"`
-	Playoffs    float64     `json:"playoffs"` // the chance of a playoff place, 0 to 1
-	Wins        float64     `json:"wins"`     // projected at the season's end
-	Losses      float64     `json:"losses"`
-	Place       float64     `json:"place"` // the average final place, 1 being first
+	// The chance of a playoff place, 0 to 1. It is exactly 1 or 0 only once
+	// a place is clinched or out of reach.
+	Playoffs   float64 `json:"playoffs"`
+	Clinched   bool    `json:"clinched"`
+	Eliminated bool    `json:"eliminated"`
+	Wins       float64 `json:"wins"` // projected at the season's end
+	Losses     float64 `json:"losses"`
+	Place      float64 `json:"place"` // the average final place, 1 being first
 }
 
 type OverallOdds struct {
@@ -66,7 +78,7 @@ type OverallOdds struct {
 }
 
 // Odds simulates every league's latest season.
-func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projector) (Odds, error) {
+func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty) (Odds, error) {
 	q := db.New(s.pool)
 	out := Odds{Leagues: []LeagueOdds{}, Overall: []OverallOdds{}}
 	dynastyRules, err := settings.Parse[settings.Dynasty](dynasty.Settings)
@@ -82,6 +94,7 @@ func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projecto
 	// title counts the leagues of the latest year.
 	type run struct {
 		year   int
+		active bool
 		places map[pgtype.UUID][]int
 	}
 	var runs []run
@@ -93,12 +106,12 @@ func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projecto
 		if err != nil {
 			return out, err
 		}
-		odds, places, err := simulate(ctx, q, league, season, project)
+		odds, places, err := simulate(ctx, q, league, season)
 		if err != nil {
 			return out, err
 		}
 		out.Leagues = append(out.Leagues, odds)
-		runs = append(runs, run{int(season.Year), places})
+		runs = append(runs, run{int(season.Year), season.Status == "active", places})
 	}
 
 	if !dynastyRules.OverallTitle.Enabled || len(runs) == 0 {
@@ -106,10 +119,12 @@ func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projecto
 	}
 	latest := slices.MaxFunc(runs, func(a, b run) int { return cmp.Compare(a.year, b.year) }).year
 	totals := map[pgtype.UUID][]float64{}
+	settled := true // every league of the year is over
 	for _, r := range runs {
 		if r.year != latest {
 			continue
 		}
+		settled = settled && !r.active
 		for id, places := range r.places {
 			if totals[id] == nil {
 				totals[id] = make([]float64, simulations)
@@ -141,7 +156,11 @@ func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projecto
 		for _, v := range t {
 			sum += v
 		}
-		out.Overall = append(out.Overall, OverallOdds{FranchiseID: id, Title: titles[id] / simulations, Points: sum / simulations})
+		title := titles[id] / simulations
+		if !settled && len(totals) > 1 {
+			title = min(max(title, floor), ceiling) // still to be decided
+		}
+		out.Overall = append(out.Overall, OverallOdds{FranchiseID: id, Title: title, Points: sum / simulations})
 	}
 	slices.SortFunc(out.Overall, func(a, b OverallOdds) int {
 		return cmp.Or(cmp.Compare(b.Title, a.Title), cmp.Compare(b.Points, a.Points))
@@ -149,9 +168,18 @@ func (s *Service) Odds(ctx context.Context, dynasty db.Dynasty, project Projecto
 	return out, nil
 }
 
+// game is a matchup still to be decided: one to come, or the rest of the
+// one in progress.
+type game struct {
+	home, away           pgtype.UUID
+	homeSoFar, awaySoFar float64 // points already scored in it
+	daysLeft             float64
+	weeksOut             int // 0 for the matchup in progress
+}
+
 // simulate plays out the rest of one league's regular season and returns
 // the odds and every run's final places (0 being first) by franchise.
-func simulate(ctx context.Context, q *db.Queries, league db.League, season db.Season, project Projector) (LeagueOdds, map[pgtype.UUID][]int, error) {
+func simulate(ctx context.Context, q *db.Queries, league db.League, season db.Season) (LeagueOdds, map[pgtype.UUID][]int, error) {
 	odds := LeagueOdds{LeagueID: league.ID, Competition: league.Competition, Rows: []TeamOdds{}}
 	rules, err := settings.Parse[settings.League](league.Settings)
 	if err != nil {
@@ -170,58 +198,74 @@ func simulate(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		names[f.ID] = f.Name
 	}
 	headToHead := rules.Format.Type == settings.FormatHeadToHead
+	active := season.Status == "active"
 	today := sportsday.Today()
 
+	// What has been scored, and over how many days: the truth to build on.
+	scored, played := map[pgtype.UUID]float64{}, map[pgtype.UUID]float64{}
 	var games []game
 	var results []result
-	var next *db.Period // the first matchup not yet begun, to project a full one
-	var current *db.Period
-	if headToHead && season.Status == "active" {
+	if headToHead && active {
 		if results, err = regularSeasonResults(ctx, q, league, season); err != nil {
 			return odds, nil, err
-		}
-		live, period, err := liveResults(ctx, q, league, season)
-		if err != nil {
-			return odds, nil, err
-		}
-		current = period
-		if period != nil {
-			left := days(today, period.EndsOn.Time)
-			for _, m := range live {
-				games = append(games, game{m.Home, m.Away, m.HomePoints, m.AwayPoints, left})
-			}
 		}
 		periods, err := q.ListPeriods(ctx, season.ID)
 		if err != nil {
 			return odds, nil, err
 		}
+		settledScores, err := q.ListPeriodScores(ctx, season.ID)
+		if err != nil {
+			return odds, nil, err
+		}
+		for _, s := range settledScores {
+			i := slices.IndexFunc(periods, func(p db.Period) bool { return p.ID == s.PeriodID })
+			if i >= 0 && !periods[i].IsPlayoff {
+				scored[s.FranchiseID] += s.Points
+				played[s.FranchiseID] += days(periods[i].StartsOn.Time, periods[i].EndsOn.Time)
+			}
+		}
+		live, current, err := liveResults(ctx, q, league, season)
+		if err != nil {
+			return odds, nil, err
+		}
+		if current != nil {
+			// Today is half played, on average.
+			elapsed := days(current.StartsOn.Time, today) - 0.5
+			left := days(today, current.EndsOn.Time) - 0.5
+			for _, m := range live {
+				games = append(games, game{m.Home, m.Away, m.HomePoints, m.AwayPoints, left, 0})
+				for id, points := range map[pgtype.UUID]float64{m.Home: m.HomePoints, m.Away: m.AwayPoints} {
+					scored[id] += points
+					played[id] += elapsed
+				}
+			}
+		}
 		matchups, err := q.ListSeasonMatchups(ctx, season.ID)
 		if err != nil {
 			return odds, nil, err
 		}
+		weeks := 0
 		for _, p := range periods {
 			if p.IsPlayoff || !p.StartsOn.Time.After(today) {
 				continue
 			}
-			if next == nil {
-				next = &p
-			}
+			weeks++
 			n := days(p.StartsOn.Time, p.EndsOn.Time)
 			for _, m := range matchups {
 				if m.PeriodID == p.ID && m.AwayFranchiseID.Valid {
-					games = append(games, game{m.HomeFranchiseID, m.AwayFranchiseID, 0, 0, n})
+					games = append(games, game{m.HomeFranchiseID, m.AwayFranchiseID, 0, 0, n, weeks})
 				}
 			}
 		}
-	}
-
-	// What each franchise should score a day, and how far a matchup strays.
-	perDay, sd, err := strength(ctx, q, league, season, rows, current, next, project)
-	if err != nil {
-		return odds, nil, err
+	} else if active && !season.StartsOn.Time.After(today) {
+		// A total-points league: the season so far.
+		n := days(season.StartsOn.Time, today) - 0.5
+		for _, r := range rows {
+			scored[r.FranchiseID], played[r.FranchiseID] = r.Points, n
+		}
 	}
 	seasonLeft := 0.0
-	if !headToHead && season.Status == "active" {
+	if !headToHead && active {
 		seasonLeft = days(maxTime(today, season.StartsOn.Time), season.EndsOn.Time)
 	}
 
@@ -234,26 +278,72 @@ func simulate(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		playoffTeams = rules.Format.PlayoffTeams
 	}
 	var places map[pgtype.UUID][]int
-	odds.Rows, places = playOut(rows, results, games, perDay, sd, seasonLeft, rules.Format, names, playoffTeams, rng)
+	odds.Rows, places = playOut(rows, results, games, strengths(rows, scored, played), seasonLeft, rules.Format, names, playoffTeams, rng)
+	if active {
+		settle := settled(rows, games, playoffTeams, rules.Format)
+		for i := range odds.Rows {
+			o := &odds.Rows[i]
+			switch settle[o.FranchiseID] {
+			case 1:
+				o.Playoffs, o.Clinched = 1, true
+			case -1:
+				o.Playoffs, o.Eliminated = 0, true
+			default:
+				o.Playoffs = min(max(o.Playoffs, floor), ceiling)
+			}
+		}
+	}
 	return odds, places, nil
 }
 
-// game is a matchup still to be decided: one to come, or the rest of the
-// one in progress.
-type game struct {
-	home, away           pgtype.UUID
-	homeSoFar, awaySoFar float64 // points already scored in it
-	daysLeft             float64
+// strength is what a team should score a day, and how sure that is.
+type strength struct {
+	perDay float64
+	spread float64 // the doubt about perDay, as a share of it
+}
+
+// strengths weighs each team's points a day against the league's average:
+// a few days of results barely move it, a few weeks do.
+func strengths(rows []Row, scored, played map[pgtype.UUID]float64) map[pgtype.UUID]strength {
+	var points, days float64
+	for _, r := range rows {
+		points += scored[r.FranchiseID]
+		days += played[r.FranchiseID]
+	}
+	average := 1.0 // with nothing to go on, every team alike
+	if points > 0 && days > 0 {
+		average = points / days
+	}
+	out := map[pgtype.UUID]strength{}
+	for _, r := range rows {
+		n := max(played[r.FranchiseID], 0)
+		out[r.FranchiseID] = strength{
+			perDay: (scored[r.FranchiseID] + priorDays*average) / (n + priorDays),
+			spread: strengthSpread * math.Sqrt(priorDays/(n+priorDays)),
+		}
+	}
+	return out
 }
 
 // playOut plays the rest of a season many times from the standings as they
 // are. A total-points league has seasonLeft days still to score.
-func playOut(rows []Row, results []result, games []game, perDay map[pgtype.UUID]float64, sd, seasonLeft float64, format settings.Format, names map[pgtype.UUID]string, playoffTeams int, rng *rand.Rand) ([]TeamOdds, map[pgtype.UUID][]int) {
-	// A score over n days: a week strays by sd of what is expected, a
-	// shorter or longer span by the square root of its length.
-	draw := func(id pgtype.UUID, n float64) float64 {
-		return max(0, perDay[id]*n+rng.NormFloat64()*sd*perDay[id]*math.Sqrt(n*7))
+func playOut(rows []Row, results []result, games []game, teams map[pgtype.UUID]strength, seasonLeft float64, format settings.Format, names map[pgtype.UUID]string, playoffTeams int, rng *rand.Rand) ([]TeamOdds, map[pgtype.UUID][]int) {
+	weeks := int(math.Ceil(seasonLeft / 7))
+	for _, g := range games {
+		weeks = max(weeks, g.weeksOut)
 	}
+	// Each run's strength for every team, week by week from now.
+	form := map[pgtype.UUID][]float64{}
+	for _, r := range rows {
+		form[r.FranchiseID] = make([]float64, weeks+1)
+	}
+	// A score over n days: one week strays by spread of what is expected, a
+	// shorter or longer span by the square root of its length.
+	draw := func(id pgtype.UUID, n float64, week int) float64 {
+		mean := form[id][week] * n
+		return max(0, mean+rng.NormFloat64()*spread*form[id][week]*math.Sqrt(n*7))
+	}
+
 	places := map[pgtype.UUID][]int{}
 	wins, losses, place := map[pgtype.UUID]float64{}, map[pgtype.UUID]float64{}, map[pgtype.UUID]float64{}
 	playoffs := map[pgtype.UUID]float64{}
@@ -262,6 +352,16 @@ func playOut(rows []Row, results []result, games []game, perDay map[pgtype.UUID]
 	}
 	sim := make([]Row, len(rows))
 	for i := range simulations {
+		for id, f := range form {
+			t := teams[id]
+			level := t.perDay * max(0.2, 1+rng.NormFloat64()*t.spread)
+			for w := range f {
+				if w > 0 {
+					level *= max(0.2, 1+rng.NormFloat64()*drift)
+				}
+				f[w] = level
+			}
+		}
 		copy(sim, rows)
 		index := map[pgtype.UUID]*Row{}
 		for j := range sim {
@@ -273,7 +373,7 @@ func playOut(rows []Row, results []result, games []game, perDay map[pgtype.UUID]
 			if home == nil || away == nil {
 				continue
 			}
-			homeAdd, awayAdd := draw(g.home, g.daysLeft), draw(g.away, g.daysLeft)
+			homeAdd, awayAdd := draw(g.home, g.daysLeft, g.weeksOut), draw(g.away, g.daysLeft, g.weeksOut)
 			hp, ap := g.homeSoFar+homeAdd, g.awaySoFar+awayAdd
 			home.PointsFor += homeAdd
 			home.PointsAgainst += awayAdd
@@ -292,9 +392,9 @@ func playOut(rows []Row, results []result, games []game, perDay map[pgtype.UUID]
 			}
 			played = append(played, result{g.home, g.away, hp, ap})
 		}
-		if seasonLeft > 0 {
-			for j := range sim {
-				sim[j].Points += draw(sim[j].FranchiseID, seasonLeft)
+		for j := range sim {
+			for w, left := 0, seasonLeft; left > 0; w, left = w+1, left-7 {
+				sim[j].Points += draw(sim[j].FranchiseID, min(left, 7), w)
 			}
 		}
 		rankStandings(sim, played, format, names)
@@ -319,110 +419,54 @@ func playOut(rows []Row, results []result, games []game, perDay map[pgtype.UUID]
 	return odds, places
 }
 
-// strength is what each franchise should score a day, and how far a week's
-// score strays from that, as a share of it.
-func strength(ctx context.Context, q *db.Queries, league db.League, season db.Season, rows []Row, current, next *db.Period, project Projector) (map[pgtype.UUID]float64, float64, error) {
-	today := sportsday.Today()
-	// What has been scored, and over how many days.
-	scored, played := map[pgtype.UUID]float64{}, map[pgtype.UUID]float64{}
-	weekly := map[pgtype.UUID][]float64{} // per-day scores, matchup by matchup
-	periods, err := q.ListPeriods(ctx, season.ID)
-	if err != nil {
-		return nil, 0, err
+// settled says which teams are certain of a playoff place (1) and which
+// cannot reach one (-1), whatever happens in the matchups left. Only a
+// league ranked by record can be settled early; one ranked by points or
+// win percentage is settled only when every team makes it.
+func settled(rows []Row, games []game, playoffTeams int, format settings.Format) map[pgtype.UUID]int {
+	out := map[pgtype.UUID]int{}
+	if playoffTeams <= 0 {
+		return out
 	}
-	if len(periods) > 0 {
-		settled, err := q.ListPeriodScores(ctx, season.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-		for _, s := range settled {
-			i := slices.IndexFunc(periods, func(p db.Period) bool { return p.ID == s.PeriodID })
-			if i < 0 || periods[i].IsPlayoff {
-				continue
-			}
-			n := days(periods[i].StartsOn.Time, periods[i].EndsOn.Time)
-			scored[s.FranchiseID] += s.Points
-			played[s.FranchiseID] += n
-			weekly[s.FranchiseID] = append(weekly[s.FranchiseID], s.Points/n)
-		}
-	} else if season.Status == "active" && !season.StartsOn.Time.After(today) {
-		// A total-points league: the season so far, up to yesterday.
-		n := days(season.StartsOn.Time, today) - 1
+	if len(rows) <= playoffTeams {
 		for _, r := range rows {
-			if n > 0 {
-				scored[r.FranchiseID], played[r.FranchiseID] = r.Points, n
-			}
+			out[r.FranchiseID] = 1
 		}
+		return out
 	}
-
-	// What each lineup is projected to score a day: over the next whole
-	// matchup, or failing that the rest of this one, or the coming week.
-	from, to := today, today.AddDate(0, 0, 6)
-	switch {
-	case next != nil:
-		from, to = next.StartsOn.Time, next.EndsOn.Time
-	case current != nil:
-		to = current.EndsOn.Time
+	if format.Ranking() != "record" {
+		return out
 	}
-	span := days(from, to)
-	perDay := map[pgtype.UUID]float64{}
-	sum, counted := 0.0, 0
+	left := map[pgtype.UUID]int{}
+	for _, g := range games {
+		left[g.home]++
+		left[g.away]++
+	}
 	for _, r := range rows {
 		id := r.FranchiseID
-		projected := 0.0
-		if season.Status == "active" {
-			if projected, err = project(ctx, league, id, from, to); err != nil {
-				return nil, 0, err
+		// Clinched: fewer than playoffTeams others could match the wins it
+		// already has. Out: playoffTeams others already have more wins than
+		// it can reach.
+		catch, ahead := 0, 0
+		for _, o := range rows {
+			if o.FranchiseID == id {
+				continue
+			}
+			if o.Wins+left[o.FranchiseID] >= r.Wins {
+				catch++
+			}
+			if o.Wins > r.Wins+left[id] {
+				ahead++
 			}
 		}
-		actual, n := scored[id]/max(played[id], 1), played[id]
 		switch {
-		case projected <= 0 && n == 0:
-			continue
-		case projected <= 0:
-			perDay[id] = actual
-		default:
-			perDay[id] = (actual*n + projected/span*projectionDays) / (n + projectionDays)
-		}
-		sum += perDay[id]
-		counted++
-	}
-	// Anyone with nothing to go on is taken as the league's average team.
-	average := 1.0
-	if counted > 0 && sum > 0 {
-		average = sum / float64(counted)
-	}
-	for _, r := range rows {
-		if perDay[r.FranchiseID] <= 0 {
-			perDay[r.FranchiseID] = average
+		case catch < playoffTeams:
+			out[id] = 1
+		case ahead >= playoffTeams:
+			out[id] = -1
 		}
 	}
-
-	// How far one matchup strays from a team's own average, once teams have
-	// played a few.
-	var squares float64
-	var samples int
-	for _, scores := range weekly {
-		if len(scores) < 2 {
-			continue
-		}
-		mean := 0.0
-		for _, s := range scores {
-			mean += s
-		}
-		mean /= float64(len(scores))
-		for _, s := range scores {
-			if mean > 0 {
-				squares += math.Pow(s/mean-1, 2)
-				samples++
-			}
-		}
-	}
-	sd := spread
-	if samples >= 10 {
-		sd = min(max(math.Sqrt(squares/float64(samples)), 0.1), 0.4)
-	}
-	return perDay, sd, nil
+	return out
 }
 
 // days counts the days from one to another, both included.
