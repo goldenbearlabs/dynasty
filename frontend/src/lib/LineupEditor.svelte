@@ -260,6 +260,26 @@
 			return true;
 		});
 	}
+	// A phone's one line of stats under a player: only what he recorded, no
+	// games played or points a game (his points are beside it), no free
+	// throws, and field goals as made/attempted with no label.
+	function briefStats(player: LineupPlayer, line: Record<string, number>, played: boolean) {
+		if (!statsEnabled && !played) return [];
+		const value = (c: StatColumn) => (statsEnabled ? viewedStat(player, c) : columnValue(line, c));
+		const byKey = (key: string) => columns(player).find((c) => c.key === key);
+		const out: { key: string; label: string; value: string; title: string }[] = [];
+		for (const c of columns(player)) {
+			if (['__gp', '__fpg', 'ftm', 'fta', 'fga'].includes(c.key)) continue;
+			if (c.key === 'fgm') {
+				const made = value(c) ?? 0, tried = value(byKey('fga') ?? c) ?? 0;
+				if (tried) out.push({ key: 'fg', label: '', value: `${statValue(made)}/${statValue(tried)}`, title: 'Field goals made/attempted' });
+				continue;
+			}
+			const n = value(c);
+			if (n) out.push({ key: c.key, label: c.label, value: statValue(n), title: c.title });
+		}
+		return out;
+	}
 	const columns = (player: LineupPlayer) => groupColumns(rosterGroup(sport, player.positions, slotOf(player.player_id)));
 	const tableGroups = $derived(rosterGroupOrder(sport).map(label => ({
 		label, columns: groupColumns(label),
@@ -378,7 +398,7 @@
 
 {#snippet tile(game: LineupGame)}
 	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={24} label={false} /></span>
-	<span class="day">{weekday(game.day)} {dayNumber(game.day)}</span>
+	<span class="day">{weekday(game.day)}<span class="num"> {dayNumber(game.day)}</span></span>
 	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
 	{#if !played(game) && game.projected}<span class="proj" title="Projected fantasy points, from recent seasons and the betting line">{points(game.projected)} proj</span>{/if}
 	{@render starter(game)}
@@ -501,6 +521,10 @@
 			<span class:zero={!n} title={c.title}>{#if statsEnabled || shown.length}<small>{c.label}</small>{statsEnabled && n === undefined ? '—' : c.key === '__fpg' && n !== undefined ? points(n) : statValue(n)}{/if}</span>
 		{/each}
 	</div>
+	{@const brief = briefStats(player, line, shown.length > 0)}
+	{#if brief.length}
+		<div class="stats-line">{#each brief as stat (stat.key)}<span title={stat.title}>{#if stat.label}<small>{stat.label}</small>{/if}{stat.value}</span>{/each}</div>
+	{/if}
 	{@const ahead = !statsEnabled || statsView === 'today' ? forecast(player, starting) : 0}
 	{@const viewed = performanceFor(player.player_id)}
 	<div class="pts" class:none={statsEnabled ? !viewed?.games : shown.length === 0 && !ahead}>
@@ -1141,10 +1165,16 @@
 		.game .pill {
 			display: none;
 		}
+		/* The week's games fit beside the name: no spill onto it. */
 		.tiled .games {
-			grid-column: 2 / 5;
-			grid-row: 2;
-			justify-items: start;
+			min-width: 0;
+			max-width: 9.5rem;
+			overflow: hidden;
+		}
+		.tile .day .num,
+		.tile.done:not(.on),
+		.name :global(.watch-star) {
+			display: none;
 		}
 		.stats {
 			grid-column: 2 / 5;
@@ -1207,10 +1237,22 @@
 			flex: none;
 			display: inline-flex;
 			align-items: center;
-			gap: 0.25rem;
+			gap: 0.2rem;
 			min-width: 0;
-			padding: 0.1rem 0.35rem;
-			font-size: 0.64rem;
+			padding: 0.1rem 0.25rem;
+			font-size: 0.6rem;
+		}
+		.seat > .stats {
+			display: none;
+		}
+		.seat > .stats-line {
+			grid-column: 2 / 5;
+			grid-row: 2;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0 0.55rem;
+			font: 600 0.66rem var(--mono);
+			font-variant-numeric: tabular-nums;
 		}
 		.tile .logo {
 			height: auto;
@@ -1227,8 +1269,9 @@
 			height: 16px !important;
 			margin: 0 !important;
 		}
-		.tile .proj {
-			font-size: 0.58rem;
+		.tile .proj,
+		.tile .time {
+			display: none;
 		}
 		.tile.on {
 			box-shadow: inset 0 -2px 0 var(--sport, var(--brand));
@@ -1236,6 +1279,10 @@
 		.moving-bar {
 			bottom: calc(4.3rem + env(safe-area-inset-bottom));
 		}
+	}
+	/* The phone's stat line; the table columns serve a wider screen. */
+	.stats-line {
+		display: none;
 	}
 	/* While a player is picked up: what to do next, and a way out. */
 	.moving-bar {
