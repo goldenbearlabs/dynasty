@@ -211,7 +211,8 @@ func (s *Service) Reject(ctx context.Context, tradeID pgtype.UUID, franchise db.
 		if !slices.ContainsFunc(parties, func(p db.TradeParty) bool { return p.FranchiseID == franchise.ID }) {
 			return problem.New("Your franchise is not part of this trade.")
 		}
-		return nil
+		// The rest of the trade hear who said no.
+		return q.SetTradeDecliner(ctx, db.SetTradeDeclinerParams{ID: tradeID, FranchiseID: franchise.ID})
 	})
 }
 

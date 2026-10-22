@@ -10,19 +10,23 @@
  import type { PageProps } from './$types';
 
  let { data }: PageProps = $props();
- type Section = 'drafts' | 'rankings';
- let tab = $state<Section>(untrack(() => page.url.searchParams.get('tab') === 'rankings' ? 'rankings' : 'drafts'));
- const tabs = [
+ type Section = 'drafts' | 'rankings' | 'history';
+ const sections: Section[] = ['drafts', 'rankings', 'history'];
+ let tab = $state<Section>(untrack(() => sections.find(s => s === page.url.searchParams.get('tab')) ?? 'drafts'));
+ const tabs = $derived([
   { value: 'drafts' as const, label: 'Draft rooms' },
-  { value: 'rankings' as const, label: 'Pre-draft rankings' }
- ];
+  ...(data.me && data.dynasty ? [{ value: 'rankings' as const, label: 'Pre-draft rankings' }] : []),
+  { value: 'history' as const, label: 'History' }
+ ]);
+ // Finished drafts, newest first.
+ const finished = $derived(data.drafts.filter(d => d.status === 'complete').toSorted((a,b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '') || b.year-a.year));
  const active = $derived(data.drafts.filter(d => d.status === 'live' || d.status === 'paused'));
  const scheduled = $derived(data.drafts.filter(d => d.status === 'scheduled' && !d.is_placeholder).toSorted((a,b) => a.year-b.year || a.name.localeCompare(b.name)));
  const rankingDrafts = $derived(data.drafts.filter(d => !d.is_placeholder || d.status !== 'scheduled'));
  function show(section: Section) {
   tab = section;
   const query = new URLSearchParams(page.url.search);
-  if (section === 'rankings') query.set('tab',section); else query.delete('tab');
+  if (section !== 'drafts') query.set('tab',section); else query.delete('tab');
   void goto(`?${query}`,{replaceState:true});
  }
 </script>
@@ -34,9 +38,17 @@
   <div><h1>Drafts</h1><p class="muted small-text">Join a draft or prepare your personal player rankings.</p></div>
   {#if data.me?.is_commissioner}<a class="button" href="/commissioner?section=drafts"><Icon name="plus" size={16} /> Manage drafts</a>{/if}
  </div>
- {#if data.me && data.dynasty}<Tabs {tabs} bind:value={() => tab, show} label="Drafts section" />{/if}
+ {#if data.dynasty}<Tabs {tabs} bind:value={() => tab, show} label="Drafts section" />{/if}
 
- {#if tab === 'rankings' && data.me && data.dynasty}
+ {#if tab === 'history'}
+  <section class="stack tight">
+   {#if finished.length === 0}
+    <Empty icon="draft" title="No finished drafts yet">Each draft's board appears here once it is complete.</Empty>
+   {:else}
+    <div class="list">{#each finished as draft (draft.id)}<DraftCard {draft} href="/drafts/{draft.id}" />{/each}</div>
+   {/if}
+  </section>
+ {:else if tab === 'rankings' && data.me && data.dynasty}
   <Rankings dynasty={data.dynasty} drafts={rankingDrafts} competitions={data.competitions} />
  {:else}
   {#if data.me && data.dynasty}

@@ -5,7 +5,7 @@
 	// commissioner can also place a player on any roster.
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { invalidateAll } from '$app/navigation';
+	import { snapshot, invalidateAll } from '$app/navigation';
 	import { changeRoster, type List, type Player } from '#lib/api.ts';
 	import DropToAdd from '#lib/DropToAdd.svelte';
 	import PlayerList from '#lib/PlayerList.svelte';
@@ -93,6 +93,11 @@
 			busy = '';
 		}
 	}
+	snapshot({
+		id: 'players-sport',
+		capture: () => competition,
+		restore: (value) => (competition = value),
+	});
 </script>
 
 <svelte:head><title>Players</title></svelte:head>

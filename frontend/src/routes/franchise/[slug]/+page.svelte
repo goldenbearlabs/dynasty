@@ -3,8 +3,9 @@
 	// team stands at a glance; picking a league opens that team: its lineup,
 	// its matchup, the standings, and its roster and reserve list.
 	import { untrack } from 'svelte';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, snapshot, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
 	import {
 		changeRoster,
 		setRoster,
@@ -24,6 +25,7 @@
 	import Matchups from '#lib/Matchups.svelte';
 	import SeasonRoster from '#lib/SeasonRoster.svelte';
 	import { dropQuestion } from '#lib/dropPlayer.ts';
+	import { draftTag, draftTitle } from '#lib/draftSlot.ts';
 	import PlayerActions from '#lib/PlayerActions.svelte';
 	import PlayerNickname from '#lib/PlayerNickname.svelte';
 	import TeamIdentityEditor from '#lib/TeamIdentityEditor.svelte';
@@ -287,6 +289,19 @@
 			toast.error(e);
 		}
 	}
+	snapshot({
+		id: 'team-view',
+		capture: () =>
+			$state.snapshot({ view, managing, tables, periods, openSlots, scroll: capturePageScroll() }),
+		restore: (s) => {
+			view = s.view;
+			managing = s.managing;
+			tables = s.tables;
+			periods = s.periods;
+			openSlots = s.openSlots;
+			restorePageScroll(s.scroll);
+		},
+	});
 </script>
 
 <svelte:head><title>{team.name}</title></svelte:head>
@@ -559,6 +574,7 @@
 								{#if player.team_abbrev}<TeamLogo competition={roster.competition} abbrev={player.team_abbrev} size={16} />{/if}
 								<InjuryBadge designation={player.injury_designation} />
 								<ProspectRank id={player.player_id} />
+								{#if player.status === 'prospect' && draftTag(player)}<span class="pill draft" title={draftTitle(player)}>{draftTag(player)}</span>{/if}
 								{#if player.injury_reserve_locked || player.locked_until}<span title={player.locked_until ? `Locked until ${clockTime(player.locked_until)}` : 'Injury swap: on reserve for the season'}><Icon name="lock" size={11} /></span>{/if}
 								<span class="end"><PlayerActions leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} detail={`${player.positions.join('/')} · Reserve`} onDrop={canEdit ? () => change(roster, 'drop', player) : undefined} /></span>
 							</li>
@@ -610,7 +626,7 @@
 															<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a><WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} /><PlayerActions leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} detail={`${player.positions.join('/')} · ${list.title}`} onDrop={canEdit && !plan ? () => change(roster, 'drop', player) : undefined} />
 															<InjuryBadge designation={player.injury_designation} />
 																{#if player.class}<span class="pill">{player.class}</span>{/if}
-															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{/if}
+															{#if player.status === 'prospect'}<span class="pill gold">Prospect</span>{#if draftTag(player)}<span class="pill draft" title={draftTitle(player)}>{draftTag(player)}</span>{/if}{/if}
 															{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 															{#if player.injury_reserve_locked}<span class="pill gold">Injury swap · Reserve for season</span>{/if}
 																{#if player.locked_until}<span class="pill">Locked until {clockTime(player.locked_until)}</span>{/if}
@@ -1032,6 +1048,11 @@
 	.reserve .end {
 		margin-left: auto;
 	}
+	.draft {
+		flex: none;
+		font: 650 0.6rem var(--mono);
+		white-space: nowrap;
+	}
 	.meters {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
@@ -1088,16 +1109,54 @@
 		.page {
 			gap: 0.55rem;
 		}
-		.title h1 {
-			font-size: 1.35rem;
+		/* Two rows: the crest beside the name and who runs it; then the
+		   team switcher and the trade button, side by side. */
+		.head {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			grid-template-areas: 'crest info info' 'switch switch action';
+			gap: 0.55rem 0.6rem;
 		}
-		.switch {
-			flex: 1;
+		.head > :global(:first-child) {
+			grid-area: crest;
+		}
+		.head > .grow {
+			grid-area: info;
+		}
+		.head > .switch {
+			grid-area: switch;
 			max-width: none;
-		}
-		.head .button {
-			padding: 0.35rem 0.6rem;
+			min-width: 0;
+			padding: 0.35rem 0.5rem;
 			font-size: 0.8rem;
+		}
+		.head > .button {
+			grid-area: action;
+			padding: 0.35rem 0.65rem;
+			font-size: 0.8rem;
+			white-space: nowrap;
+		}
+		/* With no team switcher, the trade button takes the row. */
+		.head > .button:nth-child(3) {
+			grid-column: 1 / -1;
+			justify-self: start;
+		}
+		.title {
+			gap: 0.3rem;
+		}
+		.title h1 {
+			font-size: 1.3rem;
+			overflow-wrap: normal;
+			line-height: 1.15;
+		}
+		.meta {
+			gap: 0.25rem 0.4rem;
+			margin-top: 0.1rem;
+			font-size: 0.75rem;
+		}
+		.meta .pill {
+			padding: 0.05rem 0.35rem;
+			font-size: 0.58rem;
 		}
 		/* Record, place and points side by side; the matchup beneath. */
 		.summary {

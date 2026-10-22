@@ -29,6 +29,7 @@
 	import Countdown from '#lib/ui/Countdown.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import Dropdown from '#lib/ui/Dropdown.svelte';
 	import Splitter from '#lib/ui/Splitter.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -396,8 +397,7 @@
 					onclick={() => control('resume')}><Icon name="play" size={14} />Resume</button
 				>{/if}
 			{#if commissioner}
-				<details class="admin">
-					<summary>Manage draft</summary>
+				<Dropdown class="admin" label="Manage draft">
 					<div class="admin-controls">
 						{#if draft.status === 'scheduled'}<button
 								class="small primary"
@@ -441,7 +441,7 @@
 								{#if orderOpened}<PickOrder draftId={id} {picks} {franchises} />{/if}
 							</details>{/if}
 					</div>
-				</details>
+				</Dropdown>
 			{/if}
 		</header>
 		{#if me && !rookie && draft.status === 'complete'}<p class="makeup">
@@ -726,31 +726,18 @@
 	.next-pick .eyebrow {
 		font-size: 0.6rem;
 	}
-	.admin {
-		position: relative;
+	:global(.admin) {
 		flex: none;
 		font-size: 0.72rem;
 	}
-	.admin summary {
-		cursor: pointer;
+	:global(.admin > summary) {
 		color: var(--ink-soft);
 	}
 	.admin-controls {
-		position: absolute;
-		z-index: 25;
-		right: 0;
-		top: calc(100% + 0.5rem);
-		width: 32rem;
-		max-width: calc(100vw - 2rem);
+		width: min(30rem, calc(100vw - 3.5rem));
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
-		padding: 0.85rem;
-		background: var(--surface);
-		border: 1px solid var(--rule-strong);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
-		max-height: 70dvh;
-		overflow: auto;
 	}
 	.clock-set {
 		width: 100%;

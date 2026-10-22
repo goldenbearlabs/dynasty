@@ -295,6 +295,7 @@ func (q *Queries) ListExpiredRights(ctx context.Context) ([]ListExpiredRightsRow
 const listFranchiseRoster = `-- name: ListFranchiseRoster :many
 select r.league_id, r.list, r.acquired_via, r.acquired_at, r.reserved_at, r.rights_until, r.rookie, r.startup, exists (select 1 from injury_reserve_locks i join seasons s on s.id = i.season_id where i.player_id = r.player_id and s.league_id = r.league_id and s.status = 'active' and ((now() at time zone 'America/New_York') - interval '5 hours')::date between s.starts_on and s.ends_on) as injury_reserve_locked,
        p.id as player_id, p.full_name, p.positions, p.status, p.injury_designation, p.class, p.note, p.birth_date, p.headshot_url,
+       p.draft_year, p.draft_round, p.draft_pick, p.draft_overall,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(n.nickname, '')::text as nickname
 from roster_entries r
@@ -324,6 +325,10 @@ type ListFranchiseRosterRow struct {
 	Note                string             `json:"note"`
 	BirthDate           pgtype.Date        `json:"birth_date"`
 	HeadshotUrl         string             `json:"headshot_url"`
+	DraftYear           pgtype.Int4        `json:"draft_year"`
+	DraftRound          pgtype.Int4        `json:"draft_round"`
+	DraftPick           pgtype.Int4        `json:"draft_pick"`
+	DraftOverall        pgtype.Int4        `json:"draft_overall"`
 	TeamAbbrev          string             `json:"team_abbrev"`
 	Nickname            string             `json:"nickname"`
 }
@@ -357,6 +362,10 @@ func (q *Queries) ListFranchiseRoster(ctx context.Context, franchiseID pgtype.UU
 			&i.Note,
 			&i.BirthDate,
 			&i.HeadshotUrl,
+			&i.DraftYear,
+			&i.DraftRound,
+			&i.DraftPick,
+			&i.DraftOverall,
 			&i.TeamAbbrev,
 			&i.Nickname,
 		); err != nil {

@@ -599,8 +599,9 @@ func upsertProspect(ctx context.Context, q *db.Queries, competition string, p Pl
 	birth, positions := columns(p)
 
 	id, err := find(ctx, q, p)
-	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = q.InsertProspect(ctx, db.InsertProspectParams{
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		id, err = q.InsertProspect(ctx, db.InsertProspectParams{
 			Provider:    p.Provider,
 			ProviderID:  p.ProviderID,
 			Competition: competition,
@@ -610,18 +611,24 @@ func upsertProspect(ctx context.Context, q *db.Queries, competition string, p Pl
 			Note:        p.Note,
 			HeadshotUrl: p.HeadshotURL,
 		})
+	case err == nil:
+		err = q.UpdateProspect(ctx, db.UpdateProspectParams{
+			ID:          id,
+			FullName:    p.FullName,
+			Positions:   positions,
+			BirthDate:   birth,
+			Note:        p.Note,
+			HeadshotUrl: p.HeadshotURL,
+		})
+	}
+	if err != nil || p.Draft == nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	return q.UpdateProspect(ctx, db.UpdateProspectParams{
-		ID:          id,
-		FullName:    p.FullName,
-		Positions:   positions,
-		BirthDate:   birth,
-		Note:        p.Note,
-		HeadshotUrl: p.HeadshotURL,
+	// Recorded even for a player who has since arrived: it does not change.
+	d := p.Draft
+	return q.SetPlayerDraft(ctx, db.SetPlayerDraftParams{
+		ID: id, Year: pgtype.Int4{Int32: int32(d.Year), Valid: true}, Round: pgtype.Int4{Int32: int32(d.Round), Valid: true},
+		Pick: pgtype.Int4{Int32: int32(d.Pick), Valid: true}, Overall: pgtype.Int4{Int32: int32(d.Overall), Valid: true},
 	})
 }
 

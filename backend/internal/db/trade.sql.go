@@ -68,7 +68,7 @@ func (q *Queries) AddTradeParty(ctx context.Context, arg AddTradePartyParams) er
 }
 
 const createTrade = `-- name: CreateTrade :one
-insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops
+insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by
 `
 
 type CreateTradeParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade
 		&i.CreatedAt,
 		&i.ResolvedAt,
 		&i.Drops,
+		&i.DeclinedBy,
 	)
 	return i, err
 }
@@ -340,7 +341,7 @@ func (q *Queries) ListTradePartiesOf(ctx context.Context, tradeID pgtype.UUID) (
 }
 
 const listTrades = `-- name: ListTrades :many
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops from trades where dynasty_id = $1 order by created_at desc limit 200
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by from trades where dynasty_id = $1 order by created_at desc limit 200
 `
 
 func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trade, error) {
@@ -361,6 +362,7 @@ func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trad
 			&i.CreatedAt,
 			&i.ResolvedAt,
 			&i.Drops,
+			&i.DeclinedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -419,7 +421,7 @@ func (q *Queries) LockDraftPick(ctx context.Context, id pgtype.UUID) (LockDraftP
 }
 
 const lockTrade = `-- name: LockTrade :one
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops from trades where id = $1 for update
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by from trades where id = $1 for update
 `
 
 func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) {
@@ -434,6 +436,7 @@ func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) 
 		&i.CreatedAt,
 		&i.ResolvedAt,
 		&i.Drops,
+		&i.DeclinedBy,
 	)
 	return i, err
 }
@@ -499,6 +502,21 @@ type SetRosterOwnerParams struct {
 
 func (q *Queries) SetRosterOwner(ctx context.Context, arg SetRosterOwnerParams) error {
 	_, err := q.db.Exec(ctx, setRosterOwner, arg.ToFranchise, arg.LeagueID, arg.PlayerID)
+	return err
+}
+
+const setTradeDecliner = `-- name: SetTradeDecliner :exec
+update trades set declined_by = $1 where id = $2
+`
+
+type SetTradeDeclinerParams struct {
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+// The franchise turning a trade down, recorded just before it closes.
+func (q *Queries) SetTradeDecliner(ctx context.Context, arg SetTradeDeclinerParams) error {
+	_, err := q.db.Exec(ctx, setTradeDecliner, arg.FranchiseID, arg.ID)
 	return err
 }
 

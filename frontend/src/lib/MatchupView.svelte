@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getLineup, getMatchup, getScores, type Franchise, type GameSummary, type League, type Lineup, type MatchupDetail, type TeamIdentity } from '#lib/api.ts';
+	import { getLineup, getMatchup, getScores, getStandings, type Franchise, type GameSummary, type League, type Lineup, type MatchupDetail, type TeamIdentity } from '#lib/api.ts';
 	import { matchupRows } from '#lib/matchupView.ts';
 	import MatchupStats from '#lib/MatchupStats.svelte';
 	import MatchupFaceoff from '#lib/MatchupFaceoff.svelte';
@@ -25,7 +25,19 @@
 	let lineupError = $state('');
 	let revision = $state(0);
 	let attempt = $state(0);
-	let scores = $state<Record<string, GameSummary>>({}); // the real games in view, by id, for their clock and score
+	let scores = $state<Record<string, GameSummary>>({});
+	// Each team's record in the league, "4-2" or "4-2-1", for the header.
+	let records = $state<Record<string, string>>({});
+	$effect(() => {
+		const leagueId = league.id;
+		void revision; // a matchup ending changes the records
+		let active = true;
+		getStandings().then((tables) => {
+			const rows = tables.find((t) => t.league_id === leagueId)?.rows ?? [];
+			if (active) records = Object.fromEntries(rows.map((r) => [r.franchise_id, `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`]));
+		}, () => {});
+		return () => { active = false; };
+	}); // the real games in view, by id, for their clock and score
 	let shownLineups = ''; // which matchup and day the lineups on screen belong to
 	const weekly = $derived(league.settings.lineup.period === 'week');
 	const pickedGames = $derived(league.settings.lineup.slots.some(s => (s.games_per_week ?? 0) > 0));
@@ -118,7 +130,7 @@
 			{#each facing as side, index (index)}
 				<div class="score-team" class:away={index === 1} class:leader={side.total > facing[1-index].total}>
 					<Crest src={side.identity.image_url} name={side.identity.name} size={24} />
-					<strong>{side.identity.name}</strong>
+					<span class="who"><strong>{side.identity.name}</strong>{#if side.id && records[side.id]}<small class="record" title="Record this season">{records[side.id]}</small>{/if}</span>
 					<span class="score" title="Full matchup fantasy points">{side.id ? points(side.total) : '—'}{#if side.projected != null}<small class="proj" title="Points so far plus what the starters are projected to add, from recent seasons and the betting lines">Proj {points(side.projected)}</small>{/if}</span>
 				</div>
 				{#if index === 0}<div class="score-state"><span class="pill" class:good={!matchup.final && sportsToday() >= matchup.period.starts_on}>{matchup.final ? 'Final' : sportsToday() < matchup.period.starts_on ? 'Upcoming' : 'In progress'}</span>{#if matchup.period.double_games}<small>Double games</small>{/if}</div>{/if}
@@ -179,7 +191,9 @@
 	.scoreboard { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: .75rem; align-items: center; padding: .65rem .75rem; border-top: 2px solid var(--sport); }
 	.score-team { display: flex; align-items: center; gap: .45rem; min-width: 0; }
 	.score-team.away { flex-direction: row-reverse; text-align: right; }
-	.score-team strong { flex: 1; min-width: 0; font-size: .85rem; overflow-wrap: anywhere; }
+	.score-team .who { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+	.score-team strong { font-size: .85rem; overflow-wrap: anywhere; }
+	.record { font: 600 .68rem var(--mono); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 	.score { font: 800 1.65rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
 	.leader .score { color: var(--sport); }
 	.score .proj { display: block; font: italic 500 .65rem var(--body); color: var(--ink-soft); }

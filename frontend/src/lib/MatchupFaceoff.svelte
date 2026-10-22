@@ -6,7 +6,7 @@
 	// stands.
 	import type { GameSummary } from '#lib/api.ts';
 	import { gameSummary, rowStats, type MatchupRow } from '#lib/matchupView.ts';
-	import { scoringStats } from '#lib/statLine.ts';
+	import { scoringStats, sumStats } from '#lib/statLine.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { points } from '#lib/ui/time.ts';
 
@@ -28,6 +28,15 @@
 		Array.from({ length: Math.max(a.length, b.length) }, (_, i) => ({ a: a[i], b: b[i], slot: a[i]?.slot ?? b[i]?.slot ?? '' }));
 	const starters = $derived(pair(left.rows.filter((r) => !r.bench), right.rows.filter((r) => !r.bench)));
 	const bench = $derived(pair(left.rows.filter((r) => r.bench), right.rows.filter((r) => r.bench)));
+	// Each side's starters added up: every stat that scored, and the points, for the day or week in view.
+	const totals = (side: Side) => {
+		const starters = side.rows.filter((r) => !r.bench && !r.empty);
+		return {
+			stats: scoringStats(sumStats(starters.map((r) => rowStats(r).line)), scoring),
+			points: starters.reduce((n, r) => n + r.points, 0),
+			projected: starters.reduce((n, r) => n + r.projected, 0)
+		};
+	};
 	const live = (row: MatchupRow) => row.games.some((g) => g.gameId && scores[g.gameId]?.status === 'live');
 	// Over or under what was expected, once the games behind his points are over.
 	const verdict = (row: MatchupRow) => (!row.settled || !row.pregame ? '' : row.points > row.pregame ? 'over' : row.points < row.pregame ? 'under' : '');
@@ -77,8 +86,24 @@
 	{/each}
 {/snippet}
 
+{#snippet total(side: Side, at: 'a' | 'b')}
+	{@const t = totals(side)}
+	{#if at === 'b'}<div class="fp b sum">{side.empty ? '' : points(t.points)}{#if t.projected}<span class="proj">+{points(t.projected)}</span>{/if}</div>{/if}
+	<div class="who {at}">
+		{#if !side.empty}<span class="name">Starters total</span>{/if}
+		{#if !side.empty && t.stats.length}<span class="line">{#each t.stats as stat (stat.key)}<span class="stat"><b>{stat.value}</b>{stat.label}</span>{/each}</span>{/if}
+	</div>
+	{#if at === 'a'}<div class="fp a sum">{side.empty ? '' : points(t.points)}{#if t.projected}<span class="proj">+{points(t.projected)}</span>{/if}</div>{/if}
+{/snippet}
+
 <ol class="faceoff">
 	{@render rows(starters, false)}
+	<!-- The starters added up: below the last slot, above the bench. -->
+	<li class="pair totals">
+		{@render total(left, 'a')}
+		<span class="slot sum-slot">TOT</span>
+		{@render total(right, 'b')}
+	</li>
 	{#if bench.length}
 		<li class="bench-head">
 			<button aria-expanded={benchOpen} onclick={() => (benchOpen = !benchOpen)}>
@@ -274,6 +299,19 @@
 	.bench .fp {
 		font-weight: 550;
 		opacity: 0.8;
+	}
+	/* The totals row stands apart: a heavier rule above it and bigger points. */
+	.totals {
+		border-top: 2px solid var(--rule-strong) !important;
+		background: var(--surface-2);
+	}
+	.fp.sum {
+		font-size: 1.05rem;
+		font-weight: 800;
+	}
+	.sum-slot {
+		background: var(--ink);
+		color: var(--surface);
 	}
 	.bench-head {
 		border-top: 1px solid var(--rule);

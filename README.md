@@ -370,3 +370,10 @@ that echo the requested year while returning an old season label. Migration 0044
 removes only exact copied NBA/college season lines stored under an incorrect
 year, retaining any differing lines. The League overview renders standings
 before fetching optional playoff/title odds.
+
+The Trade Block opens on league listings, with player/team/needs search, fantasy
+team and sport filters, and an option to include teams without listings. My
+Block, Team Needs, Targets and Interest each have their own focused view. Listing
+and targeting forms expand when needed; notes stay with their player, team needs
+stay grouped beneath each block, and targets can be toggled directly from league
+listings. Target and interest visibility is unchanged.

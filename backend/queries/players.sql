@@ -146,6 +146,7 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        pr.rank as prospect_rank, pr.year as prospect_rank_year,
        coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
        coalesce(pr.eta,'')::text as prospect_eta,
+       p.draft_year, p.draft_round, p.draft_pick, p.draft_overall,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
@@ -165,6 +166,7 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
           when 'age' then extract(epoch from (current_date::timestamp - p.birth_date::timestamp))
           when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
           when 'prospect_rank' then -pr.rank::float8
+          when 'draft' then -p.draft_overall::float8
           when 'stat' then stat_sort.value / case when sqlc.arg(per_game)::boolean then nullif(sc.games, 0) else 1 end
         end)::float8 as sort_number
 from players p
@@ -178,13 +180,16 @@ left join stat_sort on stat_sort.player_id = p.id and stat_sort.competition = p.
 left join rostered         on rostered.competition = p.competition
 where p.pool_eligible and (sqlc.arg(competition)::text = '' or p.competition = sqlc.arg(competition))
   and (sqlc.arg(status)::text = '' or p.status = sqlc.arg(status))
+  -- ranked_only: just the prospects on the MLB Pipeline Top 100.
+  and (not sqlc.arg(ranked_only)::boolean or pr.rank is not null)
   and (coalesce(cardinality(sqlc.arg(ownership)::text[]), 0) = 0
        or ('available' = any(sqlc.arg(ownership)::text[]) and coalesce(r.list, '') = '')
        or ('taken' = any(sqlc.arg(ownership)::text[]) and coalesce(r.list, '') <> '')
        or (sqlc.arg(ownership)::text[] && array['main','reserve','rights']::text[] and r.list = any(sqlc.arg(ownership)::text[])))
   and (coalesce(cardinality(sqlc.arg(owners)::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any(sqlc.arg(owners)::text[])))
   and (sqlc.arg(search)::text = '' or p.full_name ilike '%' || sqlc.arg(search) || '%')
-  and (sqlc.arg(position)::text = '' or sqlc.arg(position) = any(p.positions))
+  -- position: one or several, comma separated; a player matches by any of his.
+  and (sqlc.arg(position)::text = '' or p.positions && string_to_array(sqlc.arg(position), ','))
   and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))
   and (sqlc.narg('max_age')::int is null or p.birth_date > current_date - make_interval(years => sqlc.narg('max_age') + 1))
   and (sqlc.narg('available_in')::uuid is null or (
@@ -209,6 +214,7 @@ select candidates.id, candidates.competition, candidates.status, candidates.inju
  candidates.full_name, candidates.positions, candidates.birth_date, candidates.class, candidates.note,
  candidates.headshot_url, candidates.eligible_since, candidates.prospect_rank, candidates.prospect_rank_year,
  candidates.prospect_rank_source, candidates.prospect_rank_url, candidates.prospect_eta,
+ candidates.draft_year, candidates.draft_round, candidates.draft_pick, candidates.draft_overall,
  candidates.team_abbrev, candidates.team_name, candidates.owner_name, candidates.owner_slug,
  candidates.roster_list, candidates.season_games, candidates.season_scored, candidates.waiver_until,
  candidates.season, candidates.season_points, candidates.season_index,
@@ -246,13 +252,14 @@ from players p
 left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
+  and (not @ranked_only::boolean or exists (select 1 from prospect_rankings pr where pr.player_id = p.id and pr.source = 'mlb_pipeline'))
   and (coalesce(cardinality(@ownership::text[]), 0) = 0
        or ('available' = any(@ownership::text[]) and coalesce(r.list, '') = '')
        or ('taken' = any(@ownership::text[]) and coalesce(r.list, '') <> '')
        or (@ownership::text[] && array['main','reserve','rights']::text[] and r.list = any(@ownership::text[])))
   and (coalesce(cardinality(@owners::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any(@owners::text[])))
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
-  and (@position::text = '' or @position = any(p.positions))
+  and (@position::text = '' or p.positions && string_to_array(@position, ','))
   and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))
   and (sqlc.narg('max_age')::int is null or p.birth_date > current_date - make_interval(years => sqlc.narg('max_age') + 1))
   and (sqlc.narg('available_in')::uuid is null or (
@@ -293,6 +300,11 @@ update players set
   headshot_url = @headshot_url,
   updated_at   = now()
 where id = @id and status = 'prospect';
+
+-- name: SetPlayerDraft :exec
+-- A draft is a fact about the player, kept whatever has happened since.
+update players set draft_year = @year, draft_round = @round, draft_pick = @pick, draft_overall = @overall
+where id = @id;
 
 -- name: InsertManualPlayer :one
 insert into players (competition, status, full_name, positions, birth_date, note)
@@ -368,6 +380,7 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        pr.rank as prospect_rank, pr.year as prospect_rank_year,
        coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
        coalesce(pr.eta,'')::text as prospect_eta,
+       p.draft_year, p.draft_round, p.draft_pick, p.draft_overall,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
        coalesce(f.name, '')::text as owner_name,

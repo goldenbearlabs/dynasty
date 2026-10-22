@@ -16,6 +16,14 @@
 		void inbox.refresh();
 	}
 	afterNavigate(close);
+	// The badge pops each time something new arrives.
+	let bumps = $state(0);
+	let seen = 0;
+	$effect(() => {
+		const unread = inbox.unread;
+		if (unread > seen) bumps++;
+		seen = unread;
+	});
 	$effect(() => {
 		void accountId;
 		close();
@@ -41,9 +49,9 @@
 	onclick={show}
 >
 	<Icon name="mail" size={23} />
-	{#if inbox.unread}<span class="unread-badge" aria-hidden="true"
+	{#if inbox.unread}{#key bumps}<span class="unread-badge" aria-hidden="true"
 			>{inbox.unread > 99 ? '99+' : inbox.unread}</span
-		>{/if}
+		>{/key}{/if}
 </button>
 <dialog
 	bind:this={dialog}
@@ -80,19 +88,18 @@
 		position: relative;
 		display: grid;
 		place-items: center;
-		width: 2.75rem;
-		height: 2.75rem;
+		width: 2.5rem;
+		height: 2.5rem;
 		padding: 0;
-		border: 1px solid var(--rule);
-		border-radius: 10px;
-		background: var(--surface);
+		border: 0;
+		background: none;
 		color: var(--ink-soft);
 	}
+	/* Just the icon on the page; it lights up when hovered or open. */
 	.mail-button:hover,
 	.mail-button[aria-expanded='true'] {
 		color: var(--brand);
-		background: var(--brand-soft);
-		border-color: var(--brand);
+		background: none;
 	}
 	.has-unread {
 		color: var(--ink);
@@ -111,6 +118,23 @@
 		color: white;
 		box-shadow: 0 0 0 2px var(--surface);
 		font: 750 0.65rem/1 var(--mono);
+		animation: pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1);
+	}
+	@keyframes pop {
+		0% {
+			transform: scale(0.4);
+		}
+		60% {
+			transform: scale(1.35);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.unread-badge {
+			animation: none;
+		}
 	}
 	dialog {
 		position: fixed;

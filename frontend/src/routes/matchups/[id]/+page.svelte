@@ -32,7 +32,7 @@
 	{:else if error}<p role="alert">{error}</p>
 	{:else if league && matchup}
 		{#if currentSeason}
-			{#key matchup.id}<MatchupHub {league} franchises={data.dynasty?.franchises ?? []} identities={data.dynasty?.team_identities} mine={data.me?.id} editable={data.me?.is_commissioner} initialId={matchup.id} initialPeriod={matchup.period.seq} />{/key}
+			{#key matchup.id}<MatchupHub {league} franchises={data.dynasty?.franchises ?? []} identities={data.dynasty?.team_identities} mine={data.me?.id} initialId={matchup.id} initialPeriod={matchup.period.seq} />{/key}
 		{:else}
 			<MatchupView id={matchup.id} {league} franchises={data.dynasty?.franchises ?? []} identities={data.dynasty?.team_identities} />
 		{/if}

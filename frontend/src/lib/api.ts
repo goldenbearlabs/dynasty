@@ -106,11 +106,14 @@ export type ProspectRankingFields = {
  prospect_rank_source: string; prospect_rank_url: string; prospect_eta: string;
 };
 
+/** Where a player was drafted into his league: year, round, place in the round, overall. Null when undrafted or unknown. */
+export type DraftSlot = { draft_year: number | null; draft_round: number | null; draft_pick: number | null; draft_overall: number | null };
+
 /** A prospect on the MLB Pipeline Top 100. */
 export type ProspectRanking = { player_id: string; rank: number; year: number; eta: string; source_url: string };
 export const getProspectRankings = () => request<ProspectRanking[]>('GET', '/prospect-rankings');
 
-export type Player = ProspectRankingFields & {
+export type Player = ProspectRankingFields & DraftSlot & {
 	roster_list: string;
 	season_games: number;
 	season_scored?: boolean;
@@ -268,6 +271,8 @@ export type PlayerFilter = {
 	owners?: string;
 	competition?: string;
 	status?: string;
+	/** "true": only prospects on the MLB Pipeline (MLB.com) Top 100. */
+	ranked_only?: string;
 	q?: string;
 	/** One of the sport's positions. */
 	position?: string;
@@ -283,7 +288,7 @@ export type PlayerFilter = {
 	page?: number;
 };
 
-export type RosterPlayer = {
+export type RosterPlayer = DraftSlot & {
  injury_reserve_locked: boolean;
  nickname: string;
 	player_id: string;

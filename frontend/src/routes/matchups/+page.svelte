@@ -42,7 +42,7 @@
 				{#if view === 'schedule'}
 					<Schedule {league} {franchises} identities={data.dynasty?.team_identities} {team} />
 				{:else}
-					<MatchupHub {league} {franchises} identities={data.dynasty?.team_identities} mine={data.me?.id} editable={data.me?.is_commissioner} />
+					<MatchupHub {league} {franchises} identities={data.dynasty?.team_identities} mine={data.me?.id} />
 				{/if}
 			{/key}
 		</section>

@@ -223,6 +223,10 @@ type Player struct {
 	InjuryDesignation string             `json:"injury_designation"`
 	InjuryCheckedAt   pgtype.Timestamptz `json:"injury_checked_at"`
 	PoolEligible      bool               `json:"pool_eligible"`
+	DraftYear         pgtype.Int4        `json:"draft_year"`
+	DraftRound        pgtype.Int4        `json:"draft_round"`
+	DraftPick         pgtype.Int4        `json:"draft_pick"`
+	DraftOverall      pgtype.Int4        `json:"draft_overall"`
 }
 
 type PlayerExternalID struct {
@@ -357,6 +361,7 @@ type Trade struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
 	Drops      json.RawMessage    `json:"drops"`
+	DeclinedBy pgtype.UUID        `json:"declined_by"`
 }
 
 type TradeBlock struct {

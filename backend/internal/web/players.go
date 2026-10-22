@@ -235,8 +235,10 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		return pgtype.Int4{Int32: int32(n), Valid: err == nil && n >= 0}
 	}
 	position, minAge, maxAge := query.Get("position"), age("min_age"), age("max_age")
+	rankedOnly := query.Get("ranked_only") == "true" // only the MLB Pipeline Top 100
 
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
+		RankedOnly:  rankedOnly,
 		Ownership:   splitPlayerFilter(query.Get("ownership")),
 		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
@@ -260,6 +262,7 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, err := s.Queries.CountPlayers(r.Context(), db.CountPlayersParams{
+		RankedOnly:  rankedOnly,
 		Ownership:   splitPlayerFilter(query.Get("ownership")),
 		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,

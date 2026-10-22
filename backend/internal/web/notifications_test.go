@@ -152,6 +152,13 @@ func TestInboxAndTradePrivacy(t *testing.T) {
 	var second struct{ ID string }
 	bob.want(201, "POST", "/api/trades", secondOffer, &second)
 	cy.want(204, "POST", "/api/trades/"+second.ID+"/reject", nil, nil)
+	// The proposer hears who turned the offer down; the decliner is not told about themselves.
+	if declined := look(bob, "?kind=trade"); declined.Total != 1 || !strings.Contains(declined.Notifications[0].Title, "Cy declined your trade") {
+		t.Fatalf("decline notification: %+v", declined)
+	}
+	if look(cy, "?kind=trade").Total != 2 {
+		t.Fatal("decliner was notified of their own decline")
+	}
 	if countTrades(ann) != 1 || countTrades(guest) != 1 || countTrades(bob) != 2 {
 		t.Fatal("declined unaccepted trade leaked")
 	}

@@ -1,4 +1,6 @@
 <script lang="ts">
+ import { snapshot } from '$app/navigation';
+ import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
  import { onMount } from 'svelte';
  import { page } from '$app/state';
  import type { PageProps } from './$types';
@@ -17,6 +19,17 @@
  const visible = $derived(watchlist.entries.filter(p => (!sport || p.competition === sport) && (!category || (category === '\u0000' ? !p.category : p.category === category)) && (!ownership || (ownership === 'free' ? !p.owner_slug : ownership === 'mine' ? p.owner_slug === data.me?.slug : !!p.owner_slug && p.owner_slug !== data.me?.slug)) && (!search.trim() || `${p.full_name} ${p.team_name} ${p.notes}`.toLowerCase().includes(search.trim().toLowerCase()))));
  onMount(() => { if (watchlist.loaded) void watchlist.refresh(); });
  async function save() { try { await watchlist.edit(editing, draftCategory, draftNotes); editing = ''; } catch(e) { toast.error(e); } }
+	snapshot({
+		id: 'watchlist-filters',
+		capture: () => ({ sport, search, category, ownership, scroll: capturePageScroll() }),
+		restore: (s) => {
+			sport = s.sport;
+			search = s.search;
+			category = s.category;
+			ownership = s.ownership;
+			restorePageScroll(s.scroll);
+		},
+	});
 </script>
 <svelte:head><title>Watchlist · Crossover Dynasty</title></svelte:head>
 <div class="stack">

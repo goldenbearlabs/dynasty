@@ -31,6 +31,10 @@ update trades set
   resolved_at = case when @status in ('proposed', 'accepted') then null else now() end
 where id = @id;
 
+-- name: SetTradeDecliner :exec
+-- The franchise turning a trade down, recorded just before it closes.
+update trades set declined_by = @franchise_id where id = @id;
+
 -- name: ListTradeItems :many
 -- Every item of every trade in the dynasty, described for display.
 select i.*,

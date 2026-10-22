@@ -7,6 +7,7 @@
 
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { rememberPlayerOrigin, restorePlayerOrigin } from '#lib/playerNavigation.svelte.ts';
 	import { onMount, untrack } from 'svelte';
 	import { inbox } from '#lib/inbox.svelte.ts';
 	import { watchlist } from '#lib/watchlist.svelte.ts';
@@ -21,6 +22,10 @@
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
+	afterNavigate(({ from, to, type }) => {
+		if (type === 'enter' && to) restorePlayerOrigin(to.url);
+		else if (type !== 'popstate') rememberPlayerOrigin(from?.url ?? null, to?.url ?? null);
+	});
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => inbox.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });

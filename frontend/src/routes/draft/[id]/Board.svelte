@@ -18,7 +18,8 @@
 		showSport,
 		changingId,
 		onselect,
-		onchange
+		onchange,
+		readonly = false
 	}: {
 		picks: DraftPick[];
 		franchises: Franchise[];
@@ -38,6 +39,8 @@
 		onselect?: (id: string) => void;
 		/** Given only to a commissioner: offers to change a made pick. */
 		onchange?: (pick: DraftPick) => void;
+		/** A finished draft looked back on: no clock, no live room, no keys for them. */
+		readonly?: boolean;
 	} = $props();
 	const name = (id: string) => franchises.find((f) => f.id === id)?.name ?? 'Unknown team';
 	const layout = $derived(layoutDraftBoard(picks));
@@ -98,6 +101,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (choosingFor = undefined)} />
 
+{#if !readonly}
 <div class="board-tools">
 	<div class="legend">
 		<span class="key mine-key"></span>Your picks <span class="key clock-key"></span>On clock
@@ -112,6 +116,7 @@
 			>{/if}
 	</div>
 </div>
+{/if}
 <div class="board" bind:this={board} role="region" aria-label="Draft board by round">
 	<table style:--columns={columns}>
 		<thead>

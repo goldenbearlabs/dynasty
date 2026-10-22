@@ -21,7 +21,9 @@
 	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import PlayerActions from '#lib/PlayerActions.svelte';
 	import { dropPlayer } from '#lib/dropPlayer.ts';
-	import { invalidateAll } from '$app/navigation';
+	import { snapshot, invalidateAll } from '$app/navigation';
+	import { untrack } from 'svelte';
+	import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
 	import { page } from '$app/state';
 
 	type Props = {
@@ -104,7 +106,9 @@
 		moving = undefined;
 	}
 	$effect(() => {
-		getLineup(league.id, franchise.id, day).then(show, toast.error);
+		let active = true;
+		getLineup(league.id, franchise.id, day).then(value => { if (active) show(value); }, error => { if (active) toast.error(error); });
+		return () => { active = false; };
 	});
 	// Points and locks follow the games, unless a change is still being saved.
 	onScoresChange(
@@ -349,6 +353,18 @@
 			autoSetting = false;
 		}
 	}
+	snapshot({
+		id: untrack(() => `lineup-view:${league.id}:${franchise.id}`),
+		capture: () =>
+			$state.snapshot({ day, statsView, performance, lineup, scroll: capturePageScroll() }),
+		restore: (saved) => {
+			if (day !== saved.day) day = saved.day;
+			statsView = saved.statsView;
+			performance = saved.performance;
+			if (saved.lineup) show(saved.lineup);
+			restorePageScroll(saved.scroll);
+		},
+	});
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (moving = undefined)} />

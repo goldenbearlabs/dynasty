@@ -4,21 +4,19 @@
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import { teamIdentity } from '#lib/identity.ts';
 	import MatchupView from '#lib/MatchupView.svelte';
-	import MatchupEditor from '#lib/MatchupEditor.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { dayLabel, points } from '#lib/ui/time.ts';
 
-	let { league, franchises, identities = [], mine, editable = false, initialId, initialPeriod }: {
+	let { league, franchises, identities = [], mine, initialId, initialPeriod }: {
 		league: League; franchises: Franchise[]; identities?: TeamIdentity[]; mine?: string;
-		editable?: boolean; initialId?: string; initialPeriod?: number;
+		initialId?: string; initialPeriod?: number;
 	} = $props();
 	let seq = $state<number | undefined>(untrack(() => initialPeriod));
 	let selected = $state(untrack(() => initialId ?? ''));
 	let view = $state<Matchups>();
 	let error = $state('');
 	let loading = $state(true);
-	let editing = $state(false);
 	let request = 0;
 	async function load() {
 		const token = ++request;
@@ -55,11 +53,14 @@
 		return `${week} – ${opponent ? `vs ${identity(opponent).name}` : 'Bye'}${extra}`;
 	}
 	const identity = (id: string | null) => id ? teamIdentity(franchises.find(f => f.id === id), identities, league.id) : { name: 'Bye', image_url: '' };
+	// The side ahead, or '' when level or a bye.
+	const leader = (m: Matchups['matchups'][number]) =>
+		!m.away_franchise_id || m.home_points === m.away_points ? '' : m.home_points > m.away_points ? 'home' : 'away';
 	function move(by: number) {
 		const next = matchups[index + by];
 		if (next) selected = next.id;
 	}
-	function changePeriod(value: number) { seq = value; editing = false; }
+	function changePeriod(value: number) { seq = value; }
 	let picker = $state<HTMLElement>();
 	$effect(() => {
 		void selected;
@@ -94,16 +95,13 @@
 				</select>
 				<button aria-label="Next matchup period" disabled={period.seq >= (view.periods.at(-1)?.seq ?? 0)} onclick={() => changePeriod(period.seq+1)}><Icon name="right" size={16} /></button>
 			</nav>
-			{#if editable && !matchups.some(m => m.final)}<button class="quiet small" onclick={() => editing = !editing}>{editing ? 'Close editor' : 'Edit pairings'}</button>{/if}
 		</div>
-		{#if editing}
-			{#key period.id}<MatchupEditor {period} {matchups} teams={franchises.map(f => ({id:f.id,name:identity(f.id).name}))} ondone={changed => { editing=false; if(changed) load(); }} />{/key}
-		{:else if matchups.length}
+		{#if matchups.length}
 			<nav bind:this={picker} class="matchup-picker" aria-label="Choose matchup">
 				{#each matchups as m, i (m.id)}
 					<button class:selected={selected === m.id} aria-pressed={selected === m.id} onclick={() => selected = m.id}>
-						<span class="pair"><span>{identity(m.home_franchise_id).name}</span><strong>{points(m.home_points)}</strong></span>
-						<span class="pair"><span>{identity(m.away_franchise_id).name}</span><strong>{m.away_franchise_id ? points(m.away_points) : '—'}</strong></span>
+						<span class="pair" class:lead={leader(m) === 'home'} class:trail={leader(m) === 'away'}><span>{identity(m.home_franchise_id).name}</span><strong>{points(m.home_points)}</strong></span>
+						<span class="pair" class:lead={leader(m) === 'away'} class:trail={leader(m) === 'home'}><span>{identity(m.away_franchise_id).name}</span><strong>{m.away_franchise_id ? points(m.away_points) : '—'}</strong></span>
 						{#if mine && (m.home_franchise_id === mine || m.away_franchise_id === mine)}<small>Your matchup</small>{:else}<small>{period.is_playoff ? m.bracket === 'consolation' ? 'Consolation' : 'Championship' : `Matchup ${i+1}`}</small>{/if}
 					</button>
 				{/each}
@@ -136,6 +134,11 @@
 	.pair { display: flex; justify-content: space-between; gap: .4rem; font-size: .7rem; }
 	.pair span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.pair strong { font-variant-numeric: tabular-nums; }
+	/* Who is winning, at a glance: the leader bold in the sport's colour, the other side faded. */
+	.pair.lead span { font-weight: 700; color: var(--ink); }
+	.pair.lead strong { color: var(--sport, var(--good)); font-weight: 800; }
+	.pair.trail { color: var(--ink-soft); }
+	.pair.trail strong { font-weight: 500; }
 	.matchup-picker small { color: var(--ink-soft); font-weight: 500; font-size: .55rem; }
 	.matchup-nav { gap: .35rem; }
 	.matchup-nav span { font-size: .65rem; }

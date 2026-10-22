@@ -1,10 +1,14 @@
 <script lang="ts">
 	import ProspectRank from '#lib/ui/ProspectRank.svelte';
+	import { draftTag, draftTitle } from '#lib/draftSlot.ts';
+	import Dropdown from '#lib/ui/Dropdown.svelte';
 	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import WatchStar from '#lib/WatchStar.svelte';
 	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
+	import { snapshot } from '$app/navigation';
+	import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
 	import { untrack, type Snippet } from 'svelte';
 	import {
 		getPlayers,
@@ -83,11 +87,14 @@
 			? (competitions.find((c) => c.key === competition)?.positions ?? [])
 			: [...new Set(competitions.flatMap((c) => c.positions))].sort(),
 	);
-	let position = $state('');
+	let position = $state<string[]>([]); // any of these; none is any position
 	let minAge = $state<number | null>(null);
 	let maxAge = $state<number | null>(null);
 
 	let status = $state('');
+	// MLB prospects only: narrow to those on MLB.com's Top 100.
+	let topHundred = $state(false);
+	const rankable = $derived(competition === 'mlb' && status === 'prospect');
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
 	let availableOnly = $state(false);
@@ -187,7 +194,7 @@
 	$effect.pre(() => {
 		if (competition !== shown) {
 			shown = competition;
-			position = ''; // positions belong to a sport
+			position = []; // positions belong to a sport
 			chosenStats = null;
 			if (order.startsWith('stat:')) {
 				order = 'points';
@@ -196,7 +203,7 @@
 			}
 			page = 1;
 			seasonBack = 0;
-			if (!chose || (order === 'prospect_rank' && competition !== 'mlb' && competition !== ''))
+			if (!chose || (order === 'prospect_rank' && competition !== 'mlb' && competition !== '') || (order === 'draft' && competition !== 'nhl'))
 				order = usual();
 		}
 	});
@@ -211,8 +218,9 @@
 			ownership: workspace ? ownership.join(',') : undefined,
 			owners: workspace ? owners.join(',') : undefined,
 			status,
+			ranked_only: rankable && topHundred ? 'true' : undefined,
 			q: query,
-			position: position || undefined,
+			position: position.length ? position.join(',') : undefined,
 			min_age: minAge ?? undefined,
 			max_age: maxAge ?? undefined,
 			page,
@@ -236,6 +244,69 @@
 				if (request === latest) loading = false;
 			});
 	});
+	if (untrack(() => workspace))
+		snapshot({
+			id: 'players-table',
+			capture: () =>
+				$state.snapshot({
+					picked,
+					position,
+					minAge,
+					maxAge,
+					status,
+					topHundred,
+					search,
+					query,
+					availableOnly,
+					ownership,
+					owners,
+					perGame,
+					chosenStats,
+					mobileStats,
+					moreFilters,
+					order,
+					ascending,
+					chose,
+					seasonBack,
+					seasons,
+					page,
+					result,
+					competition,
+					scroll: capturePageScroll(),
+				}),
+			restore: (saved) => {
+				clearTimeout(typing);
+				shown = saved.competition;
+				picked = saved.picked;
+				position = Array.isArray(saved.position)
+					? saved.position
+					: saved.position
+						? [saved.position]
+						: [];
+				minAge = saved.minAge;
+				maxAge = saved.maxAge;
+				status = saved.status;
+				topHundred = saved.topHundred;
+				search = saved.search;
+				query = saved.query;
+				availableOnly = saved.availableOnly;
+				ownership = saved.ownership;
+				owners = saved.owners;
+				perGame = saved.perGame;
+				chosenStats = saved.chosenStats;
+				mobileStats = saved.mobileStats;
+				moreFilters = saved.moreFilters;
+				order = saved.order;
+				ascending = saved.ascending;
+				chose = saved.chose;
+				seasonBack = saved.seasonBack;
+				seasons = saved.seasons;
+				page = saved.page;
+				result = saved.result;
+				loading = !saved.result;
+				restorePageScroll(saved.scroll);
+			},
+		});
 </script>
 
 {#snippet team(player: Player)}{#if player.team_abbrev}<TeamLogo
@@ -283,7 +354,20 @@
 			<option value="prospect">Prospects</option>
 			<option value="inactive">Inactive</option>
 		</select>
-		{#if byPoints || competition === 'mlb'}
+		{#if rankable}
+			<label class="check top-hundred">
+				<input
+					type="checkbox"
+					bind:checked={topHundred}
+					onchange={() => {
+						page = 1;
+						if (topHundred && !chose) order = 'prospect_rank'; // ranked prospects read best in rank order
+					}}
+				/>
+				MLB.com Top 100 prospects only
+			</label>
+		{/if}
+		{#if byPoints || competition === 'mlb' || competition === 'nhl'}
 			<select
 				aria-label="Order"
 				bind:value={order}
@@ -299,6 +383,7 @@
 				{#if competition === 'mlb' || !competition}<option value="prospect_rank"
 						>By MLB Pipeline Top 100 rank</option
 					>{/if}
+				{#if competition === 'nhl'}<option value="draft">By draft capital</option>{/if}
 				<option value="name">By name</option>
 				{#if workspace}<option value="games">By games played</option><option value="position"
 						>By position</option
@@ -320,15 +405,16 @@
 				</select>
 			{/if}
 			{#if positions.length > 0}
-				<select
-					class="extra-filter"
-					aria-label="Position"
-					bind:value={position}
-					onchange={() => (page = 1)}
-				>
-					<option value="">Any position</option>
-					{#each positions as p (p)}<option value={p}>{p}</option>{/each}
-				</select>
+				<span class="extra-filter">
+					<Dropdown class="position-filter" align="left" title="Positions" label={position.length ? position.join(', ') : 'Any position'}>
+						<div class="position-options">
+							{#each positions as p (p)}<label class="check"
+									><input type="checkbox" value={p} bind:group={position} onchange={() => (page = 1)} />{p}</label
+								>{/each}
+						</div>
+						{#if position.length}<button class="small quiet clear-positions" onclick={() => { position = []; page = 1; }}>Any position</button>{/if}
+					</Dropdown>
+				</span>
 			{/if}
 			<span class="ages extra-filter">
 				Age
@@ -382,8 +468,7 @@
 					>
 				{/each}
 			</div>
-			<details class="team-filter">
-				<summary>Fantasy teams{owners.length ? ` (${owners.length})` : ''}</summary>
+			<Dropdown class="team-filter" label="Fantasy teams{owners.length ? ` (${owners.length})` : ''}" title="Fantasy teams">
 				<div class="team-options">
 					{#each franchises as f (f.id)}<label class="check"
 							><input
@@ -397,10 +482,9 @@
 							/>{f.name}</label
 						>{/each}
 				</div>
-			</details>
+			</Dropdown>
 			{#if statKeys.length}
-				<details class="team-filter">
-					<summary>Stat columns</summary>
+				<Dropdown class="team-filter" label="Stat columns">
 					<div class="team-options">
 						{#each statKeys as stat}<label class="check"
 								><input
@@ -420,7 +504,7 @@
 								/>{stat.label}</label
 							>{/each}
 					</div>
-				</details>
+				</Dropdown>
 			{/if}
 			<label class="check"
 				><input type="checkbox" bind:checked={perGame} onchange={() => (page = 1)} />Per game</label
@@ -540,7 +624,7 @@
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
-													>{/if}
+													>{#if draftTag(player)}<span class="pill draft" title={draftTitle(player)}>{draftTag(player)}</span>{/if}{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 												{#if player.waiver_until}<span class="pill brand">Waivers</span>{/if}
 											</div>
@@ -684,29 +768,33 @@
 		color: var(--brand);
 		border-color: var(--brand);
 	}
-	.team-filter {
-		position: relative;
+	:global(.team-filter) {
 		font-size: 0.8rem;
 	}
-	.team-filter summary {
-		cursor: pointer;
+	:global(.team-filter > summary) {
 		padding: 0.5rem;
 	}
 	.team-options {
-		position: absolute;
-		z-index: 5;
-		top: 100%;
-		right: 0;
-		min-width: 14rem;
-		max-height: 20rem;
-		overflow: auto;
-		background: var(--surface);
-		border: 1px solid var(--rule);
-		border-radius: 8px;
-		padding: 0.75rem;
 		display: grid;
 		gap: 0.6rem;
-		box-shadow: 0 8px 24px #0002;
+	}
+	/* Looks like the selects beside it. */
+	:global(.position-filter > summary) {
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: var(--radius-small);
+		background: var(--surface);
+		font-size: 0.85rem;
+		white-space: nowrap;
+	}
+	.position-options {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.55rem 0.8rem;
+		font-size: 0.85rem;
+	}
+	.clear-positions {
+		margin-top: 0.6rem;
 	}
 	.workspace table {
 		width: 100%;
@@ -887,5 +975,13 @@
 		.wide {
 			display: none;
 		}
+	}
+	.top-hundred {
+		font-size: 0.8rem;
+		white-space: nowrap;
+	}
+	.draft {
+		font: 650 0.6rem var(--mono);
+		white-space: nowrap;
 	}
 </style>

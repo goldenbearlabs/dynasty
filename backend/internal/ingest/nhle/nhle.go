@@ -166,6 +166,7 @@ func (s *Source) draftClass(ctx context.Context, year int) ([]ingest.Player, err
 			Position    string `json:"position"`
 			BirthDate   string `json:"birthDate"`
 			Round       int    `json:"roundNumber"`
+			InRound     int    `json:"pickInRound"`
 			Overall     int    `json:"overallPickNumber"`
 			Team        string `json:"triCode"`
 			AmateurClub string `json:"amateurClubName"`
@@ -192,6 +193,7 @@ func (s *Source) draftClass(ctx context.Context, year int) ([]ingest.Player, err
 			Note: fmt.Sprintf("%d draft, round %d, #%d overall to %s. %s",
 				year, pick.Round, pick.Overall, pick.Team, club(pick.AmateurClub, pick.League)),
 			Aliases: []ingest.ExternalID{{Provider: rankingProvider, ProviderID: rankingKey(pick.FirstName, pick.LastName, birth)}},
+			Draft:   &ingest.Draft{Year: year, Round: pick.Round, Pick: pick.InRound, Overall: pick.Overall},
 		})
 	}
 	return players, nil

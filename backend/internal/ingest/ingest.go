@@ -155,10 +155,17 @@ type Player struct {
 	Class       string    // CBB only: FR, SO, JR, SR
 	HeadshotURL string
 	Note        string // prospects only: where he is now, e.g. his school or draft slot
+	Draft       *Draft // where he was drafted into this league, when the feed says
 	// Aliases are other ids this same person may already be stored under: a
 	// feed that knows him by a different id, or by no id at all. If one
 	// matches, he is the same row and gains this feed's id.
 	Aliases []ExternalID
+}
+
+// Draft is where a player was picked: the year, the round, his place in
+// that round, and overall.
+type Draft struct {
+	Year, Round, Pick, Overall int
 }
 
 // ExternalID is a player's id in one feed's id space.
