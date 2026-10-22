@@ -2,6 +2,8 @@
 	import { getLineup, getMatchup, getScores, type Franchise, type GameSummary, type League, type Lineup, type MatchupDetail, type TeamIdentity } from '#lib/api.ts';
 	import { matchupRows } from '#lib/matchupView.ts';
 	import MatchupStats from '#lib/MatchupStats.svelte';
+	import MatchupFaceoff from '#lib/MatchupFaceoff.svelte';
+	import { page } from '$app/state';
 	import { teamIdentity } from '#lib/identity.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import Crest from '#lib/ui/Crest.svelte';
@@ -16,6 +18,7 @@
 	let day = $state('');
 	let wholePeriod = $state(false);
 	let showOther = $state(false);
+	let boxScore = $state(false); // the stat tables instead of the side-by-side view
 	let loading = $state(true);
 	let loadingLineups = $state(false);
 	let error = $state('');
@@ -72,6 +75,9 @@
 		identity: side.id ? teamIdentity(franchises.find(f => f.id === side.id), identities, league.id) : { name: 'Bye', image_url: '' },
 		rows: matchupRows(side.scored, side.lineup, matchup!.period, wholePeriod, day, weekly)
 	})) : []);
+	// The viewer's own team on the left, wherever the schedule put it.
+	const flipped = $derived(!!matchup && matchup.away_franchise_id !== null && matchup.away_franchise_id === page.data.me?.id);
+	const facing = $derived(flipped ? [sides[1], sides[0]] : sides);
 	// The scoreboards of the days in view give each game's clock and score; they reload with every score change.
 	const scoreDays = $derived([...new Set(sides.flatMap(s => s.rows.flatMap(r => r.games.map(g => g.day))))].sort().join(','));
 	$effect(() => {
@@ -109,8 +115,8 @@
 {:else if matchup}
 	<div class="stack matchup-view" data-sport={league.competition}>
 		<section class="scoreboard card" aria-label="Matchup totals">
-			{#each sides as side, index (index)}
-				<div class="score-team" class:away={index === 1} class:leader={side.total > sides[1-index].total}>
+			{#each facing as side, index (index)}
+				<div class="score-team" class:away={index === 1} class:leader={side.total > facing[1-index].total}>
 					<Crest src={side.identity.image_url} name={side.identity.name} size={24} />
 					<strong>{side.identity.name}</strong>
 					<span class="score" title="Full matchup fantasy points">{side.id ? points(side.total) : '—'}{#if side.projected != null}<small class="proj" title="Points so far plus what the starters are projected to add, from recent seasons and the betting lines">Proj {points(side.projected)}</small>{/if}</span>
@@ -124,7 +130,8 @@
 				<button aria-pressed={!wholePeriod} onclick={() => wholePeriod = false}>{weekly ? pickedGames ? 'Selected games' : 'Weekly lineup' : 'Daily stats'}</button>
 				<button aria-pressed={wholePeriod} onclick={() => wholePeriod = true}>Matchup totals</button>
 			</div>
-			<label class="row small-text"><input type="checkbox" bind:checked={showOther} /> Uncounted games</label>
+			{#if boxScore}<label class="row small-text"><input type="checkbox" bind:checked={showOther} /> Uncounted games</label>{/if}
+			<button class="small quiet layout" onclick={() => (boxScore = !boxScore)}>{boxScore ? 'Side by side' : 'Box scores'}</button>
 
 		{#if !wholePeriod}
 			<nav class="row date-controls" aria-label={weekly ? 'Lineup week' : 'Scoring day'}>
@@ -140,8 +147,18 @@
 		</div>
 		{#if lineupError}<p role="alert">{lineupError}</p><button class="small" onclick={() => revision++}>Retry lineups</button>{/if}
 		{#if loadingLineups}<p class="muted small-text" role="status">Loading lineups…</p>{/if}
-		<div class="teams" hidden={loadingLineups} aria-busy={loadingLineups}>
-			{#each sides as side, index (index)}
+		{#if facing.length === 2 && !loadingLineups}
+			<div class="faceoff-view" class:off={boxScore}>
+				<div class="faceoff-head" aria-hidden="true">
+					{#each facing as side, index (index)}
+						<span class:b={index === 1}><strong>{side.identity.name}</strong> {side.id ? points(side.rows.reduce((n,p) => n+p.games.reduce((m,g) => g.counted ? m+g.points : m,0),0)) : '—'} <small>{wholePeriod ? 'total' : weekly ? 'this week' : 'this day'}</small></span>
+					{/each}
+				</div>
+				<MatchupFaceoff left={{ rows: facing[0].rows, empty: !facing[0].id }} right={{ rows: facing[1].rows, empty: !facing[1].id }} scoring={league.settings.scoring} slots={league.settings.lineup.slots.map(s => s.name)} {scores} picking={pickedGames} />
+			</div>
+		{/if}
+		<div class="teams" class:off={!boxScore} hidden={loadingLineups} aria-busy={loadingLineups}>
+			{#each facing as side, index (index)}
 				<section class="card flush team-panel">
 					<header class="spread"><strong>{side.identity.name}</strong><span class="scope-score">{side.id ? points(side.rows.reduce((n,p) => n+p.games.reduce((m,g) => g.counted ? m+g.points : m,0),0)) : '—'} <small>{wholePeriod ? 'total FP' : weekly ? side.lineup?.doubled ? 'matchup FP' : 'week FP' : 'day FP'}</small></span></header>
 					{#if side.lineup?.starts && !wholePeriod}<p class="cap small-text">Pitcher starts: {side.lineup.starts.made.filter(s => s.counts).length} / {side.lineup.starts.limit}{side.lineup.doubled ? ' · shared across double matchup' : ' this week'}</p>{/if}
@@ -153,7 +170,7 @@
 				</section>
 			{/each}
 		</div>
-		<p class="muted scoring-note">FP = counted fantasy points. Expand a player for individual games and box scores.</p>
+		<p class="muted scoring-note" class:off={!boxScore}>FP = counted fantasy points. Expand a player for individual games and box scores.</p>
 	</div>
 {/if}
 
@@ -195,4 +212,12 @@
 		.score-team:first-child .score { text-align: left; }
 		.date-controls { margin-left: 0; }
 	}
+	/* Side by side is the view; the stat tables are a tap away. */
+	.faceoff-view { display: grid; gap: .3rem; width: 100%; max-width: 60rem; justify-self: center; }
+	.faceoff-view.off, .teams.off, .scoring-note.off { display: none; }
+	.layout { margin-left: auto; font-size: .7rem; padding: .3rem .45rem; }
+	.faceoff-head { display: flex; justify-content: space-between; gap: .5rem; font-size: .72rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+	.faceoff-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.faceoff-head strong { color: var(--ink); }
+	.faceoff-head .b { text-align: right; }
 </style>

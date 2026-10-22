@@ -84,3 +84,19 @@ export function sumStats(lines: Record<string, number>[]): Record<string, number
 
 /** A stat as a box score shows it: whole numbers plain, innings to a tenth. */
 export const statValue = (n: number | undefined) => (n === undefined ? '0' : Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+/** Short names for every stat key, as a box score would print them. */
+export const statAbbreviations: Record<string, string> = {
+	pts: 'PTS', reb: 'REB', ast: 'AST', stl: 'STL', blk: 'BLK', tpm: '3PM', tpa: '3PA', tov: 'TO', fgm: 'FGM', fga: 'FGA', ftm: 'FTM', fta: 'FTA',
+	goals: 'G', assists: 'A', shots: 'SOG', hits: 'HIT', blocks: 'BLK', pp_points: 'PPP', pp_goals: 'PPG', plus_minus: '+/-', pim: 'PIM', saves: 'SV', goals_against: 'GA', goalie_wins: 'W', shutouts: 'SO',
+	pass_yds: 'PYD', pass_td: 'PTD', interceptions: 'INT', rush_yds: 'RYD', rush_td: 'RTD', receptions: 'REC', rec_yds: 'RECYD', rec_td: 'RECTD', fumbles_lost: 'FUM',
+	bat_ab: 'AB', bat_h: 'H', bat_r: 'R', bat_hr: 'HR', bat_rbi: 'RBI', bat_sb: 'SB', bat_bb: 'BB', bat_so: 'K', pit_ip: 'IP', pit_h: 'H', pit_er: 'ER', pit_bb: 'BB', pit_so: 'K', pit_w: 'W', pit_sv: 'SV', pit_gs: 'GS'
+};
+
+/** The stats that scored, as "2 G, 1 A, 4 SOG": every one that is not zero
+ * and is worth points under the league's scoring, in the scoring's order. */
+export const scoringLine = (line: Record<string, number>, scoring: Record<string, number>) =>
+	Object.keys(scoring)
+		.filter((key) => scoring[key] !== 0 && line[key])
+		.map((key) => `${statValue(line[key])} ${statAbbreviations[key] ?? key.toUpperCase()}`)
+		.join(', ');

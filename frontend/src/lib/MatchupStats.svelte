@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { GameSummary } from '#lib/api.ts';
-	import type { MatchupGame, MatchupRow } from '#lib/matchupView.ts';
-	import { columnValue, hockeyScoringColumns, statColumns, statValue, sumStats } from '#lib/statLine.ts';
+	import { gameState as stateOf, gameSummary as summaryOf, rowStats, visibleGames, type MatchupGame, type MatchupRow } from '#lib/matchupView.ts';
+	import { columnValue, hockeyScoringColumns, statColumns, statValue } from '#lib/statLine.ts';
 	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
 	import Icon from '#lib/ui/Icon.svelte';
-	import { dayLabel, points, sportsToday, timeOfDay } from '#lib/ui/time.ts';
+	import { dayLabel, points } from '#lib/ui/time.ts';
 
 	// picking: whether the league's slots count only some games, so a game is picked and can be looked into.
 	// scores: the real games by id, for the clock and score of each.
@@ -31,31 +31,11 @@
 		}
 		return grouped.sort((a,b) => rosterGroupOrder(sport).indexOf(a.key)-rosterGroupOrder(sport).indexOf(b.key));
 	});
-	const visible = (row: MatchupRow) => row.games.filter(g => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate');
-	const statsFor = (row: MatchupRow) => {
-		const games = row.games.filter(g => row.bench || g.counted);
-		return { line: sumStats(games.map(g => g.stats)), played: games.some(g => Object.keys(g.stats ?? {}).length > 0) };
-	};
+	const visible = (row: MatchupRow) => visibleGames(row, showOther);
+	const statsFor = rowStats;
 	const shortDate = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'});
-	const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined,{weekday:'short'});
-	// Where a game stands: its start time, or the score with the clock once it starts.
-	function gameState(game: MatchupGame): string {
-		const live = game.gameId ? scores[game.gameId] : undefined;
-		const status = live?.status ?? game.status;
-		if (!live || status === 'scheduled') return `${game.day === sportsToday() ? '' : `${weekday(game.day)} `}${timeOfDay(game.starts_at)}`;
-		// From the player's side when known, otherwise away – home as the game is listed.
-		const [ours, theirs] = game.at_home === undefined ? [live.away_score, live.home_score] : game.at_home ? [live.home_score, live.away_score] : [live.away_score, live.home_score];
-		const result = status === 'final' && game.at_home !== undefined ? ours > theirs ? 'W ' : ours < theirs ? 'L ' : 'T ' : '';
-		return `${result}${ours}–${theirs} · ${live.detail || (status === 'final' ? 'Final' : 'Live')}`;
-	}
-	function gameSummary(row: MatchupRow): string {
-		const games = visible(row);
-		const auto = !row.bench && row.selection.startsWith('Auto');
-		if (games.length === 1) return `${games[0].opponent} · ${gameState(games[0])}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
-		const playing = games.find(g => g.gameId && scores[g.gameId]?.status === 'live');
-		if (games.length > 1) return `${games.length} games${playing ? ` · ${playing.opponent} ${gameState(playing)}` : ''}${auto ? ' · Auto' : ''}`;
-		return row.bench ? 'No game in this view' : auto ? 'Auto · waiting for a game' : 'No selected game';
-	}
+	const gameState = (game: MatchupGame) => stateOf(game, scores);
+	const gameSummary = (row: MatchupRow) => summaryOf(row, scores, showOther, picking);
 	function toggle(id: string) { expanded = expanded.includes(id) ? expanded.filter(p => p !== id) : [...expanded,id]; }
 	function toggleBench(key: string) { benchClosed = benchClosed.includes(key) ? benchClosed.filter(k => k !== key) : [...benchClosed,key]; }
 </script>

@@ -119,8 +119,20 @@
 			: [...ownership, value];
 		page = 1;
 	}
-	const usual = () => (!byPoints ? 'name' : competition ? 'points' : 'index');
+	const usual = () =>
+		workspace ? 'points' : !byPoints ? 'name' : competition ? 'points' : 'index';
 	let order = $state(untrack(usual));
+	let ascending = $state(false);
+	const textSort = (key: string) => ['name', 'position', 'team'].includes(key);
+	const sorted = (key: string) => workspace && order === key;
+	const sortDirection = (key: string) =>
+		sorted(key) ? (ascending ? 'ascending' : 'descending') : 'none';
+	function sortColumn(key: string) {
+		ascending = order === key ? !ascending : textSort(key);
+		order = key;
+		chose = true;
+		page = 1;
+	}
 	let chose = false; // whether the order was picked by hand, and so is kept
 	let seasonBack = $state(0);
 	let seasons = $state<StatSeason[]>([]);
@@ -177,6 +189,11 @@
 			shown = competition;
 			position = ''; // positions belong to a sport
 			chosenStats = null;
+			if (order.startsWith('stat:')) {
+				order = 'points';
+				chose = false;
+				ascending = false;
+			}
 			page = 1;
 			seasonBack = 0;
 			if (!chose || (order === 'prospect_rank' && competition !== 'mlb' && competition !== ''))
@@ -200,7 +217,10 @@
 			max_age: maxAge ?? undefined,
 			page,
 			draft_id: draftId,
-			sort: order !== 'name' ? order : undefined,
+			sort: order.startsWith('stat:') ? 'stat' : order,
+			stat_key: order.startsWith('stat:') ? order.slice(5) : undefined,
+			ascending: workspace ? String(ascending) : undefined,
+			per_game: workspace ? String(perGame) : undefined,
 			season_back: (ranked || workspace) && seasonBack > 0 ? seasonBack : undefined,
 			available_in: availableOnly ? leagueId : undefined,
 		})
@@ -223,6 +243,16 @@
 			abbrev={player.team_abbrev}
 			size={18}
 		/>{:else}{player.team_name || 'No team'}{/if}{/snippet}
+
+{#snippet sortHeader(key: string, label: string, description = '')}
+	{#if workspace}<button
+			class="sort-header"
+			class:active={sorted(key)}
+			title={description || `Sort by ${label}`}
+			onclick={() => sortColumn(key)}
+			>{label}{#if sorted(key)}<Icon name={ascending ? 'up' : 'down'} size={12} />{/if}</button
+		>{:else}{label}{/if}
+{/snippet}
 
 <div class="stack tight" class:compact class:workspace class:more-filters={moreFilters}>
 	{#if workspace}<button
@@ -259,6 +289,7 @@
 				bind:value={order}
 				onchange={() => {
 					chose = true;
+					ascending = textSort(order);
 					page = 1;
 				}}
 			>
@@ -269,6 +300,11 @@
 						>By MLB Pipeline Top 100 rank</option
 					>{/if}
 				<option value="name">By name</option>
+				{#if workspace}<option value="games">By games played</option><option value="position"
+						>By position</option
+					>{#each displayStats as stat}<option value="stat:{stat.key}"
+							>By {stat.label.toLowerCase()}</option
+						>{/each}{/if}
 			</select>
 			{#if (ranked || workspace) && seasonChoices.length > 0}
 				<select aria-label="Season" bind:value={seasonBack} onchange={() => (page = 1)}>
@@ -375,13 +411,20 @@
 										chosenStats = current.includes(stat.key)
 											? current.filter((k) => k !== stat.key)
 											: [...current, stat.key];
+										if (order === `stat:${stat.key}` && !chosenStats.includes(stat.key)) {
+											order = 'points';
+											ascending = false;
+											page = 1;
+										}
 									}}
 								/>{stat.label}</label
 							>{/each}
 					</div>
 				</details>
-				<label class="check"><input type="checkbox" bind:checked={perGame} />Stats per game</label>
 			{/if}
+			<label class="check"
+				><input type="checkbox" bind:checked={perGame} onchange={() => (page = 1)} />Per game</label
+			>
 			<label class="check mobile-toggle"
 				><input type="checkbox" bind:checked={mobileStats} />Show detailed stats</label
 			>
@@ -410,17 +453,62 @@
 				<table>
 					<thead>
 						<tr>
-							<th>Player</th>
-							<th class:mobile-hide={workspace}>Pos</th>
-							{#if !compact}<th class="wide">Team</th><th class="wide num">Age</th>{/if}
-							{#if workspace}<th class="num mobile-hide">GP</th><th class="num mobile-hide">FP/G</th
+							<th
+								class:sorted={sorted('name')}
+								aria-sort={workspace ? sortDirection('name') : undefined}
+								>{@render sortHeader('name', 'Player')}</th
+							>
+							<th
+								class:mobile-hide={workspace}
+								class:sorted={sorted('position')}
+								aria-sort={workspace ? sortDirection('position') : undefined}
+								>{@render sortHeader('position', 'Pos')}</th
+							>
+							{#if !compact}<th
+									class="wide"
+									class:sorted={sorted('team')}
+									aria-sort={workspace ? sortDirection('team') : undefined}
+									>{@render sortHeader('team', 'Team')}</th
+								><th
+									class="wide num"
+									class:sorted={sorted('age')}
+									aria-sort={workspace ? sortDirection('age') : undefined}
+									>{@render sortHeader('age', 'Age')}</th
 								>{/if}
-							{#if columns}<th class="num">FP</th><th
+							{#if workspace}<th
+									class="num mobile-hide"
+									class:sorted={sorted('games')}
+									aria-sort={sortDirection('games')}
+									>{@render sortHeader('games', 'GP', 'Games played')}</th
+								>{/if}
+							{#if columns}<th
 									class="num"
-									title="100 is the average rostered player; 15 is one standard deviation">Index</th
+									class:sorted={sorted('points')}
+									aria-sort={workspace ? sortDirection('points') : undefined}
+									>{@render sortHeader(
+										'points',
+										workspace && perGame ? 'FP/G' : 'FP',
+										workspace && perGame ? 'Fantasy points per game' : 'Fantasy points',
+									)}</th
+								><th
+									class="num"
+									class:sorted={sorted('index')}
+									aria-sort={workspace ? sortDirection('index') : undefined}
+									>{@render sortHeader(
+										'index',
+										'Index',
+										'100 is the average rostered player; 15 is one standard deviation. Based on season totals.',
+									)}</th
 								>{/if}
-							{#if workspace}{#each displayStats as stat}<th class="num raw-stat" title={stat.label}
-										>{stat.key.toUpperCase()}</th
+							{#if workspace}{#each displayStats as stat}<th
+										class="num raw-stat"
+										class:sorted={sorted(`stat:${stat.key}`)}
+										aria-sort={sortDirection(`stat:${stat.key}`)}
+										>{@render sortHeader(
+											`stat:${stat.key}`,
+											stat.key.toUpperCase(),
+											stat.label,
+										)}</th
 									>{/each}{/if}
 							<th class="num"
 								>{workspace ? 'Action' : `${result.total.toLocaleString()} players`}</th
@@ -430,7 +518,7 @@
 					<tbody>
 						{#each result.players as player (player.id)}
 							<tr class:selected={selectedId === player.id}>
-								<td>
+								<td class:sorted={sorted('name')}>
 									<div class="player">
 										<Headshot
 											name={player.full_name}
@@ -492,24 +580,32 @@
 										</div>
 									</div>
 								</td>
-								<td class:mobile-hide={workspace}>{player.positions.join('/')}</td>
-								{#if !compact}<td class="wide muted" title={player.team_name}>{player.team_name}</td
-									><td class="wide num">{age(player.birth_date)}</td>{/if}
-								{#if workspace}<td class="num mobile-hide"
+								<td class:mobile-hide={workspace} class:sorted={sorted('position')}
+									>{player.positions.join('/')}</td
+								>
+								{#if !compact}<td
+										class="wide muted"
+										class:sorted={sorted('team')}
+										title={player.team_name}>{player.team_name}</td
+									><td class="wide num" class:sorted={sorted('age')}>{age(player.birth_date)}</td
+									>{/if}
+								{#if workspace}<td class="num mobile-hide" class:sorted={sorted('games')}
 										>{player.season ? player.season_games : '—'}</td
-									><td class="num mobile-hide"
-										>{player.season_games && player.season_scored !== false
-											? (player.season_points / player.season_games).toFixed(1)
-											: '—'}</td
 									>{/if}
-								{#if columns}<td class="num"
+								{#if columns}<td class="num" class:sorted={sorted('points')}
 										>{player.season && player.season_scored !== false
-											? fantasyPoints(player.season_points)
+											? workspace && perGame
+												? player.season_games
+													? (player.season_points / player.season_games).toFixed(1)
+													: '—'
+												: fantasyPoints(player.season_points)
 											: '—'}</td
-									><td class="num">{player.season_index ? Math.round(player.season_index) : '—'}</td
+									><td class="num" class:sorted={sorted('index')}
+										>{player.season_index ? Math.round(player.season_index) : '—'}</td
 									>{/if}
-								{#if workspace}{#each displayStats as stat}<td class="num raw-stat"
-											>{statValue(player, stat.key)}</td
+								{#if workspace}{#each displayStats as stat}<td
+											class="num raw-stat"
+											class:sorted={sorted(`stat:${stat.key}`)}>{statValue(player, stat.key)}</td
 										>{/each}{/if}
 								<td class="actions">
 									{#if workspace && action}{@render action(player)}
@@ -541,6 +637,35 @@
 </div>
 
 <style>
+	.sort-header {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-transform: inherit;
+		letter-spacing: inherit;
+		min-height: 1.8rem;
+	}
+	.sort-header:hover,
+	.sort-header.active {
+		color: var(--brand);
+	}
+	th.num .sort-header {
+		justify-content: flex-end;
+	}
+	.workspace th.sorted {
+		background: var(--brand-soft);
+		color: var(--brand);
+	}
+	.workspace td.sorted {
+		background: color-mix(in srgb, var(--brand-soft) 40%, var(--surface));
+	}
+
 	.mobile-toggle {
 		display: none;
 	}

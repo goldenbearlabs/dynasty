@@ -67,9 +67,9 @@ left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
   and (coalesce(cardinality($3::text[]), 0) = 0
-       or ('available' = any($3::text[]) and r.player_id is null)
-       or ('taken' = any($3::text[]) and r.player_id is not null)
-       or r.list = any($3::text[]))
+       or ('available' = any($3::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($3::text[]) and coalesce(r.list, '') <> '')
+       or ($3::text[] && array['main','reserve','rights']::text[] and r.list = any($3::text[])))
   and (coalesce(cardinality($4::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($4::text[])))
   and ($5::text = '' or p.full_name ilike '%' || $5 || '%')
   and ($6::text = '' or $6 = any(p.positions))
@@ -779,11 +779,16 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 
 const listPlayers = `-- name: ListPlayers :many
 with seasons as (
-  select distinct competition, year from stat_seasons
+  -- A provider fallback may have been stored under two request years.
+  -- Count each named season once, using its earliest stored year.
+  select distinct competition, year from (
+    select competition, label, min(year) as year from stat_seasons group by competition, label
+  ) canonical
 ), reference as materialized (
-  -- the season with exactly season_back newer ones in its sport
-  select s.competition, s.year from seasons s
-  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $14::int
+  select competition, year from (
+    select competition, year, row_number() over (partition by competition order by year desc) as rank
+    from seasons where ($2::text = '' or competition = $2)
+  ) ranked where rank = $3::int + 1
 ), scored as materialized (
   -- points are stored with each season line, under the rules of the league
   -- here that plays its sport
@@ -791,18 +796,15 @@ with seasons as (
          sum(ps.points) as points, sum(ps.eligible_points) as eligible_points, sum(ps.games)::int as games
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  where ps.league = '' and ($1::text = '' or ps.competition = $1)
+  where ps.league = '' and ($2::text = '' or ps.competition = $2)
   group by ps.player_id, ps.competition
-), stat_values as (
-  select ps.player_id, ps.competition, stat.key, sum(stat.value::numeric)::float8 as total
+), stat_sort as (
+  -- Only expand the requested raw key when sorting by a raw stat.
+  select ps.player_id, ps.competition, sum((ps.stats ->> $4::text)::float8) as value
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
-  where ps.league = '' and ($1::text = '' or ps.competition = $1)
-  group by ps.player_id, ps.competition, stat.key
-), season_stats as (
-  select stat_values.player_id, stat_values.competition, jsonb_object_agg(stat_values.key, stat_values.total) as stats
-  from stat_values group by stat_values.player_id, stat_values.competition
+  where ps.league = '' and $5::text = 'stat' and ps.stats ? $4::text
+  group by ps.player_id, ps.competition
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
   select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
@@ -815,7 +817,7 @@ with seasons as (
         from leagues l) sizes on sizes.competition = placed.competition
   where placed.place <= sizes.spots
   group by placed.competition
-)
+), player_pool as (
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
        pr.rank as prospect_rank, pr.year as prospect_rank_year,
@@ -828,11 +830,20 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        coalesce(r.list, '')::text as roster_list,
        coalesce(sc.games, 0)::int as season_games,
        (sc.points is not null)::boolean as season_scored,
-       coalesce(ss.stats, '{}'::jsonb) as season_stats,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
-       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index,
+       (case $5::text when 'name' then p.full_name when 'position' then array_to_string(p.positions, '/')
+          when 'team' then t.name when 'age' then null else null end)::text as sort_text,
+       (case $5::text
+          when 'points' then sc.points / case when $6::boolean then nullif(sc.games, 0) else 1 end
+          when 'games' then sc.games::float8
+          when 'age' then extract(epoch from (current_date::timestamp - p.birth_date::timestamp))
+          when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
+          when 'prospect_rank' then -pr.rank::float8
+          when 'stat' then stat_sort.value / case when $6::boolean then nullif(sc.games, 0) else 1 end
+        end)::float8 as sort_number
 from players p
 left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t      on t.id = p.pro_team_id
@@ -840,38 +851,73 @@ left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
-left join season_stats ss  on ss.player_id = p.id and ss.competition = p.competition
+left join stat_sort on stat_sort.player_id = p.id and stat_sort.competition = p.competition
 left join rostered         on rostered.competition = p.competition
-where p.pool_eligible and ($1::text = '' or p.competition = $1)
-  and ($2::text = '' or p.status = $2)
-  and (coalesce(cardinality($3::text[]), 0) = 0
-       or ('available' = any($3::text[]) and r.player_id is null)
-       or ('taken' = any($3::text[]) and r.player_id is not null)
-       or r.list = any($3::text[]))
-  and (coalesce(cardinality($4::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($4::text[])))
-  and ($5::text = '' or p.full_name ilike '%' || $5 || '%')
-  and ($6::text = '' or $6 = any(p.positions))
-  and ($7::int is null or p.birth_date <= current_date - make_interval(years => $7))
-  and ($8::int is null or p.birth_date > current_date - make_interval(years => $8 + 1))
-  and ($9::uuid is null or (
+where p.pool_eligible and ($2::text = '' or p.competition = $2)
+  and ($7::text = '' or p.status = $7)
+  and (coalesce(cardinality($8::text[]), 0) = 0
+       or ('available' = any($8::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($8::text[]) and coalesce(r.list, '') <> '')
+       or ($8::text[] && array['main','reserve','rights']::text[] and r.list = any($8::text[])))
+  and (coalesce(cardinality($9::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($9::text[])))
+  and ($10::text = '' or p.full_name ilike '%' || $10 || '%')
+  and ($11::text = '' or $11 = any(p.positions))
+  and ($12::int is null or p.birth_date <= current_date - make_interval(years => $12))
+  and ($13::int is null or p.birth_date > current_date - make_interval(years => $13 + 1))
+  and ($14::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $9)))
-  and ($10::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $14)))
+  and ($15::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $10 and l.competition = p.competition)))
-order by case when $11::text='prospect_rank' then pr.rank end asc nulls last,
-         case $11::text
-           when 'points' then sc.points
-           when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
-         end desc nulls last,
-         p.full_name, p.id
-limit $13 offset $12
+                    where dl.draft_id = $15 and l.competition = p.competition)))
+), candidates as materialized (
+select id, competition, status, injury_designation, full_name, positions, birth_date, class, note, headshot_url, eligible_since, prospect_rank, prospect_rank_year, prospect_rank_source, prospect_rank_url, prospect_eta, team_abbrev, team_name, owner_name, owner_slug, roster_list, season_games, season_scored, waiver_until, season, season_points, season_index, sort_text, sort_number from player_pool
+order by
+  case when not $1::boolean then sort_number end desc nulls last,
+  case when $1::boolean then sort_number end asc nulls last,
+  case when not $1::boolean then sort_text end desc nulls last,
+  case when $1::boolean then sort_text end asc nulls last,
+  full_name, id
+limit $17 offset $16
+)
+select candidates.id, candidates.competition, candidates.status, candidates.injury_designation,
+ candidates.full_name, candidates.positions, candidates.birth_date, candidates.class, candidates.note,
+ candidates.headshot_url, candidates.eligible_since, candidates.prospect_rank, candidates.prospect_rank_year,
+ candidates.prospect_rank_source, candidates.prospect_rank_url, candidates.prospect_eta,
+ candidates.team_abbrev, candidates.team_name, candidates.owner_name, candidates.owner_slug,
+ candidates.roster_list, candidates.season_games, candidates.season_scored, candidates.waiver_until,
+ candidates.season, candidates.season_points, candidates.season_index,
+ coalesce(raw.stats, '{}'::jsonb) as season_stats
+from candidates
+left join lateral (
+  -- Aggregate full stat lines only for the players on the selected page.
+  select jsonb_object_agg(sv.key, sv.total) as stats
+  from (
+    select stat.key, sum(stat.value::numeric)::float8 as total
+    from player_seasons ps
+    join reference on reference.competition = ps.competition and reference.year = ps.year
+    cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
+    where ps.player_id = candidates.id and ps.competition = candidates.competition and ps.league = ''
+    group by stat.key
+  ) sv
+) raw on true
+order by
+  case when not $1::boolean then candidates.sort_number end desc nulls last,
+  case when $1::boolean then candidates.sort_number end asc nulls last,
+  case when not $1::boolean then candidates.sort_text end desc nulls last,
+  case when $1::boolean then candidates.sort_text end asc nulls last,
+  candidates.full_name, candidates.id
 `
 
 type ListPlayersParams struct {
+	Ascending   bool        `json:"ascending"`
 	Competition string      `json:"competition"`
+	SeasonBack  int32       `json:"season_back"`
+	StatKey     string      `json:"stat_key"`
+	SortBy      string      `json:"sort_by"`
+	PerGame     bool        `json:"per_game"`
 	Status      string      `json:"status"`
 	Ownership   []string    `json:"ownership"`
 	Owners      []string    `json:"owners"`
@@ -881,10 +927,8 @@ type ListPlayersParams struct {
 	MaxAge      pgtype.Int4 `json:"max_age"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
-	SortBy      string      `json:"sort_by"`
 	PageOffset  int32       `json:"page_offset"`
 	PageSize    int32       `json:"page_size"`
-	SeasonBack  int32       `json:"season_back"`
 }
 
 type ListPlayersRow struct {
@@ -911,11 +955,11 @@ type ListPlayersRow struct {
 	RosterList         string             `json:"roster_list"`
 	SeasonGames        int32              `json:"season_games"`
 	SeasonScored       bool               `json:"season_scored"`
-	SeasonStats        json.RawMessage    `json:"season_stats"`
 	WaiverUntil        pgtype.Timestamptz `json:"waiver_until"`
 	Season             string             `json:"season"`
 	SeasonPoints       float64            `json:"season_points"`
 	SeasonIndex        float64            `json:"season_index"`
+	SeasonStats        json.RawMessage    `json:"season_stats"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
@@ -931,7 +975,12 @@ type ListPlayersRow struct {
 // deviation among them. sort_by "points" or "index" puts the highest first.
 func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
 	rows, err := q.db.Query(ctx, listPlayers,
+		arg.Ascending,
 		arg.Competition,
+		arg.SeasonBack,
+		arg.StatKey,
+		arg.SortBy,
+		arg.PerGame,
 		arg.Status,
 		arg.Ownership,
 		arg.Owners,
@@ -941,10 +990,8 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		arg.MaxAge,
 		arg.AvailableIn,
 		arg.DraftID,
-		arg.SortBy,
 		arg.PageOffset,
 		arg.PageSize,
-		arg.SeasonBack,
 	)
 	if err != nil {
 		return nil, err
@@ -977,11 +1024,11 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.RosterList,
 			&i.SeasonGames,
 			&i.SeasonScored,
-			&i.SeasonStats,
 			&i.WaiverUntil,
 			&i.Season,
 			&i.SeasonPoints,
 			&i.SeasonIndex,
+			&i.SeasonStats,
 		); err != nil {
 			return nil, err
 		}
@@ -1255,7 +1302,7 @@ func (q *Queries) ListSeasonLengths(ctx context.Context, competition string) ([]
 
 const listStatSeasons = `-- name: ListStatSeasons :many
 select competition, year, max(label)::text as label
-from stat_seasons
+from (select competition, label, min(year)::int as year from stat_seasons group by competition, label) canonical
 group by competition, year
 order by competition, year desc
 `

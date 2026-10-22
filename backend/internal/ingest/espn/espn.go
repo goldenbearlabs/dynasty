@@ -457,6 +457,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 				Pages int `json:"pages"`
 			} `json:"pagination"`
 			RequestedSeason struct {
+				Year        int    `json:"year"`
 				DisplayName string `json:"displayName"`
 			} `json:"requestedSeason"`
 			// The names of each group's stats, in the order every athlete's totals follow.
@@ -481,6 +482,21 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 			s.WebBase, s.Path, year, page)
 		if err := s.client.GetTransient(ctx, url, &res); err != nil {
 			return nil, err
+		}
+		// Unpublished years can silently return last season's statistics.
+		// Never store that fallback under the year we requested.
+		returnedYear := res.RequestedSeason.Year
+		labelYear := 0
+		label := strings.TrimSpace(res.RequestedSeason.DisplayName)
+		if start, _, spans := strings.Cut(label, "-"); s.SeasonSpansYears && spans && len(start) == 4 {
+			if n, err := strconv.Atoi(start); err == nil {
+				labelYear = n + 1
+			}
+		} else if len(label) == 4 {
+			labelYear, _ = strconv.Atoi(label)
+		}
+		if (returnedYear != 0 && returnedYear != year) || (labelYear != 0 && labelYear != year) {
+			return nil, nil
 		}
 		pages = res.Pagination.Pages
 

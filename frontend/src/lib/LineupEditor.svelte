@@ -7,7 +7,7 @@
 	// one that counts.
 	import { autoSetLineup, getLineup, setLineup, getRosterPerformance, type Competition, type LeagueRoster, type RosterPerformance, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
-	import { columnValue, hockeyScoringColumns, statColumns, statValue, sumStats, type StatColumn } from '#lib/statLine.ts';
+	import { columnValue, hockeyScoringColumns, statAbbreviations, statColumns, statValue, sumStats, type StatColumn } from '#lib/statLine.ts';
 	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
@@ -57,12 +57,6 @@
 	}
 	$effect(() => { void [statsView,day,league.id,franchise.id,roster?.players,competition]; loadStats(); return () => { statsRequest++; }; });
 	const performanceFor = (id: string) => statsLoading || statsError ? undefined : performance?.players.find(p => p.player_id === id);
-	const statAbbreviations: Record<string,string> = {
-		pts:'PTS',reb:'REB',ast:'AST',stl:'STL',blk:'BLK',tpm:'3PM',tpa:'3PA',tov:'TO',fgm:'FGM',fga:'FGA',ftm:'FTM',fta:'FTA',
-		goals:'G',assists:'A',shots:'SOG',hits:'HIT',blocks:'BLK',pp_points:'PPP',pp_goals:'PPG',plus_minus:'+/-',pim:'PIM',saves:'SV',goals_against:'GA',goalie_wins:'W',shutouts:'SO',
-		pass_yds:'PYD',pass_td:'PTD',interceptions:'INT',rush_yds:'RYD',rush_td:'RTD',receptions:'REC',rec_yds:'RECYD',rec_td:'RECTD',fumbles_lost:'FUM',
-		bat_ab:'AB',bat_h:'B H',bat_r:'R',bat_hr:'HR',bat_rbi:'RBI',bat_sb:'SB',bat_bb:'B BB',bat_so:'B K',pit_ip:'IP',pit_h:'P H',pit_er:'ER',pit_bb:'P BB',pit_so:'P K',pit_w:'W',pit_sv:'SV',pit_gs:'GS'
-	};
 	const performanceColumns = $derived.by(() => {
 		const definitions = (competition?.stats ?? []).map(s => ({...s}));
 		const known = new Set(definitions.map(s => s.key));

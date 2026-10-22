@@ -1,15 +1,14 @@
-import { getActivity, getOdds, getOverall, getStandings } from '#lib/api.ts';
+import { getActivity, getOverall, getStandings } from '#lib/api.ts';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ parent }) => {
 	const { dynasty } = await parent();
-	if (!dynasty) return { activity: [], standings: [], overall: [], odds: undefined };
+	if (!dynasty) return { activity: [], standings: [], overall: [] };
 
-	const [activity, standings, overall, odds] = await Promise.all([
+	const [activity, standings, overall] = await Promise.all([
 		getActivity(),
 		getStandings(),
-		getOverall(),
-		getOdds().catch(() => undefined) // the page stands without them
+		getOverall()
 	]);
-	return { activity, standings, overall, odds };
+	return { activity, standings, overall };
 };

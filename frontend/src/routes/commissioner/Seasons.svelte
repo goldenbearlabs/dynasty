@@ -19,6 +19,7 @@
 	import ScheduleEditor from './ScheduleEditor.svelte';
 	import RosterDeadline from './RosterDeadline.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
+	import Icon from '#lib/ui/Icon.svelte';
 	import { dayLabel, points, shiftDay, sportsToday } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 
@@ -29,6 +30,7 @@
 	// The form for each league: a new season's year and dates, or the
 	// current season's dates and the champion to name.
 	let forms = $state<Record<string, { year: number; starts_on: string; ends_on: string; champion: string }>>({});
+	let open = $state<Record<string, boolean>>({}); // which leagues are expanded, by id
 
 	const latest = (league: League) => seasons.find((s) => s.league_id === league.id); // newest first
 	const table = (league: League) => standings.find((s) => s.league_id === league.id);
@@ -92,9 +94,10 @@
 		{@const season = latest(league)}
 		{@const form = forms[league.id]}
 		{#if form}
-			<div class="card stack" data-sport={league.competition}>
-				<div class="spread">
+			<details class="card league" data-sport={league.competition} bind:open={open[league.id]}>
+				<summary class="spread">
 					<div class="row">
+						<Icon name={open[league.id] ? 'down' : 'right'} size={16} />
 						<SportBadge sport={league.competition} solid />
 						<h2>{league.name}</h2>
 					</div>
@@ -105,7 +108,9 @@
 					{:else}
 						<span class="pill">No season yet</span>
 					{/if}
-				</div>
+				</summary>
+				{#if open[league.id]}
+				<div class="stack body">
 
 				{#if season?.status === 'active'}
 					<div class="row end">
@@ -155,12 +160,27 @@
 						</button>
 					</div>
 				{/if}
-			</div>
+				</div>
+				{/if}
+			</details>
 		{/if}
 	{/each}
 </section>
 
 <style>
+	.league > summary {
+		cursor: pointer;
+		list-style: none;
+	}
+	.league > summary::-webkit-details-marker {
+		display: none;
+	}
+	.league > summary :global(svg) {
+		color: var(--ink-faint);
+	}
+	.body {
+		margin-top: 0.85rem;
+	}
 	.close {
 		padding-top: 1rem;
 		border-top: 1px solid var(--rule);

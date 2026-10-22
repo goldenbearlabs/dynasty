@@ -1,5 +1,6 @@
 <script lang="ts">
 	// League overview: standings and the latest activity across sports.
+	import { getOdds, type Odds } from '#lib/api.ts';
 	import { invalidateAll } from '$app/navigation';
 	import Activity from '#lib/Activity.svelte';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
@@ -8,6 +9,15 @@
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+	let odds = $state<Odds>();
+	$effect(() => {
+		const dynasty = data.dynasty?.id;
+		void data.standings;
+		odds = undefined;
+		let active = true;
+		if (dynasty) getOdds().then(value => { if (active) odds = value; }, () => {});
+		return () => { active = false; };
+	});
 	let sport = $state('all');
 	let activityType = $state('all');
 	const filtered = $derived(sport !== 'all' || activityType !== 'all');
@@ -38,7 +48,7 @@
 				identities={data.dynasty.team_identities}
 				tables={data.standings}
 				overall={data.overall}
-				odds={data.odds}
+				{odds}
 				franchises={data.dynasty.franchises}
 				leagues={data.dynasty.leagues}
 			/>

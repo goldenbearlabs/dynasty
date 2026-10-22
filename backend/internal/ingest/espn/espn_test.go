@@ -477,3 +477,29 @@ func TestGamesRegularSeasonOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestSeasonStatsRejectsProviderFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, label         string
+		returned, requested int
+		want                int
+	}{
+		{"explicit fallback", "2025-26", 2026, 2027, 0},
+		{"label fallback", "2025-26", 0, 2027, 0},
+		{"echoed request year with old label", "2025-26", 2027, 2027, 0},
+		{"matching season", "2025-26", 2026, 2026, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"pagination":{"pages":1},"requestedSeason":{"year":%d,"displayName":%q},"categories":[{"name":"general","names":["gamesPlayed"]},{"name":"offensive","names":["points"]}],"athletes":[{"athlete":{"id":"1","teamShortName":"OKC"},"categories":[{"name":"general","totals":["10"]},{"name":"offensive","totals":["100"]}]}]}`, tc.returned, tc.label)
+			}))
+			defer server.Close()
+			src := New(ingest.NewClient(0), League{Path: "basketball/nba", Provider: "test", SeasonSpansYears: true, Stats: map[string]string{"points": "pts"}, SeasonGroups: []string{"general", "offensive"}})
+			src.WebBase = server.URL
+			rows, err := src.SeasonStats(context.Background(), tc.requested)
+			if err != nil || len(rows) != tc.want {
+				t.Fatalf("rows=%+v err=%v", rows, err)
+			}
+		})
+	}
+}

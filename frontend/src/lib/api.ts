@@ -261,6 +261,9 @@ export type PlayerProfile = {
 };
 
 export type PlayerFilter = {
+	ascending?: string;
+	per_game?: string;
+	stat_key?: string;
 	ownership?: string;
 	owners?: string;
 	competition?: string;

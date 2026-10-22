@@ -55,10 +55,12 @@ To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.
 
-The Players page opens on available players, ranked by fantasy points within a
-sport or league index across sports. Combine Available, All taken, Rostered,
-Reserve and Unsigned filters, then narrow to one or more fantasy teams. Rows
-show season FP, FP/game, games and league index; selecting a sport adds raw
+The Players page opens on available players, sorted by fantasy points descending.
+Click a column header to sort the full filtered pool; click it again to reverse.
+The active header and column are highlighted. The per-game switch changes the
+single FP column and raw stats to rates, including their sort order. Combine
+Available, All taken, Rostered, Reserve and Unsigned filters, then narrow to one or more fantasy teams. Rows
+show FP (totals or per game), games and league index; selecting a sport adds raw
 stat columns with a column picker and totals/per-game switch. Green plus opens
 an add-to-roster/reserve choice, red minus confirms a drop, and blue swap opens
 a trade with that player selected. Waiver players link to claims. Mobile keeps
@@ -329,6 +331,22 @@ Session, private manager/admin routes, writes and live streams are not cached.
 Keys include a database namespace, generation, route/query or dataset selection,
 and a cache format version (`v1`); bump the version if cached JSON semantics change.
 
+Each signed-in manager has an **Inbox**, with an unread badge in the main
+navigation and a direct tab on mobile. It saves league roster moves (including
+waiver status and clearing time), trade offers sent to you, and other managers
+targeting your players. Notifications support type and unread filters,
+pagination, mark read/unread and mark all read. Opening a notification marks it
+read and opens its player, waiver page, offer or trade-interest list. The badge
+refreshes every 20 seconds while the app is visible, on focus and on navigation.
+These are in-app notifications, generated from new events after migration 0043;
+failed writes do not leave notifications behind. Target writes are idempotent.
+
+Unaccepted trade offers are visible only to their participants, including when
+another manager is commissioner. Once every party accepts, a trade is public
+while awaiting commissioner approval and after completion; trades declined or
+withdrawn before everyone accepts stay private. Notification reads and updates
+are scoped to the signed-in organization and bypass shared caches.
+
 Each signed-in manager has a private **Watchlist** saved to their organization.
 Use the star beside a player in search, player lists, research, profiles,
 rosters, lineups or draft research/queues to add or remove them. Any player
@@ -343,3 +361,11 @@ Schedule imports cover at least 365 days ahead, or the end of an active fantasy 
 Head-to-head leagues default to eight championship playoff teams with a fixed bracket. In a 14-team league, the other six play a separate consolation bracket; teams 13 and 14 receive first-round byes, and winners advance. Standings default to wins, then fewer losses, followed by points for, head-to-head record among tied teams, and points against (higher first). Commissioner rules can change playoff size, reseeding, consolation participation/seeding, standings ranking and tiebreaker order. Both brackets finish in the season's final period, and only the championship bracket determines the league title.
 
 MLB players display the current MLB Pipeline Top 100 prospect rank, list year, source link and MLB ETA. Rankings match existing players by MLBAM ID, preserve roster status and identity, and are available as a player-list sort. They refresh with the weekly prospect import or separately from Commissioner → Data feeds → MLB Top 100 ranks. `(cd backend && go run . sync-prospect-rankings)` refreshes them from the command line. Refreshes replace a complete list atomically and retain the last valid list on feed errors or incomplete responses.
+
+Player lists aggregate raw stat lines only after selecting a page; raw-stat
+sorting aggregates only the chosen key. Season choices count each named season
+once. ESPN imports reject responses for a different season, including providers
+that echo the requested year while returning an old season label. Migration 0044
+removes only exact copied NBA/college season lines stored under an incorrect
+year, retaining any differing lines. The League overview renders standings
+before fetching optional playoff/title odds.

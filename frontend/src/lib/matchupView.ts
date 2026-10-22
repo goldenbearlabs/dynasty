@@ -1,4 +1,6 @@
-import type { Lineup, LineupGame, MatchupScorer, Period, ScoredGame } from '#lib/api.ts';
+import type { GameSummary, Lineup, LineupGame, MatchupScorer, Period, ScoredGame } from '#lib/api.ts';
+import { sumStats } from '#lib/statLine.ts';
+import { sportsToday, timeOfDay } from '#lib/ui/time.ts';
 
 export type MatchupGame = {
 	day: string; starts_at: string; status: string; opponent: string;
@@ -75,4 +77,37 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 		}
 	}
 	return [...ordered,...rows.filter(row => !used.has(row.id) && !row.bench),...rows.filter(row => row.bench)];
+}
+
+const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
+
+/** Where a game stands: its start time, or the score with the clock once it starts. scores: the real games by id. */
+export function gameState(game: MatchupGame, scores: Record<string, GameSummary>): string {
+	const live = game.gameId ? scores[game.gameId] : undefined;
+	const status = live?.status ?? game.status;
+	if (!live || status === 'scheduled') return `${game.day === sportsToday() ? '' : `${weekday(game.day)} `}${timeOfDay(game.starts_at)}`;
+	// From the player's side when known, otherwise away – home as the game is listed.
+	const [ours, theirs] = game.at_home === undefined ? [live.away_score, live.home_score] : game.at_home ? [live.home_score, live.away_score] : [live.away_score, live.home_score];
+	const result = status === 'final' && game.at_home !== undefined ? (ours > theirs ? 'W ' : ours < theirs ? 'L ' : 'T ') : '';
+	return `${result}${ours}–${theirs} · ${live.detail || (status === 'final' ? 'Final' : 'Live')}`;
+}
+
+/** The games a row shows: on the bench all of them; otherwise the ones that count, are picked, or with showOther every one. */
+export const visibleGames = (row: MatchupRow, showOther = false) =>
+	row.games.filter((g) => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate');
+
+/** One line on a row's games: the opponent and where the game stands, or how many there are. picking: slots count only some games. */
+export function gameSummary(row: MatchupRow, scores: Record<string, GameSummary>, showOther = false, picking = true): string {
+	const games = visibleGames(row, showOther);
+	const auto = !row.bench && row.selection.startsWith('Auto');
+	if (games.length === 1) return `${games[0].opponent} · ${gameState(games[0], scores)}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
+	const playing = games.find((g) => g.gameId && scores[g.gameId]?.status === 'live');
+	if (games.length > 1) return `${games.length} games${playing ? ` · ${playing.opponent} ${gameState(playing, scores)}` : ''}${auto ? ' · Auto' : ''}`;
+	return row.bench ? 'No game in this view' : auto ? 'Auto · waiting for a game' : 'No selected game';
+}
+
+/** A row's stat line from the games that count; for a bench player, all of his. */
+export function rowStats(row: MatchupRow) {
+	const games = row.games.filter((g) => row.bench || g.counted);
+	return { line: sumStats(games.map((g) => g.stats)), played: games.some((g) => Object.keys(g.stats ?? {}).length > 0) };
 }
