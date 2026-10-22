@@ -66,23 +66,30 @@ from players p
 left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
-  and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::text = '' or $4 = any(p.positions))
-  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
-  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
-  and ($7::uuid is null or (
+  and (coalesce(cardinality($3::text[]), 0) = 0
+       or ('available' = any($3::text[]) and r.player_id is null)
+       or ('taken' = any($3::text[]) and r.player_id is not null)
+       or r.list = any($3::text[]))
+  and (coalesce(cardinality($4::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($4::text[])))
+  and ($5::text = '' or p.full_name ilike '%' || $5 || '%')
+  and ($6::text = '' or $6 = any(p.positions))
+  and ($7::int is null or p.birth_date <= current_date - make_interval(years => $7))
+  and ($8::int is null or p.birth_date > current_date - make_interval(years => $8 + 1))
+  and ($9::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $7)))
-  and ($8::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $9)))
+  and ($10::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $8 and l.competition = p.competition)))
+                    where dl.draft_id = $10 and l.competition = p.competition)))
 `
 
 type CountPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
+	Ownership   []string    `json:"ownership"`
+	Owners      []string    `json:"owners"`
 	Search      string      `json:"search"`
 	Position    string      `json:"position"`
 	MinAge      pgtype.Int4 `json:"min_age"`
@@ -95,6 +102,8 @@ func (q *Queries) CountPlayers(ctx context.Context, arg CountPlayersParams) (int
 	row := q.db.QueryRow(ctx, countPlayers,
 		arg.Competition,
 		arg.Status,
+		arg.Ownership,
+		arg.Owners,
 		arg.Search,
 		arg.Position,
 		arg.MinAge,
@@ -774,16 +783,26 @@ with seasons as (
 ), reference as materialized (
   -- the season with exactly season_back newer ones in its sport
   select s.competition, s.year from seasons s
-  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $12::int
+  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $14::int
 ), scored as materialized (
   -- points are stored with each season line, under the rules of the league
   -- here that plays its sport
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points
+         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points, sum(ps.games)::int as games
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  where ps.league = '' and ps.points is not null and ($1::text = '' or ps.competition = $1)
+  where ps.league = '' and ($1::text = '' or ps.competition = $1)
   group by ps.player_id, ps.competition
+), stat_values as (
+  select ps.player_id, ps.competition, stat.key, sum(stat.value::numeric)::float8 as total
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
+  where ps.league = '' and ($1::text = '' or ps.competition = $1)
+  group by ps.player_id, ps.competition, stat.key
+), season_stats as (
+  select stat_values.player_id, stat_values.competition, jsonb_object_agg(stat_values.key, stat_values.total) as stats
+  from stat_values group by stat_values.player_id, stat_values.competition
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
   select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
@@ -806,6 +825,10 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
+       coalesce(r.list, '')::text as roster_list,
+       coalesce(sc.games, 0)::int as season_games,
+       (sc.points is not null)::boolean as season_scored,
+       coalesce(ss.stats, '{}'::jsonb) as season_stats,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
@@ -817,33 +840,41 @@ left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
+left join season_stats ss  on ss.player_id = p.id and ss.competition = p.competition
 left join rostered         on rostered.competition = p.competition
 where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
-  and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::text = '' or $4 = any(p.positions))
-  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
-  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
-  and ($7::uuid is null or (
+  and (coalesce(cardinality($3::text[]), 0) = 0
+       or ('available' = any($3::text[]) and r.player_id is null)
+       or ('taken' = any($3::text[]) and r.player_id is not null)
+       or r.list = any($3::text[]))
+  and (coalesce(cardinality($4::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($4::text[])))
+  and ($5::text = '' or p.full_name ilike '%' || $5 || '%')
+  and ($6::text = '' or $6 = any(p.positions))
+  and ($7::int is null or p.birth_date <= current_date - make_interval(years => $7))
+  and ($8::int is null or p.birth_date > current_date - make_interval(years => $8 + 1))
+  and ($9::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $7)))
-  and ($8::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $9)))
+  and ($10::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $8 and l.competition = p.competition)))
-order by case when $9::text='prospect_rank' then pr.rank end asc nulls last,
-         case $9::text
+                    where dl.draft_id = $10 and l.competition = p.competition)))
+order by case when $11::text='prospect_rank' then pr.rank end asc nulls last,
+         case $11::text
            when 'points' then sc.points
            when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
          end desc nulls last,
          p.full_name, p.id
-limit $11 offset $10
+limit $13 offset $12
 `
 
 type ListPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
+	Ownership   []string    `json:"ownership"`
+	Owners      []string    `json:"owners"`
 	Search      string      `json:"search"`
 	Position    string      `json:"position"`
 	MinAge      pgtype.Int4 `json:"min_age"`
@@ -877,6 +908,10 @@ type ListPlayersRow struct {
 	TeamName           string             `json:"team_name"`
 	OwnerName          string             `json:"owner_name"`
 	OwnerSlug          string             `json:"owner_slug"`
+	RosterList         string             `json:"roster_list"`
+	SeasonGames        int32              `json:"season_games"`
+	SeasonScored       bool               `json:"season_scored"`
+	SeasonStats        json.RawMessage    `json:"season_stats"`
 	WaiverUntil        pgtype.Timestamptz `json:"waiver_until"`
 	Season             string             `json:"season"`
 	SeasonPoints       float64            `json:"season_points"`
@@ -898,6 +933,8 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 	rows, err := q.db.Query(ctx, listPlayers,
 		arg.Competition,
 		arg.Status,
+		arg.Ownership,
+		arg.Owners,
 		arg.Search,
 		arg.Position,
 		arg.MinAge,
@@ -937,6 +974,10 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.TeamName,
 			&i.OwnerName,
 			&i.OwnerSlug,
+			&i.RosterList,
+			&i.SeasonGames,
+			&i.SeasonScored,
+			&i.SeasonStats,
 			&i.WaiverUntil,
 			&i.Season,
 			&i.SeasonPoints,

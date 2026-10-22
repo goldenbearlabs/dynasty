@@ -196,6 +196,19 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 				away.Ties++
 			}
 		}
+		// Points for and against count the matchup in progress day by day;
+		// it joins the record once it is over.
+		live, _, err := liveResults(ctx, q, league, *season)
+		if err != nil {
+			return nil, err
+		}
+		for _, result := range live {
+			home, away := row(result.Home), row(result.Away)
+			home.PointsFor += result.HomePoints
+			home.PointsAgainst += result.AwayPoints
+			away.PointsFor += result.AwayPoints
+			away.PointsAgainst += result.HomePoints
+		}
 	}
 
 	rankStandings(rows, results, rules.Format, names)
@@ -355,6 +368,12 @@ type OverallRow struct {
 	FranchiseID pgtype.UUID    `json:"franchise_id"`
 	Points      float64        `json:"points"`
 	Finishes    map[string]int `json:"finishes"` // competition -> place, 1 being first
+	// The record across every league, and the points scored above each
+	// league's median, summed: a fair way to compare points across sports.
+	Wins           int     `json:"wins"`
+	Losses         int     `json:"losses"`
+	Ties           int     `json:"ties"`
+	AdjustedPoints float64 `json:"adjusted_points"`
 }
 
 // Overall returns the cross-sport table for each year that has a season,
@@ -389,6 +408,17 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 			return nil, err
 		}
 		year.Final = year.Final && season.Status == "complete"
+		leagueRules, err := settings.Parse[settings.League](league.Settings)
+		if err != nil {
+			return nil, err
+		}
+		scored := func(r Row) float64 {
+			if leagueRules.Format.Type == settings.FormatHeadToHead {
+				return r.PointsFor
+			}
+			return r.Points
+		}
+		middle := median(table, scored)
 		for place, row := range table {
 			i := slices.IndexFunc(year.Rows, func(r OverallRow) bool { return r.FranchiseID == row.FranchiseID })
 			if i < 0 {
@@ -396,6 +426,10 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 				i = len(year.Rows) - 1
 			}
 			year.Rows[i].Finishes[league.Competition] = place + 1
+			year.Rows[i].Wins += row.Wins
+			year.Rows[i].Losses += row.Losses
+			year.Rows[i].Ties += row.Ties
+			year.Rows[i].AdjustedPoints += scored(row) - middle
 			if place < len(rules.OverallTitle.PointsByFinish) {
 				year.Rows[i].Points += rules.OverallTitle.PointsByFinish[place]
 			}
@@ -404,9 +438,28 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 	for i := range years {
 		// A year is only final when every league played it.
 		years[i].Final = years[i].Final && len(years[i].Rows) > 0 && len(years[i].Rows[0].Finishes) == len(leagues)
-		slices.SortStableFunc(years[i].Rows, func(a, b OverallRow) int { return cmp.Compare(b.Points, a.Points) })
+		slices.SortStableFunc(years[i].Rows, func(a, b OverallRow) int {
+			return cmp.Or(cmp.Compare(b.Points, a.Points), cmp.Compare(b.AdjustedPoints, a.AdjustedPoints))
+		})
 	}
 	return years, nil
+}
+
+// median is the middle of a league's rows by some value.
+func median(rows []Row, value func(Row) float64) float64 {
+	if len(rows) == 0 {
+		return 0
+	}
+	values := make([]float64, len(rows))
+	for i, r := range rows {
+		values[i] = value(r)
+	}
+	slices.Sort(values)
+	mid := len(values) / 2
+	if len(values)%2 == 0 {
+		return (values[mid-1] + values[mid]) / 2
+	}
+	return values[mid]
 }
 
 // Window is the span of sports days a games sync covers by default: far

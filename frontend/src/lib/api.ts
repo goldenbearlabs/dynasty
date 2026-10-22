@@ -111,6 +111,10 @@ export type ProspectRanking = { player_id: string; rank: number; year: number; e
 export const getProspectRankings = () => request<ProspectRanking[]>('GET', '/prospect-rankings');
 
 export type Player = ProspectRankingFields & {
+	roster_list: string;
+	season_games: number;
+	season_scored?: boolean;
+	season_stats: Record<string, number>;
 	id: string;
 	competition: string;
 	status: 'prospect' | 'active' | 'inactive';
@@ -257,6 +261,8 @@ export type PlayerProfile = {
 };
 
 export type PlayerFilter = {
+	ownership?: string;
+	owners?: string;
 	competition?: string;
 	status?: string;
 	q?: string;
@@ -535,7 +541,14 @@ export type ReviewItem = {
 export type OverallYear = {
 	year: number;
 	final: boolean;
-	rows: { franchise_id: string; points: number; finishes: Record<string, number> }[];
+	/** adjusted_points: points for above each league's median, summed across leagues. */
+	rows: { franchise_id: string; points: number; finishes: Record<string, number>; wins: number; losses: number; ties: number; adjusted_points: number }[];
+};
+
+/** Simulated chances, 0 to 1: a playoff place in each league, and the overall title. */
+export type Odds = {
+	leagues: { league_id: string; competition: string; rows: { franchise_id: string; playoffs: number; wins: number; losses: number; place: number }[] }[];
+	overall: { franchise_id: string; title: number; points: number }[];
 };
 
 export type LineupGame = {
@@ -988,6 +1001,7 @@ export const ruleOnTrade = (id: string, ruling: TradeRuling) => request<void>('P
 
 export const getStandings = () => request<Standings[]>('GET', '/standings');
 export const getOverall = () => request<OverallYear[]>('GET', '/overall');
+export const getOdds = () => request<Odds>('GET', '/odds');
 export const getSeasons = () => request<Season[]>('GET', '/seasons');
 export const createSeason = (season: { league_id: string; year: number; starts_on: string; ends_on: string }) =>
 	request<Season>('POST', '/admin/seasons', season);

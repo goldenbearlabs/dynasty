@@ -55,6 +55,15 @@ To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.
 
+The Players page opens on available players, ranked by fantasy points within a
+sport or league index across sports. Combine Available, All taken, Rostered,
+Reserve and Unsigned filters, then narrow to one or more fantasy teams. Rows
+show season FP, FP/game, games and league index; selecting a sport adds raw
+stat columns with a column picker and totals/per-game switch. Green plus opens
+an add-to-roster/reserve choice, red minus confirms a drop, and blue swap opens
+a trade with that player selected. Waiver players link to claims. Mobile keeps
+names, FP, index and actions visible, with expandable filters and detailed stats.
+
 The Research tab is a research lab with a saved pool of league–season datasets.
 Add combinations such as NHL 2025-26, WNBA 2025 and NHL 2024-25; the same player
 gets a distinct row for each season, and each league-season keeps independent

@@ -39,7 +39,13 @@
 		const slug = partnerSlug;
 		theirs = undefined;
 		receiving.clear();
-		if (slug) getFranchise(slug).then((d) => slug === partnerSlug && (theirs = d), toast.error);
+		if (slug) getFranchise(slug).then((d) => {
+			if (slug !== partnerSlug) return;
+			theirs = d;
+			const player = page.url.searchParams.get('player');
+			const asset = assetsOf(d, franchises).find(a => a.playerId === player);
+			if (asset) receiving.add(asset.key);
+		}, toast.error);
 	});
 
 	const chosen = (detail: FranchiseDetail | undefined, keys: SvelteSet<string>): Asset[] =>

@@ -38,6 +38,7 @@
 				identities={data.dynasty.team_identities}
 				tables={data.standings}
 				overall={data.overall}
+				odds={data.odds}
 				franchises={data.dynasty.franchises}
 				leagues={data.dynasty.leagues}
 			/>

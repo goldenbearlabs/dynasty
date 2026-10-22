@@ -491,6 +491,42 @@ func regularSeasonResults(ctx context.Context, q *db.Queries, league db.League, 
 	return results, nil
 }
 
+// liveResults returns the regular-season matchups being played now, scored
+// so far, and the period they are in. Both are empty between periods and
+// in the playoffs.
+func liveResults(ctx context.Context, q *db.Queries, league db.League, season db.Season) ([]result, *db.Period, error) {
+	periods, err := q.ListPeriods(ctx, season.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	today := sportsday.Today()
+	i := slices.IndexFunc(periods, func(p db.Period) bool {
+		return !p.IsPlayoff && !finished(p) && !p.StartsOn.Time.After(today)
+	})
+	if i < 0 {
+		return nil, nil, nil
+	}
+	period := periods[i]
+	matchups, err := q.ListSeasonMatchups(ctx, season.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	scored, err := scores(ctx, q, league, period.StartsOn.Time, period.EndsOn.Time)
+	if err != nil {
+		return nil, nil, err
+	}
+	var live []result
+	for _, m := range matchups {
+		if m.PeriodID == period.ID && m.AwayFranchiseID.Valid {
+			live = append(live, result{
+				Home: m.HomeFranchiseID, Away: m.AwayFranchiseID,
+				HomePoints: scored[m.HomeFranchiseID].Points, AwayPoints: scored[m.AwayFranchiseID].Points,
+			})
+		}
+	}
+	return live, &period, nil
+}
+
 // settle works out what each side of a finished period's matchups scored
 // and stores it, so the period is never added up again unless something
 // behind it changes: the database clears a period's scores when it does.

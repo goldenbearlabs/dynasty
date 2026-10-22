@@ -111,11 +111,21 @@ with seasons as (
   -- points are stored with each season line, under the rules of the league
   -- here that plays its sport
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points
+         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points, sum(ps.games)::int as games
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  where ps.league = '' and ps.points is not null and (@competition::text = '' or ps.competition = @competition)
+  where ps.league = '' and (@competition::text = '' or ps.competition = @competition)
   group by ps.player_id, ps.competition
+), stat_values as (
+  select ps.player_id, ps.competition, stat.key, sum(stat.value::numeric)::float8 as total
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
+  where ps.league = '' and (@competition::text = '' or ps.competition = @competition)
+  group by ps.player_id, ps.competition, stat.key
+), season_stats as (
+  select stat_values.player_id, stat_values.competition, jsonb_object_agg(stat_values.key, stat_values.total) as stats
+  from stat_values group by stat_values.player_id, stat_values.competition
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
   select placed.competition, avg(placed.points) as mean, stddev_pop(placed.points) as spread
@@ -138,6 +148,10 @@ select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.posit
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
+       coalesce(r.list, '')::text as roster_list,
+       coalesce(sc.games, 0)::int as season_games,
+       (sc.points is not null)::boolean as season_scored,
+       coalesce(ss.stats, '{}'::jsonb) as season_stats,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
@@ -149,9 +163,15 @@ left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
+left join season_stats ss  on ss.player_id = p.id and ss.competition = p.competition
 left join rostered         on rostered.competition = p.competition
 where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
+  and (coalesce(cardinality(@ownership::text[]), 0) = 0
+       or ('available' = any(@ownership::text[]) and r.player_id is null)
+       or ('taken' = any(@ownership::text[]) and r.player_id is not null)
+       or r.list = any(@ownership::text[]))
+  and (coalesce(cardinality(@owners::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any(@owners::text[])))
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
   and (@position::text = '' or @position = any(p.positions))
   and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))
@@ -185,6 +205,11 @@ from players p
 left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
+  and (coalesce(cardinality(@ownership::text[]), 0) = 0
+       or ('available' = any(@ownership::text[]) and r.player_id is null)
+       or ('taken' = any(@ownership::text[]) and r.player_id is not null)
+       or r.list = any(@ownership::text[]))
+  and (coalesce(cardinality(@owners::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any(@owners::text[])))
   and (@search::text = '' or p.full_name ilike '%' || @search || '%')
   and (@position::text = '' or @position = any(p.positions))
   and (sqlc.narg('min_age')::int is null or p.birth_date <= current_date - make_interval(years => sqlc.narg('min_age')))

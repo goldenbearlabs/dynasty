@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -236,6 +237,8 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	position, minAge, maxAge := query.Get("position"), age("min_age"), age("max_age")
 
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
+		Ownership:   splitPlayerFilter(query.Get("ownership")),
+		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
 		Status:      status,
 		Search:      search,
@@ -254,6 +257,8 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, err := s.Queries.CountPlayers(r.Context(), db.CountPlayersParams{
+		Ownership:   splitPlayerFilter(query.Get("ownership")),
+		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
 		Status:      status,
 		Search:      search,
@@ -273,4 +278,12 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		"page":     page,
 		"per_page": playersPerPage,
 	})
+}
+
+// Empty lists preserve the unfiltered behavior used by drafts and search.
+func splitPlayerFilter(value string) []string {
+	if value == "" {
+		return []string{}
+	}
+	return strings.Split(value, ",")
 }

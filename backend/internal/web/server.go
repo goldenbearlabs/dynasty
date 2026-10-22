@@ -55,6 +55,8 @@ type Server struct {
 	// ScheduleDays extends the full-year schedule horizon when larger than 365.
 	// Active fantasy season end dates can extend it further.
 	ScheduleDays int
+
+	odds oddsRun
 }
 
 // Handler routes every request. Reading is open to anyone who can reach the
@@ -85,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/activity", s.cached(cache.Public, 30*time.Second, s.listActivity))
 	mux.HandleFunc("GET /api/standings", s.cached(cache.Public, 30*time.Second, s.listStandings))
 	mux.HandleFunc("GET /api/overall", s.cached(cache.Public, 30*time.Second, s.getOverall))
+	mux.HandleFunc("GET /api/odds", s.getOdds)
 	mux.HandleFunc("GET /api/seasons", s.cached(cache.Public, 30*time.Second, s.listSeasons))
 	mux.HandleFunc("GET /api/leagues/{id}/lineup", s.getLineup)
 	mux.HandleFunc("GET /api/leagues/{id}/roster-stats", s.cached(cache.Public, 30*time.Second, s.getRosterStats))

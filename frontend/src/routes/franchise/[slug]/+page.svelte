@@ -216,13 +216,14 @@
 	// While the manager is setting the roster, plan holds where each moved
 	// player is headed; nothing is saved until the whole split is.
 	let plan = $state<Record<string, List>>();
-	let rosterOpen = $state(false);
+	let managing = $state(false); // the full main and reserve lists, for moving players between them
 	$effect(() => {
 		void league?.id;
 		void team.id;
 		plan = undefined;
 	});
 	const on = (r: LeagueRoster, list: List) => r.players.filter((p) => (plan?.[p.player_id] ?? p.list) === list);
+	const reserve = $derived(roster ? on(roster, 'reserve') : []);
 	const over = (r: LeagueRoster) => on(r, 'main').length > r.limits.main || on(r, 'reserve').length > r.limits.reserve;
 	// Whether a player sent to reserve now is there for the rest of the season.
 	const seasonLocked = (r: LeagueRoster) => r.limits.reserve_lock_season && standing(r.league_id).phase.key === 'in';
@@ -290,9 +291,9 @@
 
 <svelte:head><title>{team.name}</title></svelte:head>
 
-<div class="stack">
+<div class="stack page">
 	<header class="head">
-		<Crest name={league ? roster?.team_name || team.name : team.name} src={league ? roster?.image_url || team.image_url : team.image_url} size={56} />
+		<Crest name={league ? roster?.team_name || team.name : team.name} src={league ? roster?.image_url || team.image_url : team.image_url} size={44} />
 		<div class="grow">
 			<div class="title">
 				<h1>{league ? roster?.team_name || team.name : team.name}</h1>
@@ -440,7 +441,7 @@
 		</section>
 	{:else if roster && now}
 		<!-- ---- one league ---- -->
-		<div class="stack" data-sport={league.competition}>
+		<div class="stack league-view" data-sport={league.competition}>
 			<div class="summary">
 				<div class="fact"><small>Status</small><span class="pill" class:good={now.phase.key === 'in'}>{now.phase.label}</span></div>
 				{#if now.phase.key === 'in' || now.phase.key === 'over'}
@@ -526,8 +527,10 @@
 			{/if}
 
 			<section class="stack tight player-views">
-				<h2>Players</h2>
-				{#if mine}<a class="small-text" href="/watchlist?competition={league.competition}">View your {league.name} watchlist →</a>{/if}
+				<div class="spread">
+					<h2>Lineup</h2>
+					{#if mine}<a class="small-text" href="/watchlist?competition={league.competition}">{league.name} watchlist →</a>{/if}
+				</div>
 				{#key league.id + team.id}
 					<LineupEditor {league} franchise={team} {roster} competition={data.competitions.find(c => c.key === league.competition)!} {canEdit} commissioner={data.me?.is_commissioner === true} />
 				{/key}
@@ -535,17 +538,38 @@
 
 
 
-			<details class="panel fold" bind:open={rosterOpen}>
-				<summary>
-					<strong>Roster and reserve list</strong>
-					<span class="muted small-text">
-						{on(roster, 'main').length} of {roster.limits.main} on the main roster · {on(roster, 'reserve').length} of {roster.limits.reserve} on reserve
-					</span>
-					{#if roster.overage > 0}<span class="pill bad">Over the limit by {roster.overage}</span>{/if}
-					{#if roster.season?.locked}
-						<span class="pill"><Icon name="lock" size={11} /> {roster.season.set_at ? `Set for ${roster.season.year}` : 'Locked at the deadline'} · lists held until {dayLabel(roster.season.ends_on)}</span>
-					{/if}
-				</summary>
+			<!-- The reserve list at a glance; the main roster is the lineup above. -->
+			<section class="panel">
+				<h2 class="bar">
+					Reserve
+					<span class="muted small-text">{reserve.length}/{roster.limits.reserve} · main {on(roster, 'main').length}/{roster.limits.main}</span>
+					{#if roster.overage > 0}<span class="pill bad">{roster.overage} over</span>{/if}
+					{#if roster.season?.locked}<span class="pill" title="Lists held until {dayLabel(roster.season.ends_on)}"><Icon name="lock" size={11} /> Lists set</span>{/if}
+					{#if canEdit}<button class="small quiet count" aria-expanded={managing} onclick={() => (managing = !managing)}>{managing ? 'Done' : 'Manage lists'}</button>{/if}
+				</h2>
+				{#if reserve.length === 0}
+					<p class="muted small-text pad">Nobody on reserve.</p>
+				{:else}
+					<ul class="reserve">
+						{#each reserve as player (player.player_id)}
+							<li>
+								<Headshot name={player.full_name} src={player.headshot_url} size={22} />
+								<a href="/player/{player.player_id}" title={player.full_name}>{player.full_name}</a>
+								<span class="muted pos">{player.positions.join('/')}</span>
+								{#if player.team_abbrev}<TeamLogo competition={roster.competition} abbrev={player.team_abbrev} size={16} />{/if}
+								<InjuryBadge designation={player.injury_designation} />
+								<ProspectRank id={player.player_id} />
+								{#if player.injury_reserve_locked || player.locked_until}<span title={player.locked_until ? `Locked until ${clockTime(player.locked_until)}` : 'Injury swap: on reserve for the season'}><Icon name="lock" size={11} /></span>{/if}
+								<span class="end"><PlayerActions leagueId={roster.league_id} playerId={player.player_id} ownerId={team.id} name={player.full_name} detail={`${player.positions.join('/')} · Reserve`} onDrop={canEdit ? () => change(roster, 'drop', player) : undefined} /></span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+
+			{#if managing && canEdit}
+			<section class="panel">
+				<h2 class="bar">Main roster and reserve list</h2>
 				<div class="meters">
 					<Meter label="Main" value={on(roster, 'main').length} max={roster.limits.main} />
 					<Meter label="Reserve" value={on(roster, 'reserve').length} max={roster.limits.reserve} />
@@ -629,7 +653,8 @@
 				{#if mine}
 					<p class="pad small-text"><a href="/players?competition={roster.competition}">Find {roster.name} players to add</a></p>
 				{/if}
-			</details>
+			</section>
+			{/if}
 
 			<div class="columns">
 				<section class="panel">
@@ -640,7 +665,7 @@
 						<table class="standings">
 							<tbody>
 								{#each now.table.rows as row, i (row.franchise_id)}
-									<tr class:me={row.franchise_id === team.id}>
+									<tr class:me={row.franchise_id === team.id} class:cut={now.headToHead && i === league.settings.format.playoff_teams - 1 && i < now.table.rows.length - 1}>
 										<td class="rank">{i + 1}</td>
 										<td>{nameOf(row.franchise_id, league.id)}</td>
 										{#if now.headToHead}<td class="num">{row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ''}</td>{/if}
@@ -667,11 +692,23 @@
 
 <style>
 	.player-views { min-width: 0; grid-template-columns: minmax(0,1fr); }
+	/* Grid children may shrink below their content, so a wide table
+	   scrolls inside itself instead of widening the page on a phone. */
+	.page,
+	.league-view {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.page {
+		gap: 0.75rem;
+	}
+	.league-view {
+		gap: 0.6rem;
+	}
 	.head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.5rem 0.8rem;
 	}
 	.switch {
 		max-width: 14rem;
@@ -691,14 +728,14 @@
 	}
 	.meta {
 		gap: 0.4rem 0.6rem;
-		margin-top: 0.3rem;
+		margin-top: 0.15rem;
 	}
 	.bar {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.6rem 1rem;
-		font-size: 1rem;
+		padding: 0.45rem 0.9rem;
+		font-size: 0.95rem;
 		border-bottom: 1px solid var(--rule);
 	}
 	.count {
@@ -935,9 +972,9 @@
 	.summary {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.8rem 2rem;
+		gap: 0.5rem 1.6rem;
 		align-items: end;
-		padding: 0.8rem 1rem;
+		padding: 0.5rem 0.9rem;
 		background: var(--surface);
 		border-block: 1px solid var(--rule);
 		border-top: 3px solid var(--sport);
@@ -947,7 +984,7 @@
 		gap: 0.1rem;
 	}
 	.fact strong {
-		font: 700 1.05rem/1.2 var(--display);
+		font: 700 1rem/1.2 var(--display);
 	}
 	.matchup {
 		margin-left: auto;
@@ -965,13 +1002,35 @@
 		font: 650 0.85rem var(--mono);
 		color: var(--gold);
 	}
-	.fold > summary {
+	/* The reserve list: one short line a player, in columns. */
+	.reserve {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+		margin: 0;
+		padding: 0.3rem 0;
+		list-style: none;
+	}
+	.reserve li {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem 0.9rem;
-		padding: 0.75rem 1rem;
-		cursor: pointer;
+		gap: 0.4rem;
+		min-width: 0;
+		padding: 0.2rem 0.9rem;
+		font-size: 0.82rem;
+	}
+	.reserve a {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--ink);
+		font-weight: 600;
+	}
+	.reserve .pos {
+		flex: none;
+		font: 600 0.68rem var(--mono);
+	}
+	.reserve .end {
+		margin-left: auto;
 	}
 	.meters {
 		display: grid;
@@ -1020,5 +1079,50 @@
 	.standings tr.me td {
 		background: var(--brand-soft);
 		font-weight: 650;
+	}
+	/* The playoff cutoff: a line under the last team in. */
+	.standings tr.cut td {
+		border-bottom: 2px solid var(--sport, var(--brand));
+	}
+	@media (max-width: 640px) {
+		.page {
+			gap: 0.55rem;
+		}
+		.title h1 {
+			font-size: 1.35rem;
+		}
+		.switch {
+			flex: 1;
+			max-width: none;
+		}
+		.head .button {
+			padding: 0.35rem 0.6rem;
+			font-size: 0.8rem;
+		}
+		/* Record, place and points side by side; the matchup beneath. */
+		.summary {
+			display: grid;
+			grid-template-columns: repeat(3, auto);
+			justify-content: start;
+			gap: 0.35rem 1.2rem;
+			padding: 0.45rem 0.75rem;
+		}
+		.fact strong {
+			font-size: 0.9rem;
+		}
+		.matchup {
+			grid-column: 1 / -1;
+			margin-left: 0;
+			text-align: left;
+		}
+		.reserve {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.reserve li {
+			padding-inline: 0.75rem;
+		}
+		.bar {
+			padding: 0.4rem 0.75rem;
+		}
 	}
 </style>

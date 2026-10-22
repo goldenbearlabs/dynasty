@@ -477,7 +477,7 @@
 	<div class="games">{@render games(player, starting)}</div>
 	{@const shown = shownGames(player, starting)}
 	{@const line = sumStats(shown.map((g) => g.stats))}
-	<div class="stats" class:none={!statsEnabled && shown.length === 0}>
+	<div class="stats" class:none={statsEnabled ? !performanceFor(player.player_id)?.games : shown.length === 0}>
 		{#each columns(player) as c (c.key)}
 			{@const n = statsEnabled ? viewedStat(player,c) : columnValue(line, c)}
 			<span class:zero={!n} title={c.title}>{#if statsEnabled || shown.length}<small>{c.label}</small>{statsEnabled && n === undefined ? '—' : c.key === '__fpg' && n !== undefined ? points(n) : statValue(n)}{/if}</span>
@@ -491,7 +491,7 @@
 	</div>
 {/snippet}
 
-<div class="stack tight" class:stats-enabled={statsEnabled} data-sport={sport}>
+<div class="stack tight editor" class:stats-enabled={statsEnabled} class:tiled={weekly && limited.length > 0} data-sport={sport}>
 	{#if !lineup}
 		<p class="muted">Loading the lineup…</p>
 	{:else}
@@ -525,7 +525,7 @@
 			</nav>
 			<div class="row actions">
 				{#if saving}<span class="muted small-text">Saving…</span>{:else if saved}<span class="saved small-text"><Icon name="check" size={14} /> Saved</span>{/if}
-				{#if canEdit && !lineup.locked && lineup.players.length > 0}
+				{#if owner && !lineup.locked && lineup.players.length > 0}
 					<button class="small" disabled={autoSetting || saving} title="Start the best players you have, keeping anyone who has locked" onclick={autoSet}>
 						<Icon name="refresh" size={14} /> {autoSetting ? 'Setting…' : weekly ? 'Auto-set this week' : 'Auto-set rest of week'}
 					</button>
@@ -554,13 +554,13 @@
 			</Empty>
 		{:else}
 			{#if limited.length > 0 && canEdit}
-				<p class="muted small-text">
+				<p class="muted small-text hint">
 					{limited.length === lineup.slots.length ? 'Each starter' : `Each ${limited.map((s) => s.name).join(' and ')}`}
 					scores in {lineup.doubled ? `${limited[0].games_per_week * 2} games this matchup` : limited[0].games_per_week === 1 ? 'one game a week' : `${limited[0].games_per_week} games a week`}. On <strong>Auto</strong> it is his last {lineup.doubled ? 'games of the matchup' : 'game of the week'}
 					that he plays in, so a game he sits out falls back to the one before. Tap a game to count that one instead. Changes save as you make them.
 				</p>
 			{:else if canEdit && !lineup.locked}
-				<p class="muted small-text">
+				<p class="muted small-text hint">
 					{weekly ? 'Each player locks when his game starts, and stays put for the rest of the week.' : 'Each player locks when his game starts.'}
 					Drag players between slots and the bench, or tap one and then tap where he goes. Changes save as you make them.
 				</p>
@@ -636,7 +636,8 @@
 	.name .row.tight :global(.watch-star) { padding:.1rem; }
 	.name .small-text { font-size:.66rem; }
 	.name .period-ranks { margin-top:0; font-size:.6rem; }
-	.seat .empty { padding:.25rem .5rem; }
+	.seat .empty { padding:.2rem .5rem; }
+	.editor { gap: .45rem; }
 
 	.stat-view-controls { gap: .4rem; }
 	.stat-view-controls label { gap: .4rem; }
@@ -719,7 +720,7 @@
 		grid-template-columns: var(--row);
 		align-items: center;
 		gap: 0.45rem;
-		padding: 0.45rem 0.9rem;
+		padding: 0.35rem 0.9rem;
 		background: var(--surface-2);
 		border-bottom: 1px solid var(--rule);
 		font: 600 0.66rem/1.2 var(--mono);
@@ -742,8 +743,8 @@
 		grid-template-columns: var(--row);
 		align-items: center;
 		gap: 0.45rem;
-		min-height: 2.7rem;
-		padding: 0.25rem 0.55rem;
+		min-height: 2.3rem;
+		padding: 0.1rem 0.55rem;
 		transition:
 			background 120ms,
 			opacity 120ms;
@@ -900,7 +901,7 @@
 		display: grid;
 		grid-template-columns: repeat(var(--stat-cols), minmax(0, 1fr));
 		align-self: stretch;
-		margin-block: -0.25rem;
+		margin-block: -0.1rem;
 		text-align: center;
 	}
 	.stats > span {
@@ -918,7 +919,7 @@
 	}
 	.labels .stats > span,
 	.labels .pts {
-		padding-block: 0.5rem;
+		padding-block: 0.4rem;
 	}
 	.labels .stats > span:last-child,
 	.labels .stats > span {
@@ -1057,9 +1058,41 @@
 		.head span:nth-child(2) {
 			display: none;
 		}
+		/* One line for the slot, the player, his game and his points; his
+		   stats in small type beneath. */
 		.seat {
-			grid-template-columns: 2.6rem minmax(0, 1fr) 3.4rem;
-			gap: 0.3rem 0.6rem;
+			grid-template-columns: 2.1rem minmax(0, 1fr) auto 2.9rem;
+			gap: 0.1rem 0.45rem;
+			min-height: 0;
+			padding-block: 0.3rem;
+		}
+		.slot {
+			min-width: 0;
+			padding: 0.25rem 0.2rem;
+			font-size: 0.62rem;
+		}
+		.who {
+			gap: 0.4rem;
+		}
+		.period-ranks,
+		.hint,
+		.name .pill.brand {
+			display: none;
+		}
+		.days {
+			gap: 0.1rem;
+		}
+		.day {
+			min-width: 2.05rem;
+			padding: 0.2rem 0.15rem;
+		}
+		.stat-view-controls {
+			flex-wrap: nowrap;
+		}
+		.stat-context {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 		.labels {
 			display: none;
@@ -1072,15 +1105,35 @@
 			border-top: 0;
 		}
 		.games {
-			grid-column: 2 / 4;
+			grid-column: 3;
+			grid-row: 1;
+			justify-items: end;
+			font-size: 0.72rem;
+		}
+		.game {
+			flex-wrap: nowrap;
+			gap: 0.3rem;
+		}
+		.game .pill {
+			display: none;
+		}
+		.tiled .games {
+			grid-column: 2 / 5;
 			grid-row: 2;
+			justify-items: start;
 		}
 		.stats {
-			grid-column: 2 / 4;
-			grid-row: 3;
+			grid-column: 2 / 5;
+			grid-row: 2;
 			display: flex;
 			flex-wrap: wrap;
-			gap: 0.15rem 0.7rem;
+			gap: 0 0.55rem;
+		}
+		.seat .stats {
+			font-size: 0.66rem;
+		}
+		.tiled .stats {
+			grid-row: 3;
 		}
 		.stats.none {
 			display: none;
@@ -1100,15 +1153,15 @@
 			color: var(--ink-faint);
 		}
 		.pts {
-			grid-column: 3;
+			grid-column: 4;
 			grid-row: 1;
+			font-size: 0.82rem;
 		}
 		.pts small {
-			display: block;
-			margin: 0;
+			display: none;
 		}
 		.empty {
-			grid-column: span 2;
+			grid-column: span 3;
 		}
 	}
 </style>
