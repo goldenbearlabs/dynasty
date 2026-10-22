@@ -11,18 +11,31 @@
 	import { points } from '#lib/ui/time.ts';
 	import { page } from '$app/state';
 
-	type Props = { tables: Standings[]; overall: OverallYear[]; franchises: Franchise[]; leagues: League[]; identities?: TeamIdentity[]; odds?: Odds };
-	let { tables, overall, franchises, leagues, identities = [], odds }: Props = $props();
+	// shown: the tab picked, a competition or 'overall'; empty until one is picked.
+	type Props = { tables: Standings[]; overall: OverallYear[]; franchises: Franchise[]; leagues: League[]; identities?: TeamIdentity[]; odds?: Odds; shown?: string };
+	let { tables, overall, franchises, leagues, identities = [], odds, shown = $bindable('') }: Props = $props();
 
 	const franchise = (id: string | null) => franchises.find((f) => f.id === id);
 	const latest = $derived(overall[0]);
 
-	let shown = $state('');
+	// Leagues furthest through their season first: those under way by how
+	// much of it is played, then those about to start, then finished ones,
+	// then those with no season.
+	const today = new Date().toLocaleDateString('en-CA');
+	const progress = (t: Standings) => {
+		const s = t.season;
+		if (!s) return -3;
+		if (s.status === 'complete') return -2;
+		if (today < s.starts_on) return -1 - (Date.parse(s.starts_on) - Date.parse(today)) / 1e13; // sooner first
+		const span = Date.parse(s.ends_on) - Date.parse(s.starts_on);
+		return span > 0 ? Math.min(1, (Date.parse(today) - Date.parse(s.starts_on)) / span) : 1;
+	};
 	const tabs = $derived([
-		...tables.map((t) => ({ value: t.competition, label: t.competition.toUpperCase(), sport: t.competition })),
-		...(latest ? [{ value: 'overall', label: 'Overall' }] : [])
+		...(latest ? [{ value: 'overall', label: 'Overall' }] : []),
+		...tables.toSorted((a, b) => progress(b) - progress(a)).map((t) => ({ value: t.competition, label: t.competition.toUpperCase(), sport: t.competition }))
 	]);
-	const table = $derived(tables.find((t) => t.competition === shown) ?? (shown === 'overall' ? undefined : tables[0]));
+	const current = $derived(shown || tabs[0]?.value || '');
+	const table = $derived(tables.find((t) => t.competition === current));
 	const headToHead = $derived(table?.format === 'head_to_head');
 	const league = $derived(leagues.find((l) => l.id === table?.league_id));
 	// The last playoff place, which a line follows.
@@ -49,7 +62,7 @@
 	type Sort = { key: string; desc: boolean };
 	let sort = $state<Sort>({ key: 'place', desc: false });
 	$effect(() => {
-		void shown;
+		void current;
 		sort = { key: 'place', desc: false }; // each table opens in standings order
 	});
 	// Places and finishes read best-first going up; everything else going down.
@@ -110,7 +123,7 @@
 {/snippet}
 
 <div class="stack tight">
-	<Tabs {tabs} bind:value={() => shown || tables[0]?.competition || '', (v) => (shown = v)} label="Standings" />
+	<Tabs {tabs} bind:value={() => current, (v) => (shown = v)} label="Standings" />
 
 	{#if table}
 		{#if !table.season}
@@ -171,7 +184,7 @@
 				{#key league.id}<Matchups {league} {franchises} {identities} />{/key}
 			{/if}
 		{/if}
-	{:else if latest}
+	{:else if latest && current === 'overall'}
 		<div class="panel scroll">
 			<table>
 				<thead>

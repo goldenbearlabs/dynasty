@@ -190,3 +190,38 @@ func TestSportSeasonNumbering(t *testing.T) {
 		}
 	}
 }
+
+func TestNHLRosterRanksGroupForwards(t *testing.T) {
+	players := []RosterStatPlayer{
+		{Games: 1, Points: 20, positions: []string{"C", "LW"}},
+		{Games: 1, Points: 20, positions: []string{"RW"}},
+		{Games: 1, Points: 10, positions: []string{"LW", "RW"}},
+		{Games: 1, Points: 5, positions: []string{"F", "W"}},
+		{Games: 1, Points: 30, positions: []string{"D"}},
+		{Games: 1, Points: 15, positions: []string{"G"}},
+		{Games: 0, Points: 0, positions: []string{"C"}},
+	}
+	rankRosterStats(players, "nhl")
+	for i, want := range []int{1, 1, 3, 4} {
+		if len(players[i].PositionRanks) != 1 || players[i].PositionRanks["F"] != want {
+			t.Fatalf("forward %d rank=%v want F #%d", i, players[i].PositionRanks, want)
+		}
+	}
+	if players[4].PositionRanks["D"] != 1 || players[5].PositionRanks["G"] != 1 {
+		t.Fatalf("D/G should have separate pools: %v %v", players[4].PositionRanks, players[5].PositionRanks)
+	}
+	if players[6].OverallRank != nil || len(players[6].PositionRanks) != 0 {
+		t.Fatal("unplayed forward should not be ranked")
+	}
+	if *players[0].OverallRank != 2 || *players[1].OverallRank != 2 || *players[2].OverallRank != 5 {
+		t.Fatal("overall rankings should retain ties and compare all positions")
+	}
+}
+
+func TestOtherSportsKeepRosterPositions(t *testing.T) {
+	players := []RosterStatPlayer{{Games: 1, Points: 10, positions: []string{"C"}}, {Games: 1, Points: 20, positions: []string{"PG", "SG"}}}
+	rankRosterStats(players, "nba")
+	if players[0].PositionRanks["C"] != 1 || len(players[0].PositionRanks) != 1 || players[1].PositionRanks["PG"] != 1 || players[1].PositionRanks["SG"] != 1 {
+		t.Fatalf("non-NHL positions changed: %+v", players)
+	}
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	// League overview: standings and the latest activity across sports.
+	import { untrack } from 'svelte';
 	import { getOdds, type Odds } from '#lib/api.ts';
 	import { invalidate } from '$app/navigation';
 	import Activity from '#lib/Activity.svelte';
@@ -25,6 +26,13 @@
 		return () => { active = false; };
 	});
 	let sport = $state('all');
+	// Picking a league's standings filters the activity to it; Overall shows every sport.
+	let standingsTab = $state('');
+	$effect(() => {
+		const tab = standingsTab;
+		// Only a new tab resets the filter, not a score refresh.
+		sport = untrack(() => data.dynasty?.leagues.some((l) => l.competition === tab)) ? tab : 'all';
+	});
 	let activityType = $state('all');
 	const filtered = $derived(sport !== 'all' || activityType !== 'all');
 	const activity = $derived(data.activity.filter(item =>
@@ -58,6 +66,7 @@
 				tables={data.standings}
 				overall={data.overall}
 				{odds}
+				bind:shown={standingsTab}
 				franchises={data.dynasty.franchises}
 				leagues={data.dynasty.leagues}
 			/>

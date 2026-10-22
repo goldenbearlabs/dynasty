@@ -177,9 +177,10 @@
 		{/if}
 
 		<div class="page">
- {#if data.me}<div class="notification-toolbar"><span>{data.dynasty.name}</span><NotificationCenter accountId={data.me.id} /></div>{/if}
 			{#if !path.startsWith('/draft/')}
-				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me} />
+				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me}>
+					{#snippet actions()}{#if data.me}<NotificationCenter accountId={data.me.id} />{/if}{/snippet}
+				</LiveScores>
 			{/if}
 			{#if liveDraft && !path.startsWith('/draft/')}
 				<a class="live" href="/draft/{liveDraft.id}">
@@ -199,9 +200,6 @@
 <Toaster />
 
 <style>
- .notification-toolbar { position:sticky; top:0; z-index:25; display:flex; align-items:center; justify-content:space-between; gap:1rem; min-height:3.6rem; padding:.4rem 1.25rem; background:var(--surface); border-bottom:1px solid var(--rule); }
- .notification-toolbar > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:700 .85rem var(--display); color:var(--ink-soft); }
- @media(max-width:640px) { .notification-toolbar { padding:.4rem 1rem; } }
 
 	.bare {
 		max-width: 52rem;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import type { GameDetail, LeagueRoster, RosterPlayer, Scoreboard } from '#lib/api.ts';
 	import { LiveSocket } from '#lib/socket.svelte.ts';
 	import ScoreCard from '#lib/ScoreCard.svelte';
@@ -7,8 +7,8 @@
 	import Icon from '#lib/ui/Icon.svelte';
 	import { points } from '#lib/ui/time.ts';
 
-	let { sports, rosters = [], signedIn = false }: {
-		sports: string[]; rosters?: LeagueRoster[]; signedIn?: boolean;
+	let { sports, rosters = [], signedIn = false, actions }: {
+		sports: string[]; rosters?: LeagueRoster[]; signedIn?: boolean; actions?: Snippet;
 	} = $props();
 	let boards = $state<Record<string, Scoreboard>>({});
 	let details = $state<Record<string, GameDetail>>({});
@@ -79,6 +79,7 @@
 <section class="scorebar" class:compact aria-label="Today's games and your players">
 	<div class="toolbar">
 		<div class="controls">
+			{@render actions?.()}
 			<select aria-label="Filter games by sport" bind:value={sport}>
 				<option value="all">All sports</option>
 				{#each sports as key (key)}<option value={key}>{key.toUpperCase()}</option>{/each}
@@ -167,8 +168,11 @@
 	@media (max-width: 640px) {
 		.toolbar { padding: 0.4rem 0.85rem; }
 		.arrows { display: none; }
-		.controls { gap: 0.35rem; }
-		.controls { width: 100%; }
+		.controls { gap: 0.25rem; }
+		.controls select, .view-option { font-size: 0.68rem; padding-inline: 0.3rem; }
+		.controls { width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-block: 0.35rem; margin-block: -0.35rem; }
+		.controls > :global(*) { flex-shrink: 0; }
+		.controls :global(.mail-button) { position: sticky; left: 0; z-index: 1; }
 		.all-scores { display: none; }
 		.compact .match { width: 7.5rem; }
 		/* A phone keeps the strip short: tighter cards, smaller faces, two of your players a game at most. */

@@ -71,14 +71,6 @@
 		height: 1.6rem;
 		object-fit: contain;
 	}
-	@media (prefers-color-scheme: dark) {
-		img {
-			/* Most logos are drawn for a light page: give them one. */
-			background: #eceef5;
-			border-radius: 50%;
-			padding: 2px;
-		}
-	}
 	.team {
 		flex: 1;
 	}

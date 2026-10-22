@@ -169,7 +169,7 @@ func (s *Service) RosterPerformance(ctx context.Context, league db.League, franc
 		}
 		valued = append(valued, row)
 	}
-	rankRosterStats(valued)
+	rankRosterStats(valued, league.Competition)
 	for _, row := range valued {
 		if row.OverallRank != nil {
 			result.RankedPlayers++
@@ -191,8 +191,9 @@ func (s *Service) RosterPerformance(ctx context.Context, league db.League, franc
 }
 
 // Equal total FP share a rank (1, 1, 3). Position comparisons include every
-// eligible position; roster ownership and list never change the ranking pool.
-func rankRosterStats(players []RosterStatPlayer) {
+// eligible position; NHL forwards share one F pool. Roster ownership and list
+// never change the ranking pool.
+func rankRosterStats(players []RosterStatPlayer, competition string) {
 	indices := []int{}
 	for i, p := range players {
 		if p.Games > 0 {
@@ -217,6 +218,13 @@ func rankRosterStats(players []RosterStatPlayer) {
 		seenPositions := map[string]bool{}
 		for _, position := range p.positions {
 			position = strings.TrimSpace(position)
+			if competition == "nhl" {
+				position = strings.ToUpper(position)
+				switch position {
+				case "C", "LW", "RW", "W", "F":
+					position = "F"
+				}
+			}
 			if position == "" || seenPositions[position] {
 				continue
 			}

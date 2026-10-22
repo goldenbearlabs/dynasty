@@ -331,7 +331,7 @@ Session, private manager/admin routes, writes and live streams are not cached.
 Keys include a database namespace, generation, route/query or dataset selection,
 and a cache format version (`v1`); bump the version if cached JSON semantics change.
 
-Each signed-in manager has a mail icon in the top bar, with a red unread count.
+Each signed-in manager has a mail icon to the left of the Game Day filters, with a red unread count.
 It opens a notification overlay on desktop and mobile without leaving the current
 page. Escape, the close button or clicking outside dismisses it. It saves league roster moves (including
 waiver status and clearing time), trade offers sent to you, and other managers
