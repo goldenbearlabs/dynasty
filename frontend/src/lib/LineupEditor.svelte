@@ -183,13 +183,14 @@
 		queueSave();
 	}
 	const toggleMove = (id: string) => (moving = moving === id ? undefined : id);
-	// Dragging needs a mouse; on a touch screen a tap picks a player up and a
-	// second tap, on a highlighted slot or the bench, puts him down.
+	// A player moves by his slot tag: dragged with a mouse, or on a touch
+	// screen tapped, then a highlighted slot or the bench tapped.
 	const mouse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches;
-	function tapMove(e: MouseEvent, player: LineupPlayer) {
-		if (!canEdit || frozen(player) || (e.target as HTMLElement).closest('a, button, input, select')) return;
-		toggleMove(player.player_id);
-	}
+	// "D. Daniels" for Dyson Daniels, where a phone has no room for more.
+	const shortName = (full: string) => {
+		const [first, ...rest] = full.split(' ');
+		return rest.length ? `${first[0]}. ${rest.join(' ')}` : full;
+	};
 	function dragStart(e: DragEvent, id: string) {
 		moving = id;
 		e.dataTransfer?.setData('text/plain', id);
@@ -398,9 +399,10 @@
 
 {#snippet tile(game: LineupGame)}
 	<span class="logo"><small>{game.at_home ? 'vs' : '@'}</small><TeamLogo competition={sport} abbrev={game.opponent} size={24} label={false} /></span>
-	<span class="day">{weekday(game.day)}<span class="num"> {dayNumber(game.day)}</span></span>
+	<span class="tday">{weekday(game.day)}<span class="num">{dayNumber(game.day)}</span></span>
 	<span class="time" class:live={game.status === 'live'}>{played(game) ? when(game) : timeOfDay(game.starts_at)}</span>
 	{#if !played(game) && game.projected}<span class="proj" title="Projected fantasy points, from recent seasons and the betting line">{points(game.projected)} proj</span>{/if}
+	<span class="chip-pts">{played(game) ? (game.status === 'final' || game.points ? points(game.points) : '') : game.projected ? points(game.projected) : ''}</span>
 	{@render starter(game)}
 {/snippet}
 
@@ -411,7 +413,7 @@
 
 {#snippet games(player: LineupPlayer, starting: boolean)}
 	{#if player.games.length === 0}
-		<span class="muted small-text">{weekly ? 'No games this week' : 'No game'}</span>
+		<span class="muted small-text nogame"><span class="long">{weekly ? 'No games this week' : 'No game'}</span><span class="dash" title={weekly ? 'No games this week' : 'No game'}>–</span></span>
 	{:else if weekly && limited.length > 0}
 		<!-- The week's games as the opponents' logos, each with its day and time
 		     beneath: the one that counts is filled in; tap another to count it instead. -->
@@ -424,7 +426,7 @@
 					title="Count his last game of the week that he plays in"
 					onclick={() => pick(player.player_id, AUTO)}
 				>
-					<span class="logo"><strong>AUTO</strong></span><span class="day">Last</span><span class="time">he plays</span>
+					<span class="logo"><strong>AUTO</strong></span><span class="tday">Last</span><span class="time">he plays</span>
 				</button>
 			{/if}
 			{#each player.games as game (game.starts_at)}
@@ -459,6 +461,25 @@
 	{/if}
 {/snippet}
 
+<!-- A slot's tag, which is also how its player moves: drag it, or tap it
+     and then tap where he goes. -->
+{#snippet handle(name: string, title: string, player: LineupPlayer | undefined)}
+	{#if player && canEdit && !frozen(player)}
+		<button
+			class="slot handle"
+			aria-pressed={moving === player.player_id}
+			aria-label="Move {player.full_name} ({name})"
+			title="{title} · drag, or tap and then tap where he goes"
+			draggable={mouse}
+			ondragstart={(e) => dragStart(e, player.player_id)}
+			ondragend={dragEnd}
+			onclick={() => toggleMove(player.player_id)}>{name}</button
+		>
+	{:else}
+		<span class="slot" {title}>{name}</span>
+	{/if}
+{/snippet}
+
 <!-- A row of column headings; the first in a section also names it. -->
 {#snippet labels(cols: StatColumn[], title: string)}
 	<li class="labels" aria-hidden="true">
@@ -472,39 +493,18 @@
 {/snippet}
 
 {#snippet who(player: LineupPlayer, starting: boolean)}
-	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events: dragging and tapping the row are shortcuts; the grip button is the keyboard path -->
-	<div
-		class="who"
-		class:picked={moving === player.player_id}
-		class:movable={canEdit && !frozen(player)}
-		draggable={mouse && canEdit && !frozen(player)}
-		onclick={(e) => tapMove(e, player)}
-		ondragstart={(e) => dragStart(e, player.player_id)}
-		ondragend={dragEnd}
-	>
-		{#if canEdit}
-			<button
-				class="grip"
-				disabled={frozen(player)}
-				aria-pressed={moving === player.player_id}
-				aria-label="Move {player.full_name}"
-				title={frozen(player) ? `${player.full_name} is locked` : 'Drag, or tap and then tap where he goes'}
-				onclick={() => toggleMove(player.player_id)}
-			>
-				<Icon name={frozen(player) && player.locked ? 'lock' : 'grip'} size={14} />
-			</button>
-		{/if}
+	<div class="who" class:picked={moving === player.player_id}>
 		<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 		<div class="name">
 			<span class="row tight">
-				<a href="/player/{player.player_id}"><strong>{player.full_name}</strong></a>
+				<a href="/player/{player.player_id}" title={player.full_name}><strong><span class="full">{player.full_name}</span><span class="short">{shortName(player.full_name)}</span></strong></a>
 				<WatchStar playerID={player.player_id} playerName={player.full_name} /><ProspectRank id={player.player_id} />
 				<PlayerActions leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} detail={`${player.positions.join('/')} · ${player.team_abbrev ?? ''}`} onDrop={canEdit ? () => release(player) : undefined} />
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 				<InjuryBadge designation={player.injury} />
-				{#if player.locked && !canEdit}<Icon name="lock" size={12} />{/if}
+				{#if player.locked}<span class="locked" title="Locked: his game has started"><Icon name="lock" size={12} /></span>{/if}
 			</span>
-			<div class="player-meta"><span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={18} />{#if player.eligibility_note} · {player.eligibility_note}{/if}</span>
+			<div class="player-meta"><span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={18} />{#if player.eligibility_note} · <span class="long" title={player.eligibility_note}>{player.eligibility_note}</span><span class="dash elig" title={player.eligibility_note}>Can't start</span>{/if}</span>
 			{#if statsEnabled}
 				{@const stats = performanceFor(player.player_id)}
 				<div class="period-ranks" aria-label="Ranks for {player.full_name}"><span title="Overall rank by total fantasy points">Rank {stats?.overall_rank ? `#${stats.overall_rank}` : '—'}</span>{#each Object.entries(stats?.position_ranks ?? {}) as [position,rank] (position)}<span>{position} #{rank}</span>{:else}<span>Position —</span>{/each}</div>
@@ -645,7 +645,7 @@
 							ondragleave={() => over === i && (over = undefined)}
 							ondrop={(e) => drop(e, i)}
 						>
-							<span class="slot" title={slot.positions.includes('*') ? 'Any position' : slot.positions.join(', ')}>{slot.name}</span>
+							{@render handle(slot.name, slot.positions.includes('*') ? 'Any position' : slot.positions.join(', '), player)}
 							{#if player}
 								{@render who(player, true)}
 							{:else}
@@ -659,7 +659,7 @@
 						<div class="bench-divider"><span>Bench · {group.bench.length}</span>{#if moving && canPlace(moving, 'bench')}<button class="small" onclick={() => place(moving!, 'bench')}>Move to bench</button>{/if}</div>
 						<ul class="rows">
 							{#each group.bench as player (player.player_id)}
-								<li class="seat bench-seat"><span class="slot">BN</span>{@render who(player, false)}</li>
+								<li class="seat bench-seat">{@render handle('BN', 'Bench', player)}{@render who(player, false)}</li>
 							{:else}<li class="muted small-text pad">Everyone is starting.</li>{/each}
 						</ul>
 					</li>
@@ -694,7 +694,7 @@
 	.period-ranks { display: flex; flex-wrap: wrap; gap: .25rem .5rem; font-size: .65rem; color: var(--brand); margin-top: .15rem; }
 	.stats-enabled { min-width: 0; grid-template-columns: minmax(0,1fr); }
 	.stats-enabled .lineup-list { overflow-x: auto; scrollbar-width: thin; }
-	.stats-enabled .lineup-list > .rows { min-width: calc(30rem + var(--stat-cols) * 2.55rem); }
+	.stats-enabled .lineup-list > .rows { min-width: calc(36rem + var(--stat-cols) * 2.55rem); }
 	@media(max-width:640px) { .stats-enabled .lineup-list > .rows { min-width: 0; } }
 
 	/* ---- the day or week ---- */
@@ -761,7 +761,7 @@
 	/* Slot, player, game, a column per stat, fantasy points: every row shares
 	   these, so the numbers line up down the table. */
 	.lineup-list {
-		--row: 2rem minmax(14rem, 1fr) minmax(6rem, 1fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
+		--row: 2rem minmax(13rem, 1fr) minmax(13rem, 1fr) calc(var(--stat-cols) * 2.55rem) 3.6rem;
 	}
 	.head {
 		display: grid;
@@ -896,26 +896,31 @@
 		gap: 0.55rem;
 		min-width: 0;
 	}
-	.who.movable {
-		cursor: grab;
-	}
 	.who.picked {
 		border-radius: var(--radius-small);
 		box-shadow: 0 0 0 2px var(--sport, var(--brand));
 	}
-	.grip {
-		flex: none;
-		padding: 0.3rem 0.15rem;
+	/* The slot tag doubles as the handle that moves its player. */
+	.slot.handle {
 		border: 0;
-		background: transparent;
-		color: var(--ink-faint);
 		cursor: grab;
 	}
-	.grip:disabled {
-		cursor: not-allowed;
+	.slot.handle:hover {
+		box-shadow: inset 0 0 0 1px var(--sport, var(--brand));
 	}
-	.grip[aria-pressed='true'] {
-		color: var(--sport, var(--brand));
+	.slot.handle[aria-pressed='true'] {
+		background: var(--sport, var(--brand));
+		color: var(--surface);
+	}
+	.locked {
+		display: inline-flex;
+		color: var(--ink-faint);
+	}
+	/* The short name and a game card's points line are for a phone. */
+	.short,
+	.chip-pts,
+	.dash {
+		display: none;
 	}
 	.name {
 		display: grid;
@@ -1029,6 +1034,12 @@
 		display: block;
 		font: 600 0.55rem var(--mono);
 		color: var(--ink-faint);
+	}
+	.tile .tday {
+		white-space: nowrap;
+	}
+	.tile .tday .num {
+		margin-left: 0.25em;
 	}
 	.tile .time {
 		font-weight: 400;
@@ -1168,10 +1179,8 @@
 		/* The week's games fit beside the name: no spill onto it. */
 		.tiled .games {
 			min-width: 0;
-			max-width: 9.5rem;
-			overflow: hidden;
 		}
-		.tile .day .num,
+		.tile .tday .num,
 		.tile.done:not(.on),
 		.name :global(.watch-star) {
 			display: none;
@@ -1233,14 +1242,93 @@
 			gap: 0.25rem;
 			scrollbar-width: none;
 		}
+		/* A game as a narrow card: logo and day, then its points. */
 		.tile {
 			flex: none;
-			display: inline-flex;
+			display: grid;
+			grid-template-columns: auto auto;
 			align-items: center;
-			gap: 0.2rem;
+			justify-items: center;
+			gap: 0 0.12rem;
 			min-width: 0;
-			padding: 0.1rem 0.25rem;
-			font-size: 0.6rem;
+			padding: 0.12rem 0.2rem;
+			font-size: 0.58rem;
+			line-height: 1.15;
+		}
+		.tile .chip-pts {
+			display: block;
+			grid-column: 1 / -1;
+			font: 600 0.58rem var(--mono);
+			color: var(--ink-soft);
+		}
+		.tile.on .chip-pts {
+			color: var(--ink);
+		}
+		/* No auto card: on auto, his last game is the one shown as counting. */
+		.tile.auto {
+			display: none;
+		}
+		.tile.next {
+			border-style: solid;
+			background: color-mix(in srgb, var(--sport, var(--brand)) 14%, var(--surface));
+		}
+		.full,
+		.long {
+			display: none;
+		}
+		.short,
+		.dash {
+			display: inline;
+		}
+		.elig {
+			margin-left: 0.25em;
+			color: var(--bad);
+		}
+		.player-meta :global(img),
+		.player-meta :global(picture) {
+			width: auto !important;
+			max-width: 1.5rem;
+			height: 16px !important;
+			margin: 0 !important;
+		}
+		.player-meta :global(.team) {
+			gap: 0.2em;
+			margin-left: 0.15em;
+		}
+		.opponent :global(picture) {
+			margin: 0 !important;
+		}
+		/* A single game as a small card: logo, then when or how it stands. */
+		.game {
+			display: grid;
+			grid-template-columns: auto;
+			justify-items: center;
+			gap: 0;
+			padding: 0.12rem 0.3rem;
+			border: 1px solid var(--rule);
+			border-radius: var(--radius-small);
+			font-size: 0.58rem;
+			line-height: 1.2;
+		}
+		.opponent {
+			gap: 0.15rem;
+			font-size: 0.56rem;
+			font-weight: 500;
+			color: var(--ink-faint);
+		}
+		.opponent :global(img) {
+			width: 15px !important;
+			height: 15px !important;
+			margin: 0 !important;
+		}
+		.opponent :global(.team > span) {
+			display: none;
+		}
+		.game .status {
+			white-space: nowrap;
+		}
+		.name {
+			overflow: hidden;
 		}
 		.seat > .stats {
 			display: none;
@@ -1260,13 +1348,13 @@
 		.tile .logo small,
 		.tile .start,
 		.tile.done .time,
-		.tile.auto .day,
+		.tile.auto .tday,
 		.tile.auto .time {
 			display: none;
 		}
 		.tile :global(img) {
-			width: 16px !important;
-			height: 16px !important;
+			width: 14px !important;
+			height: 14px !important;
 			margin: 0 !important;
 		}
 		.tile .proj,
@@ -1302,10 +1390,5 @@
 	}
 	.moving-bar button {
 		flex: none;
-	}
-	@media (pointer: coarse) {
-		.who.movable {
-			cursor: pointer;
-		}
 	}
 </style>
