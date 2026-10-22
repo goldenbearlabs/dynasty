@@ -183,6 +183,13 @@
 		queueSave();
 	}
 	const toggleMove = (id: string) => (moving = moving === id ? undefined : id);
+	// Dragging needs a mouse; on a touch screen a tap picks a player up and a
+	// second tap, on a highlighted slot or the bench, puts him down.
+	const mouse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches;
+	function tapMove(e: MouseEvent, player: LineupPlayer) {
+		if (!canEdit || frozen(player) || (e.target as HTMLElement).closest('a, button, input, select')) return;
+		toggleMove(player.player_id);
+	}
 	function dragStart(e: DragEvent, id: string) {
 		moving = id;
 		e.dataTransfer?.setData('text/plain', id);
@@ -445,12 +452,13 @@
 {/snippet}
 
 {#snippet who(player: LineupPlayer, starting: boolean)}
-	<!-- svelte-ignore a11y_no_static_element_interactions: dragging is a shortcut; the grip button is the tap and keyboard path -->
+	<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events: dragging and tapping the row are shortcuts; the grip button is the keyboard path -->
 	<div
 		class="who"
 		class:picked={moving === player.player_id}
 		class:movable={canEdit && !frozen(player)}
-		draggable={canEdit && !frozen(player)}
+		draggable={mouse && canEdit && !frozen(player)}
+		onclick={(e) => tapMove(e, player)}
 		ondragstart={(e) => dragStart(e, player.player_id)}
 		ondragend={dragEnd}
 	>
@@ -636,6 +644,12 @@
 			{/each}
 
 		{/if}
+	{/if}
+	{#if moving && byId.get(moving)}
+		<div class="moving-bar" role="status">
+			<span>Moving <strong>{byId.get(moving)?.full_name}</strong> · tap a highlighted slot{seats.includes(moving) ? ' or the bench' : ''}</span>
+			<button class="small" onclick={() => (moving = undefined)}>Cancel</button>
+		</div>
 	{/if}
 </div>
 
@@ -1172,6 +1186,79 @@
 		}
 		.empty {
 			grid-column: span 3;
+			padding: 0.2rem 0.5rem;
+			font-size: 0.75rem;
+		}
+		/* Only the stats he has: no rows of zeros and dashes. */
+		.stats .zero {
+			display: none;
+		}
+		.stat-context {
+			display: none;
+		}
+		/* The week's games as small one-line chips that scroll sideways. */
+		.tiles {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			gap: 0.25rem;
+			scrollbar-width: none;
+		}
+		.tile {
+			flex: none;
+			display: inline-flex;
+			align-items: center;
+			gap: 0.25rem;
+			min-width: 0;
+			padding: 0.1rem 0.35rem;
+			font-size: 0.64rem;
+		}
+		.tile .logo {
+			height: auto;
+		}
+		.tile .logo small,
+		.tile .start,
+		.tile.done .time,
+		.tile.auto .day,
+		.tile.auto .time {
+			display: none;
+		}
+		.tile :global(img) {
+			width: 16px !important;
+			height: 16px !important;
+			margin: 0 !important;
+		}
+		.tile .proj {
+			font-size: 0.58rem;
+		}
+		.tile.on {
+			box-shadow: inset 0 -2px 0 var(--sport, var(--brand));
+		}
+		.moving-bar {
+			bottom: calc(4.3rem + env(safe-area-inset-bottom));
+		}
+	}
+	/* While a player is picked up: what to do next, and a way out. */
+	.moving-bar {
+		position: sticky;
+		bottom: 1rem;
+		z-index: 6;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+		padding: 0.5rem 0.6rem 0.5rem 0.85rem;
+		border-radius: var(--radius);
+		background: var(--sport, var(--brand));
+		color: var(--surface);
+		font-size: 0.82rem;
+		box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+	}
+	.moving-bar button {
+		flex: none;
+	}
+	@media (pointer: coarse) {
+		.who.movable {
+			cursor: pointer;
 		}
 	}
 </style>
