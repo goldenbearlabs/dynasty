@@ -67,11 +67,6 @@ join leagues l on l.id = s.league_id
 where l.dynasty_id = @dynasty_id
 order by s.year desc;
 
--- name: RunningSeasonEnd :one
--- The last day of the season a league is playing on this day, if it is.
-select ends_on from seasons
-where league_id = @league_id and status = 'active' and @day::date between starts_on and ends_on;
-
 -- name: SetSeasonDates :exec
 update seasons set starts_on = @starts_on, ends_on = @ends_on where id = @id;
 
@@ -89,7 +84,7 @@ select max(effective_on)::date as effective_on from lineups
 where league_id = @league_id and franchise_id = @franchise_id and effective_on <= @day;
 
 -- name: ListLineupEntries :many
-select slot, slot_index, player_id, counts_from from lineup_entries
+select slot, slot_index, player_id, counts_from, counts_last from lineup_entries
 where league_id = @league_id and franchise_id = @franchise_id and effective_on = @effective_on
 order by slot, slot_index;
 
@@ -103,12 +98,12 @@ insert into lineups (league_id, franchise_id, effective_on) values (@league_id, 
 on conflict do nothing;
 
 -- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id, @counts_from);
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id, @counts_from, @counts_last);
 
 -- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id, e.counts_from
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id, e.counts_from, e.counts_last
 from lineup_entries e
 where e.league_id = @league_id and e.franchise_id = @franchise_id and e.effective_on = @from_day;
 
@@ -127,7 +122,7 @@ select exists (
 
 -- name: ListRosterGames :many
 -- A franchise's main roster in one league with each player's games in a
--- span of days and the fantasy points he scored in each. A player with no
+-- span of days, the fantasy points he scored in each and his stat line. A player with no
 -- game in the span appears once, with no game.
 select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(n.nickname, '')::text as nickname,
@@ -135,8 +130,20 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
-       coalesce((select sl.points from stat_lines sl
-                 where sl.game_id = g.id and sl.player_id = p.id), 0)::float8 as points
+       coalesce(sl.points, 0)::float8 as points,
+       coalesce(sl.stats, '{}')::jsonb as stats,
+       p.injury_designation,
+       -- The market's view of the game from his side: his team's implied
+       -- score, the opponent's, and his team's chance of winning; zero without a line.
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_implied else g.away_implied end, 0)::float8 as team_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.away_implied else g.home_implied end, 0)::float8 as opponent_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_win else 1 - g.home_win end, 0)::float8 as win_chance,
+       -- Whether a feed has him starting that day: confirmed, expected, or
+       -- other when his team has someone else at his position named.
+       (case when ps.player_id is not null then case when ps.confirmed then 'confirmed' else 'expected' end
+             when exists (select 1 from probable_starters o join players op on op.id = o.player_id
+                          where o.day = g.day and op.pro_team_id = p.pro_team_id and op.positions && p.positions) then 'other'
+             else '' end)::text as starter
 from roster_entries re
 join players p on p.id = re.player_id
 join leagues l on l.id = re.league_id
@@ -146,6 +153,8 @@ left join games g on g.competition = l.competition
                  and p.pro_team_id in (g.home_team_id, g.away_team_id)
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
+left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
+left join probable_starters ps on ps.player_id = p.id and ps.day = g.day
 left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = @league_id and re.franchise_id = @franchise_id and re.list = 'main'
 order by p.full_name, p.id, g.starts_at;
@@ -157,27 +166,42 @@ order by p.full_name, p.id, g.starts_at;
 -- each day's stat lines for whoever was in the lineup in force that day,
 -- weighted by the league's scoring rules. A slot may count only some of a
 -- player's games each week (games_per_week): those are his first so many on
--- or after the day his manager picked. A league may also cap a team's
+-- or after the day his manager picked, or, left on auto (counts_last), his
+-- last so many that week in which he recorded a stat, so a game he sat out
+-- gives way to the one before it. A league may also cap a team's
 -- pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 -- in the order they were played, score nothing. Weeks are counted from
 -- week_start, the first day of the week from_day falls in, so a span that
--- begins mid-week still knows which games came earlier.
+-- begins mid-week still knows which games came earlier. A matchup the
+-- commissioner has doubled (double_games) counts as one window in place of
+-- its weeks, with twice the games and twice the starts.
 with days as (
-  select generate_series(@week_start::date, @to_day::date, interval '1 day')::date as day
+  select d::date as day, w.week_start
+  from (select @week_start::date as week_start) w
+  cross join generate_series(w.week_start, @to_day::date, interval '1 day') d
 ), in_force as (
-  select f.id as franchise_id, d.day,
+  select f.id as franchise_id, d.day, d.week_start,
          (select max(n.effective_on) from lineups n
           where n.league_id = @league_id and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
   from franchises f
   cross join days d
   where f.dynasty_id = (select dynasty_id from leagues where id = @league_id)
 ), started as (
-  select i.franchise_id, e.player_id, g.id as game_id, g.day, sl.stats, l.settings,
+  select i.franchise_id, e.player_id, e.slot, g.id as game_id, g.day, sl.stats, l.settings,
          coalesce((select (def.rule->>'games_per_week')::int
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - @week_start::date) / 7
+         case when dp.doubled then 2 else 1 end as mult,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win
                             order by g.starts_at, g.id) as nth,
+         e.counts_last,
+         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
+         -- Counting back from his last game of the week, among those he recorded a stat in.
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win,
+                                         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
+                            order by g.starts_at desc, g.id desc) as nth_last,
          coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
          -- A start, for the cap: he started the game, and if he is a reliever
          -- he went more than an inning, so an opener does not use one up.
@@ -186,7 +210,7 @@ with days as (
          sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
                    and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
                   then 1 else 0 end)
-           over (partition by i.franchise_id, (g.day - @week_start::date) / 7
+           over (partition by i.franchise_id, dp.win
                  order by g.starts_at, g.id, e.player_id) as starts_so_far
   from in_force i
   join lineup_entries e on e.league_id = @league_id and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
@@ -194,6 +218,14 @@ with days as (
   join leagues l on l.id = @league_id
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  -- The window it counts in: the doubled matchup it falls in, if any, or its week.
+  cross join lateral (
+    select coalesce((select p.starts_on from periods p join seasons se on se.id = p.season_id
+                     where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
+                     limit 1), g.day - (g.day - i.week_start) % 7) as win,
+           exists (select 1 from periods p join seasons se on se.id = p.season_id
+                   where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on) as doubled
+  ) dp
   where (e.counts_from is null or g.day >= e.counts_from)
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -205,18 +237,32 @@ with days as (
            and team.id in (g.home_team_id, g.away_team_id) and ps.conference <> '' limit 1),
         (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
          in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
+), counted as (
+  select st.*, (select sum(s.value::numeric * r.value::numeric)
+               from jsonb_each_text(st.stats) s
+               join jsonb_each_text(st.settings->'scoring') r on r.key = s.key) as points
+  from started st
+where st.day >= @from_day::date
+  and (st.games_per_week = 0
+    or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
+    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
        count(distinct st.game_id) as games,
-       sum(s.value::numeric * r.value::numeric)::float8 as points
-from started st
+       sum(st.points)::float8 as points,
+       case when @include_games::boolean then jsonb_agg(jsonb_build_object(
+         'game_id', st.game_id, 'day', st.day, 'slot', st.slot, 'points', st.points,
+         'stats', st.stats, 'starts_at', g.starts_at, 'status', g.status,
+         'home', home.abbrev, 'away', away.abbrev, 'positions', p.positions
+       ) order by g.starts_at, g.id) else '[]'::jsonb end as game_lines
+from counted st
 join players p on p.id = st.player_id
+join games g on g.id = st.game_id
+left join pro_teams home on home.id = g.home_team_id
+left join pro_teams away on away.id = g.away_team_id
 left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id = st.player_id
-cross join lateral jsonb_each_text(st.stats) s
-join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
-where st.day >= @from_day::date
-  and (st.games_per_week = 0 or st.nth <= st.games_per_week)
-  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
+where st.points is not null
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc;
 
@@ -328,7 +374,7 @@ update periods set by_hand = @by_hand where id = @id;
 select m.*, p.seq, p.is_playoff from matchups m
 join periods p on p.id = m.period_id
 where p.season_id = @season_id
-order by p.seq, m.id;
+order by p.seq, m.bracket, m.bracket_slot, m.id;
 
 -- name: GetMatchup :one
 select * from matchups where id = @id;
@@ -351,3 +397,35 @@ select pg_advisory_xact_lock(hashtextextended((@period_id::uuid)::text, 0));
 -- name: InsertPeriodScore :exec
 insert into period_scores (period_id, franchise_id, points) values (@period_id, @franchise_id, @points)
 on conflict do nothing;
+
+-- name: LastScheduledDay :one
+-- The latest day a competition has a game stored for, or null with none.
+select max(day)::date from games where competition = @competition;
+
+-- name: FirstScheduledDay :one
+-- The earliest day a competition has a game stored for, or null with none.
+select min(day)::date from games where competition = @competition;
+
+-- name: DeleteGame :exec
+-- Removes a game the feed says is not part of the regular season, with its stat lines.
+delete from games where competition = @competition and provider_id = @provider_id;
+
+-- name: ListUnplayedGamesOnDay :many
+-- Games on a day that were due to start over a day ago and never did:
+-- placeholders the feed may have since dropped.
+select provider_id from games
+where competition = @competition and day = @day and status = 'scheduled' and starts_at < now() - interval '1 day';
+
+-- name: InsertBracketMatchup :exec
+insert into matchups (period_id,home_franchise_id,away_franchise_id,bracket,bracket_slot)
+values (@period_id,@home_franchise_id,@away_franchise_id,@bracket,@bracket_slot);
+
+-- name: DoublePeriodOn :one
+-- The doubled matchup a day falls in, in a league's open season, if any.
+select p.* from periods p
+join seasons s on s.id = p.season_id
+where s.league_id = @league_id and s.status = 'active' and p.double_games and @day::date between p.starts_on and p.ends_on
+limit 1;
+
+-- name: SetPeriodDoubleGames :exec
+update periods set double_games = @double_games where id = @id;

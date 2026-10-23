@@ -44,6 +44,8 @@ Player data comes from the commissioner page ("Data feeds"), or from the shell:
 make sync c=nba               # teams and players: cbb | nba | nhl | nfl | mlb
 make sync c=nhl j=prospects   # prospects: cbb (recruits) | nhl (draft picks, rankings) | mlb (draft picks)
 make sync c=nhl j=games       # schedule and box scores for the days around today
+make sync c=nhl j=schedule    # refresh the full published schedule (at least one year ahead)
+(cd backend && go run . sync-schedules) # backfill missing future schedules for every configured league
 make sync c=nba j=seasons     # season-by-season stat history for every player
 make runs                     # recent sync runs
 ```
@@ -57,9 +59,27 @@ logs show up to ten imported final box scores using the current league's
 scoring rules. Commissioner controls and the pre-draft pick-order editor are
 under "Manage draft".
 
+The board keeps fixed team columns, so snake rounds alternate left-to-right
+and right-to-left. Traded picks stay in their original team's column and
+show their current owner. A green dot beside a team name means its manager
+has a connected draft-room tab; it does not indicate keyboard activity.
+Presence is transient and counts multiple tabs correctly, with disconnected
+connections removed within about 40 seconds. It never changes draft data.
+
 To play a season: the commissioner starts it (Commissioner, "Seasons"), and
 each manager sets a lineup from their team page. Standings are on the League
 page; a head-to-head league also gets a schedule, matchups and playoffs.
+
+The Players page opens on available players, sorted by fantasy points descending.
+Click a column header to sort the full filtered pool; click it again to reverse.
+The active header and column are highlighted. The per-game switch changes the
+single FP column and raw stats to rates, including their sort order. Combine
+Available, All taken, Rostered, Reserve and Unsigned filters, then narrow to one or more fantasy teams. Rows
+show FP (totals or per game), games and league index; selecting a sport adds raw
+stat columns with a column picker and totals/per-game switch. Green plus opens
+an add-to-roster/reserve choice, red minus confirms a drop, and blue swap opens
+a trade with that player selected. Waiver players link to claims. Mobile keeps
+names, FP, index and actions visible, with expandable filters and detailed stats.
 
 The Research tab is a research lab with a saved pool of league–season datasets.
 Add combinations such as NHL 2025-26, WNBA 2025 and NHL 2024-25; the same player
@@ -209,6 +229,35 @@ and may be held on reserve under the default **Prospects or outside starting
 conferences** reserve rule. Conference eligibility is also enforced by lineup
 validation and scoring, including lineups saved before a rule change.
 
+College roster imports explicitly select the season ending the following year
+from July onward (for example, `season=2027` for fall 2026), and supplement
+ESPN's team listing with teams in its conference membership feed. Verified
+players still omitted by ESPN can be added in
+`backend/internal/competition/college_rosters.go`, with their ESPN athlete id,
+school roster URL, team and season. These additions only apply to that season;
+ESPN's own player details take precedence once it lists them. The prospect job
+continues to import future recruiting classes; current freshmen come from the
+season-specific roster job.
+
+NFL and WNBA prospect imports include completed professional draft picks,
+not the next draft's college rankings. MLB prospects must have a confirmed
+draft signing bonus or appear in professional minor-league player lists;
+unsigned selections who remain in college are excluded. Previously imported
+players outside these professional prospect pools are hidden from player
+search, rankings and draft queues and cannot be acquired or drafted. Their
+records and historical picks are retained. When an eligible prospect feed or
+professional roster later admits them, they enter the pool as new arrivals
+for the normal rookie-draft and free-agency rules.
+
+NHL season-history syncs also discover players from this season and the two
+preceding seasons, using official season totals and biography reports.
+Injured and unsigned veterans missing from current rosters are added as
+inactive, draftable players without inventing a current team. Existing
+rostered players and their ids are left alone. When players are recovered,
+that run revisits the configured older history to fill their missing stats.
+After deploying this patch, run the NHL season-history job in Data feeds
+to recover missing players immediately; the nightly history sync also does it.
+
 Replacement demand treats basketball position aliases and baseball outfield
 positions as shared pools. Above-replacement season totals are raw fantasy
 points under that league’s rules and are not comparable across sports.
@@ -297,6 +346,23 @@ Session, private manager/admin routes, writes and live streams are not cached.
 Keys include a database namespace, generation, route/query or dataset selection,
 and a cache format version (`v1`); bump the version if cached JSON semantics change.
 
+Each signed-in manager has a mail icon to the left of the Game Day filters, with a red unread count.
+It opens a notification overlay on desktop and mobile without leaving the current
+page. Escape, the close button or clicking outside dismisses it. It saves league roster moves (including
+waiver status and clearing time), trade offers sent to you, and other managers
+targeting your players. Notifications support type and unread filters,
+pagination, mark read/unread and mark all read. Opening a notification marks it
+read and opens its player, waiver page, offer or trade-interest list. The badge
+refreshes every 20 seconds while the app is visible, on focus and on navigation.
+These are in-app notifications, generated from new events after migration 0043;
+failed writes do not leave notifications behind. Target writes are idempotent.
+
+Unaccepted trade offers are visible only to their participants, including when
+another manager is commissioner. Once every party accepts, a trade is public
+while awaiting commissioner approval and after completion; trades declined or
+withdrawn before everyone accepts stay private. Notification reads and updates
+are scoped to the signed-in organization and bypass shared caches.
+
 Each signed-in manager has a private **Watchlist** saved to their organization.
 Use the star beside a player in search, player lists, research, profiles,
 rosters, lineups or draft research/queues to add or remove them. Any player
@@ -305,3 +371,24 @@ The Watchlist page supports a saved priority order, custom groups and scouting
 notes, with filters for sport, group and ownership. A sport's team page links
 to its filtered watchlist. Watching a player does not change their roster or
 draft status. Saved entries follow the canonical player when duplicates merge.
+
+Schedule imports cover at least 365 days ahead, or the end of an active fantasy season when later. Startup, nightly refreshes and commissioner schedule syncs use the same horizon. `SCHEDULE_DAYS` can extend it beyond a year. Only games published by the sport's feed can be imported; unreleased fixtures become available on subsequent refreshes.
+
+Head-to-head leagues default to eight championship playoff teams with a fixed bracket. In a 14-team league, the other six play a separate consolation bracket; teams 13 and 14 receive first-round byes, and winners advance. Standings default to wins, then fewer losses, followed by points for, head-to-head record among tied teams, and points against (higher first). Commissioner rules can change playoff size, reseeding, consolation participation/seeding, standings ranking and tiebreaker order. Both brackets finish in the season's final period, and only the championship bracket determines the league title.
+
+MLB players display the current MLB Pipeline Top 100 prospect rank, list year, source link and MLB ETA. Rankings match existing players by MLBAM ID, preserve roster status and identity, and are available as a player-list sort. They refresh with the weekly prospect import or separately from Commissioner → Data feeds → MLB Top 100 ranks. `(cd backend && go run . sync-prospect-rankings)` refreshes them from the command line. Refreshes replace a complete list atomically and retain the last valid list on feed errors or incomplete responses.
+
+Player lists aggregate raw stat lines only after selecting a page; raw-stat
+sorting aggregates only the chosen key. Season choices count each named season
+once. ESPN imports reject responses for a different season, including providers
+that echo the requested year while returning an old season label. Migration 0044
+removes only exact copied NBA/college season lines stored under an incorrect
+year, retaining any differing lines. The League overview renders standings
+before fetching optional playoff/title odds.
+
+The Trade Block opens on league listings, with player/team/needs search, fantasy
+team and sport filters, and an option to include teams without listings. My
+Block, Team Needs, Targets and Interest each have their own focused view. Listing
+and targeting forms expand when needed; notes stay with their player, team needs
+stay grouped beneath each block, and targets can be toggled directly from league
+listings. Target and interest visibility is unchanged.

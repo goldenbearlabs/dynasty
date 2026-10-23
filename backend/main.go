@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"crossover/internal/cache"
 	"crossover/internal/competition"
 	"crossover/internal/db"
+	"crossover/internal/devseed"
 	"crossover/internal/draft"
 	"crossover/internal/dynasty"
 	"crossover/internal/hub"
@@ -34,6 +36,7 @@ import (
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
+	"crossover/internal/sportsday"
 	"crossover/internal/trade"
 	"crossover/internal/waiver"
 	"crossover/internal/web"
@@ -87,6 +90,16 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	client := ingest.NewClient(envDuration("FETCH_GAP", time.Second))
+	// FETCH_GAPS gives a host its own gap: "host=250ms,host=2s". ESPN's site
+	// API took bursts of 16 a second and a steady 5 without refusing, so it
+	// gets 4 a second; feeds not yet measured keep FETCH_GAP.
+	client.Gaps = map[string]time.Duration{}
+	for _, pair := range strings.Split(env("FETCH_GAPS", "site.api.espn.com=250ms"), ",") {
+		host, gap, _ := strings.Cut(strings.TrimSpace(pair), "=")
+		if d, err := time.ParseDuration(gap); err == nil && host != "" {
+			client.Gaps[host] = d
+		}
+	}
 	// FETCH_VIA routes feeds through relays: "host=https://relay,host=https://relay".
 	client.Via = map[string]string{}
 	for _, pair := range strings.Split(os.Getenv("FETCH_VIA"), ",") {
@@ -100,7 +113,59 @@ func run(log *slog.Logger) error {
 		}
 	}
 	registry := competition.NewRegistry(client)
+	// `crossover seed [draft|season]` fills a local database with a dynasty to
+	// work against, just after its startup drafts or in season, then exits.
+	if len(os.Args) > 1 && os.Args[1] == "seed" {
+		state := devseed.PostDraft
+		if len(os.Args) > 2 {
+			state = os.Args[2]
+		}
+		return devseed.Run(ctx, pool, registry, log, state)
+	}
 	syncer := ingest.NewSyncer(queries, log)
+	if len(os.Args) > 1 && os.Args[1] == "sync-prospect-rankings" {
+		var failures []error
+		for _, c := range registry {
+			if ranked, ok := c.Prospects.(ingest.ProspectRankingSource); ok {
+				if err := syncer.SyncProspectRankings(ctx, c.Key, ranked); err != nil {
+					failures = append(failures, fmt.Errorf("%s: %w", c.Key, err))
+				}
+			}
+		}
+		return errors.Join(failures...)
+	}
+
+	// Fill missing future schedules immediately without starting another API.
+	if len(os.Args) > 1 && os.Args[1] == "sync-schedules" {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			return err
+		}
+		var failures []error
+		var mu sync.Mutex
+		var jobs sync.WaitGroup
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			jobs.Go(func() {
+				from, _ := scoring.Window()
+				if last, err := queries.LastScheduledDay(ctx, c.Key); err == nil && last.Valid && last.Time.After(from) {
+					from = last.Time.AddDate(0, 0, 1)
+				}
+				log.Info("backfill full schedule", "competition", c.Key, "from", from.Format(time.DateOnly))
+				if err := syncer.SyncFullSchedule(ctx, c.Key, c.Games, from, envInt("SCHEDULE_DAYS", 365)); err != nil {
+					mu.Lock()
+					failures = append(failures, fmt.Errorf("%s: %w", c.Key, err))
+					mu.Unlock()
+				}
+			})
+		}
+		jobs.Wait()
+		return errors.Join(failures...)
+	}
+
 	rosters := roster.NewService(pool)
 	// A player who turns up in a new competition takes his fantasy rights
 	// with him, where the league's rules say so.
@@ -175,6 +240,49 @@ func run(log *slog.Logger) error {
 	schedule.AddFunc(env("SCORES_SYNC_CRON", "*/15 * * * *"), func() { syncGames(scoring.Window()) })
 	// Without this a fresh server would show no games until the first run above.
 	go syncGames(scoring.Window())
+	// Full published schedules for matchup planning, refreshed nightly and
+	// on startup. A previously loaded 60-day schedule must not skip backfill.
+	scheduleDays := envInt("SCHEDULE_DAYS", 365)
+	syncSchedule := func() {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			log.Error("list league competitions", "err", err)
+			return
+		}
+		_, near := scoring.Window()
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			if err := syncer.SyncFullSchedule(ctx, c.Key, c.Games, near.AddDate(0, 0, 1), scheduleDays); err != nil {
+				log.Warn("refresh full schedule", "competition", c.Key, "err", err)
+			}
+		}
+	}
+	schedule.AddFunc(env("SCHEDULE_SYNC_CRON", "30 4 * * *"), syncSchedule)
+	go syncSchedule()
+	// Injuries, betting lines and probable starters change through the day,
+	// so the sports someone here plays read them often: lines and starters
+	// for the week ahead.
+	syncReports := func() {
+		played, err := queries.ListLeagueCompetitions(ctx)
+		if err != nil {
+			log.Error("list league competitions", "err", err)
+			return
+		}
+		today := sportsday.Today()
+		for _, key := range played {
+			c, ok := registry.Get(key)
+			if !ok {
+				continue
+			}
+			syncer.SyncInjuries(ctx, c.Key, c.Injuries)
+			syncer.SyncPreviews(ctx, c.Key, c.Previews, today, today.AddDate(0, 0, envInt("PREVIEW_DAYS", 6)))
+		}
+	}
+	schedule.AddFunc(env("REPORTS_SYNC_CRON", "*/30 * * * *"), syncReports)
+	go syncReports()
 	// Stat history: every player's season totals, refreshed with the nightly
 	// sync. The first run for a sport fetches years of it; later runs only
 	// keep the last two seasons current.
@@ -212,7 +320,7 @@ func run(log *slog.Logger) error {
 		Drafts:         drafts,
 		Trades:         trade.NewService(pool),
 		Waivers:        waivers,
-		Lineups:        lineup.NewService(pool),
+		Lineups:        lineup.NewService(pool, registry),
 		Scoring:        scores,
 		Live:           games,
 		Log:            log,
@@ -221,6 +329,7 @@ func run(log *slog.Logger) error {
 		AdminToken:     os.Getenv("ADMIN_TOKEN"),
 		PublicURL:      os.Getenv("PUBLIC_URL"),
 		SeasonBackfill: backfill,
+		ScheduleDays:   scheduleDays,
 	}
 	if host, from := os.Getenv("SMTP_HOST"), os.Getenv("MAIL_FROM"); host != "" && from != "" && server.PublicURL != "" {
 		port, err := strconv.Atoi(env("SMTP_PORT", "587"))

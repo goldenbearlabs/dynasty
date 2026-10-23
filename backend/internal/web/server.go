@@ -54,6 +54,11 @@ type Server struct {
 	SendAccountEmail func(context.Context, string, string, string) error
 	// SeasonBackfill is how many seasons of stat history a sync keeps.
 	SeasonBackfill int
+	// ScheduleDays extends the full-year schedule horizon when larger than 365.
+	// Active fantasy season end dates can extend it further.
+	ScheduleDays int
+
+	odds oddsRun
 }
 
 // Handler routes every request. Reading is open to anyone who can reach the
@@ -68,8 +73,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/my-leagues/{id}", s.getMyLeague)
 
 	mux.HandleFunc("GET /api/competitions", s.cached(cache.Research, 10*time.Minute, s.listCompetitions))
+	mux.HandleFunc("GET /api/teams", s.cached(cache.Research, 10*time.Minute, s.listTeams))
 	mux.HandleFunc("GET /api/players", s.cached(cache.Public, 30*time.Second, s.listPlayers))
 	mux.HandleFunc("GET /api/stat-seasons", s.cached(cache.Research, 10*time.Minute, s.listStatSeasons))
+	mux.HandleFunc("GET /api/prospect-rankings", s.cached(cache.Research, 10*time.Minute, s.listProspectRankings))
 	mux.HandleFunc("GET /api/research", s.cached(cache.Research, 10*time.Minute, s.listResearch))
 	mux.HandleFunc("GET /api/players/{id}", s.cached(cache.Public, 30*time.Second, s.researchPlayer))
 	mux.HandleFunc("GET /api/players/{id}/seasons", s.cached(cache.Public, 30*time.Second, s.playerSeasons))
@@ -86,10 +93,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/activity", s.cached(cache.Public, 30*time.Second, s.listActivity))
 	mux.HandleFunc("GET /api/standings", s.cached(cache.Public, 30*time.Second, s.listStandings))
 	mux.HandleFunc("GET /api/overall", s.cached(cache.Public, 30*time.Second, s.getOverall))
+	mux.HandleFunc("GET /api/odds", s.getOdds)
 	mux.HandleFunc("GET /api/seasons", s.cached(cache.Public, 30*time.Second, s.listSeasons))
 	mux.HandleFunc("GET /api/leagues/{id}/lineup", s.getLineup)
+	mux.HandleFunc("GET /api/leagues/{id}/roster-stats", s.cached(cache.Public, 30*time.Second, s.getRosterStats))
 	mux.HandleFunc("GET /api/leagues/{id}/matchups", s.cached(cache.Public, 30*time.Second, s.listMatchups))
 	mux.HandleFunc("GET /api/leagues/{id}/schedule", s.cached(cache.Public, 30*time.Second, s.getSchedule))
+	mux.HandleFunc("GET /api/leagues/{id}/game-counts", s.cached(cache.Public, 30*time.Second, s.getGameCounts))
 	mux.HandleFunc("GET /api/matchups/{id}", s.cached(cache.Public, 30*time.Second, s.getMatchup))
 	mux.HandleFunc("GET /api/scores/{competition}", s.cached(cache.Public, 30*time.Second, s.getScores))
 	mux.HandleFunc("GET /api/scores/{competition}/ws", s.watchScores)
@@ -100,6 +110,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/drafts", s.listDrafts)
 	mux.HandleFunc("GET /api/drafts/{id}", s.getDraft)
 	mux.HandleFunc("GET /api/drafts/{id}/ws", s.watchDraft)
+	presence := newDraftPresence()
+	mux.HandleFunc("GET /api/drafts/{id}/presence/ws", s.member(func(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+		s.watchDraftPresence(w, r, me, presence)
+	}))
 
 	mux.HandleFunc("GET /api/session", s.getSession)
 	mux.HandleFunc("POST /api/auth/login", s.login)
@@ -121,16 +135,27 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("POST /api/leagues/{id}/roster/{action}", s.member(s.changeRoster))
 	mux.HandleFunc("PUT /api/leagues/{id}/lineup", s.member(s.setLineup))
+	mux.HandleFunc("POST /api/leagues/{id}/lineup/auto", s.member(s.autoSetLineup))
 	mux.HandleFunc("POST /api/leagues/{id}/waivers/claims", s.member(s.claimWaiver))
 	mux.HandleFunc("DELETE /api/waivers/claims/{id}", s.member(s.cancelWaiverClaim))
 	mux.HandleFunc("POST /api/trades", s.member(s.proposeTrade))
 	mux.HandleFunc("POST /api/trades/{id}/{action}", s.member(s.answerTrade))
 	mux.HandleFunc("POST /api/drafts/{id}/pick", s.member(s.makePick))
 	mux.HandleFunc("POST /api/drafts/{id}/pass", s.member(s.passPick))
+	mux.HandleFunc("POST /api/drafts/{id}/picks/{pick}/react", s.member(s.reactToPick))
 	mux.HandleFunc("GET /api/drafts/{id}/queue", s.member(s.getQueue))
 	mux.HandleFunc("PUT /api/drafts/{id}/queue", s.member(s.setQueue))
 	mux.HandleFunc("PUT /api/drafts/{id}/autopick", s.member(s.setAutoPick))
 	mux.HandleFunc("POST /api/drafts/{id}/queue/import", s.member(s.importRanking))
+	mux.HandleFunc("GET /api/trade-market", s.member(s.getTradeMarket))
+	mux.HandleFunc("PUT /api/trade-market/block", s.member(s.setTradeBlock))
+	mux.HandleFunc("POST /api/trade-market/wants", s.member(s.addTradeWant))
+	mux.HandleFunc("DELETE /api/trade-market/wants/{id}", s.member(s.removeTradeWant))
+	mux.HandleFunc("PUT /api/trade-market/targets", s.member(s.setTradeTarget))
+	mux.HandleFunc("GET /api/notifications", s.member(s.listNotifications))
+	mux.HandleFunc("GET /api/notifications/summary", s.member(s.notificationSummary))
+	mux.HandleFunc("PATCH /api/notifications/{id}", s.member(s.readNotification))
+	mux.HandleFunc("POST /api/notifications/read", s.member(s.readAllNotifications))
 	mux.HandleFunc("GET /api/watchlist", s.member(s.getWatchlist))
 	mux.HandleFunc("PUT /api/watchlist/order", s.member(s.orderWatchlist))
 	mux.HandleFunc("PUT /api/watchlist/players/{player_id}", s.member(s.addWatchlistPlayer))
@@ -154,6 +179,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/seasons/{id}", s.commissioner(s.setSeasonDates))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/close", s.commissioner(s.closeSeason))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/reopen", s.commissioner(s.reopenSeason))
+	mux.HandleFunc("PUT /api/admin/seasons/{id}/roster-deadline", s.commissioner(s.setRosterDeadline))
+	mux.HandleFunc("PUT /api/admin/seasons/{id}/schedule", s.commissioner(s.setSchedule))
 	mux.HandleFunc("POST /api/admin/seasons/{id}/schedule", s.commissioner(s.generateSchedule))
 	mux.HandleFunc("POST /api/admin/playoffs/advance", s.commissioner(s.advancePlayoffs))
 	mux.HandleFunc("PUT /api/admin/periods/{id}/matchups", s.commissioner(s.setMatchups))
@@ -167,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/admin/drafts/{id}", s.commissioner(s.deleteDraft))
 	mux.HandleFunc("POST /api/admin/drafts/{id}/schedule", s.commissioner(s.scheduleDraft))
 	mux.HandleFunc("PUT /api/admin/drafts/{id}/picks", s.commissioner(s.setDraftPicks))
+	mux.HandleFunc("PUT /api/admin/drafts/{id}/picks/{pick}", s.commissioner(s.overridePick))
 	mux.HandleFunc("POST /api/admin/drafts/{id}/{action}", s.commissioner(s.controlDraft))
 	mux.HandleFunc("POST /api/admin/players", s.commissioner(s.addPlayers))
 	mux.HandleFunc("GET /api/admin/players/merge-suggestions", s.commissioner(s.listMergeSuggestions))

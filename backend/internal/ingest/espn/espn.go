@@ -40,6 +40,11 @@ type League struct {
 	// how ESPN numbers it. See LatestSeason.
 	SeasonStarts     time.Month
 	SeasonSpansYears bool
+	// RosterSeasonStarts selects rosters for the coming season after this
+	// month. College rosters turn over in summer, before games start.
+	// Zero leaves ESPN's default season in place for other leagues.
+	RosterSeasonStarts time.Month
+	RosterAdditions    []RosterAddition
 	// Derive adds stats worked out from a player's line in one game, such
 	// as a double-double. It may be nil.
 	Derive func(stats map[string]float64)
@@ -89,8 +94,10 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 			} `json:"leagues"`
 		} `json:"sports"`
 	}
-	// limit=500 returns every college team in one page.
-	if err := s.client.GetJSON(ctx, fmt.Sprintf("%s/%s/teams?limit=500", s.Base, s.Path), &res); err != nil {
+	// The site listing can omit Division I teams. Conference membership
+	// below supplements it when season-specific college rosters are enabled.
+	url := s.rosterURL(fmt.Sprintf("%s/%s/teams?limit=500", s.Base, s.Path))
+	if err := s.client.GetJSON(ctx, url, &res); err != nil {
 		return nil, err
 	}
 	if len(res.Sports) == 0 || len(res.Sports[0].Leagues) == 0 {
@@ -113,6 +120,7 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 		return nil, fmt.Errorf("espn %s: no conference membership for season %d", s.Path, season)
 	}
 	var teams []ingest.Team
+	listed := map[string]bool{}
 	for _, t := range res.Sports[0].Leagues[0].Teams {
 		if members != nil && !members[t.Team.ID] {
 			continue
@@ -122,6 +130,40 @@ func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
 			team.LogoURL = t.Team.Logos[0].Href
 		}
 		teams = append(teams, team)
+		listed[team.ProviderID] = true
+	}
+	if s.RosterSeasonStarts != 0 {
+		var missing []string
+		for id := range conferences {
+			if !listed[id] && (members == nil || members[id]) {
+				missing = append(missing, id)
+			}
+		}
+		slices.Sort(missing)
+		for _, id := range missing {
+			var res struct {
+				Team struct {
+					ID           string `json:"id"`
+					Abbreviation string `json:"abbreviation"`
+					DisplayName  string `json:"displayName"`
+					Logos        []struct {
+						Href string `json:"href"`
+					} `json:"logos"`
+				} `json:"team"`
+			}
+			url := s.rosterURL(fmt.Sprintf("%s/%s/teams/%s?enable=roster", s.Base, s.Path, id))
+			if err := s.client.GetJSON(ctx, url, &res); err != nil {
+				return nil, fmt.Errorf("conference team %s: %w", id, err)
+			}
+			if res.Team.ID != id || res.Team.DisplayName == "" {
+				return nil, fmt.Errorf("espn %s: missing details for conference team %s", s.Path, id)
+			}
+			team := ingest.Team{ProviderID: id, Conference: conferences[id], Abbrev: res.Team.Abbreviation, Name: res.Team.DisplayName}
+			if len(res.Team.Logos) > 0 {
+				team.LogoURL = res.Team.Logos[0].Href
+			}
+			teams = append(teams, team)
+		}
 	}
 	return teams, nil
 }
@@ -198,16 +240,14 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 				Position    struct {
 					Abbreviation string `json:"abbreviation"`
 				} `json:"position"`
-				Headshot struct {
-					Href string `json:"href"`
-				} `json:"headshot"`
+				Headshot   rosterHeadshot `json:"headshot"`
 				Experience struct {
 					Abbreviation string `json:"abbreviation"` // class year, college only
 				} `json:"experience"`
 			} `json:"athletes"`
 		} `json:"team"`
 	}
-	url := fmt.Sprintf("%s/%s/teams/%s?enable=roster", s.Base, s.Path, team.ProviderID)
+	url := s.rosterURL(fmt.Sprintf("%s/%s/teams/%s?enable=roster", s.Base, s.Path, team.ProviderID))
 	if err := s.client.GetJSON(ctx, url, &res); err != nil {
 		return nil, err
 	}
@@ -234,7 +274,7 @@ func (s *Source) Roster(ctx context.Context, team ingest.Team) ([]ingest.Player,
 		}
 		players = append(players, p)
 	}
-	return players, nil
+	return s.addRosterPlayers(players, team.ProviderID, time.Now()), nil
 }
 
 // Games lists a day's games from the scoreboard.
@@ -274,8 +314,9 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	status := map[string]string{"pre": ingest.GameScheduled, "in": ingest.GameLive, "post": ingest.GameFinal}
 	var games []ingest.Game
 	for _, e := range res.Events {
-		if e.Season.Type != 2 {
-			continue // Exclude preseason, postseason, and unclassified games.
+		if e.Season.Type != 2 { // preseason, postseason and unclassified games
+			games = append(games, ingest.Game{ProviderID: e.ID, NonRegular: true})
+			continue
 		}
 		starts, err := time.Parse("2006-01-02T15:04Z07:00", e.Date)
 		if err != nil || len(e.Competitions) == 0 {
@@ -416,6 +457,7 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 				Pages int `json:"pages"`
 			} `json:"pagination"`
 			RequestedSeason struct {
+				Year        int    `json:"year"`
 				DisplayName string `json:"displayName"`
 			} `json:"requestedSeason"`
 			// The names of each group's stats, in the order every athlete's totals follow.
@@ -440,6 +482,21 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 			s.WebBase, s.Path, year, page)
 		if err := s.client.GetTransient(ctx, url, &res); err != nil {
 			return nil, err
+		}
+		// Unpublished years can silently return last season's statistics.
+		// Never store that fallback under the year we requested.
+		returnedYear := res.RequestedSeason.Year
+		labelYear := 0
+		label := strings.TrimSpace(res.RequestedSeason.DisplayName)
+		if start, _, spans := strings.Cut(label, "-"); s.SeasonSpansYears && spans && len(start) == 4 {
+			if n, err := strconv.Atoi(start); err == nil {
+				labelYear = n + 1
+			}
+		} else if len(label) == 4 {
+			labelYear, _ = strconv.Atoi(label)
+		}
+		if (returnedYear != 0 && returnedYear != year) || (labelYear != 0 && labelYear != year) {
+			return nil, nil
 		}
 		pages = res.Pagination.Pages
 
@@ -599,6 +656,9 @@ type Draft struct {
 	Provider string     // the league's athlete id space
 	Month    time.Month // when the draft is held
 	Classes  int        // how many past drafts' picks are listed
+	// PicksOnly excludes the next draft board, which still contains college
+	// players. Completed professional draft picks remain eligible.
+	PicksOnly bool
 	// Positions, when set, keeps only prospects at these positions.
 	Positions []string
 	client    *ingest.Client
@@ -642,6 +702,9 @@ func (d *Draft) Prospects(ctx context.Context) ([]ingest.Player, error) {
 		}
 	}
 
+	if d.PicksOnly {
+		return players, nil
+	}
 	var board struct {
 		Items []ref `json:"items"`
 	}

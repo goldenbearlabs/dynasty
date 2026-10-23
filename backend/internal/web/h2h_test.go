@@ -14,6 +14,7 @@ import (
 	"crossover/internal/dbtest"
 	"crossover/internal/dynasty"
 	"crossover/internal/players"
+	"crossover/internal/scoring"
 	"crossover/internal/settings"
 	"crossover/internal/sportsday"
 )
@@ -46,6 +47,8 @@ func TestHeadToHeadFlow(t *testing.T) {
 	rules.Roster.ReserveEligibility = "anyone"
 	rules.Scoring = map[string]float64{"pts": 1}
 	rules.Format.Type, rules.Format.MatchupDays, rules.Format.PlayoffTeams = "head_to_head", 1, 2
+	noConsolation := false // This fixture covers a single championship final.
+	rules.Format.Consolation = &noConsolation
 	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
 		Name:     "Head To Head Test",
 		Settings: dynastySettings(10, 7, 5, 3),
@@ -234,14 +237,23 @@ func TestHeadToHeadFlow(t *testing.T) {
 	var detail struct {
 		Competition string
 		HomePlayers []struct {
-			FullName string `json:"full_name"`
-			Points   float64
+			FullName  string `json:"full_name"`
+			Points    float64
+			GameLines []scoring.ScoredGame `json:"game_lines"`
 		} `json:"home_players"`
 		AwayPoints float64 `json:"away_points"`
 	}
 	ann.want(http.StatusOK, "GET", "/api/matchups/"+final.Matchups[0].ID, nil, &detail)
 	if detail.Competition != "nba" || len(detail.HomePlayers) != 1 || detail.HomePlayers[0].FullName != "Zh Ann Star" || detail.AwayPoints != 99 {
 		t.Errorf("matchup detail = %+v", detail)
+	}
+
+	if len(detail.HomePlayers) != 1 || len(detail.HomePlayers[0].GameLines) != 1 {
+		t.Fatalf("matchup must include the counted per-game breakdown: %+v", detail)
+	}
+	counted := detail.HomePlayers[0].GameLines[0]
+	if counted.Points != detail.HomePlayers[0].Points || counted.Stats["pts"] != 40 || counted.Slot != "UTIL" || counted.Day != day(1).Format(time.DateOnly) || !counted.GameID.Valid {
+		t.Fatalf("counted game must explain the official score: %+v", counted)
 	}
 
 	// The schedule cannot be rebuilt once the playoffs have begun.

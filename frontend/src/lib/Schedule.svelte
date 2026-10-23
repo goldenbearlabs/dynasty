@@ -28,7 +28,7 @@
 	const regular = $derived(periods?.filter((p) => !p.is_playoff).length ?? 0);
 	const unit = $derived(league.settings.format.matchup_days === 7 ? 'Week' : 'Matchup');
 	const label = (p: SchedulePeriod) =>
-		!p.is_playoff ? `${unit} ${p.seq}` : p.seq === periods?.at(-1)?.seq ? 'Final' : `Playoffs, round ${p.seq - regular}`;
+		!p.is_playoff ? `${unit} ${p.seq}` : p.seq === periods?.at(-1)?.seq ? 'Finals' : `Playoffs, round ${p.seq - regular}`;
 	const days = (p: SchedulePeriod) => (p.starts_on === p.ends_on ? dayLabel(p.starts_on) : `${dayLabel(p.starts_on)} – ${dayLabel(p.ends_on)}`);
 
 	// The team's side of each period: who it plays and how it is going.
@@ -94,6 +94,7 @@
 								<div class="games">
 									{#each period.matchups as m (m.id)}
 										<span class="game">
+											{#if period.is_playoff}<span class="pill">{m.bracket === 'consolation' ? 'Consolation' : 'Championship'}</span>{/if}
 											<span class="side">{identity(m.home_franchise_id).name}</span>
 											{#if m.away_franchise_id}
 												{#if started(period)}{@render score(period, m, m.home_points, m.away_points)}{:else}<a href="/matchups/{m.id}">vs</a>{/if}

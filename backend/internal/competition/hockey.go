@@ -31,6 +31,8 @@ func nhl(client *ingest.Client) Competition {
 			{"pim", "Penalty minutes"}, {"plus_minus", "Plus/minus"},
 			{"saves", "Saves"}, {"goals_against", "Goals against"}, {"goalie_wins", "Goalie wins"}, {"shutouts", "Shutouts"},
 		},
+		// A goalie faces the other side's shots.
+		Follows:   map[string]string{"saves": "opponent", "goals_against": "opponent", "goalie_wins": "win", "shutouts": "none"},
 		Defaults:  rules,
 		Season:    [2]string{"10-07", "04-16"},
 		Source:    source,

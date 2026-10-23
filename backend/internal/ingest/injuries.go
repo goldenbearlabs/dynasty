@@ -28,41 +28,51 @@ func (s *Syncer) SyncInjuries(ctx context.Context, competition string, src Injur
 			if err != nil {
 				return err
 			}
-			names := map[string][]pgtype.UUID{}
-			known := map[pgtype.UUID]bool{}
-			for _, p := range players {
-				names[injuryName(p.FullName)] = append(names[injuryName(p.FullName)], p.ID)
-				known[p.ID] = true
-			}
-			updates := map[pgtype.UUID]string{}
+			match := playerMatcher(ctx, q, players)
+			listed := map[pgtype.UUID]string{}
 			for _, entry := range entries {
-				var id pgtype.UUID
-				if entry.ProviderID != "" {
-					id, _ = q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: entry.Provider, ProviderID: entry.ProviderID})
+				if id, ok := match(entry.Provider, entry.ProviderID, entry.FullName); ok {
+					listed[id] = entry.Designation
 				}
-				if !known[id] {
-					// NHL/MLB use different providers. Only an unambiguous exact normalized name can bridge them.
-					candidates := names[injuryName(entry.FullName)]
-					if len(candidates) != 1 {
-						continue
+			}
+			matched = len(listed)
+			// Only players whose designation changed are written, so a feed
+			// read often does not keep emptying the cache.
+			for _, p := range players {
+				if listed[p.ID] != p.InjuryDesignation {
+					if err := q.SetInjuryDesignation(ctx, db.SetInjuryDesignationParams{ID: p.ID, InjuryDesignation: listed[p.ID]}); err != nil {
+						return err
 					}
-					id = candidates[0]
 				}
-				updates[id] = entry.Designation
-			}
-			if err := q.ClearInjuryDesignations(ctx, competition); err != nil {
-				return err
-			}
-			for id, designation := range updates {
-				if err := q.SetInjuryDesignation(ctx, db.SetInjuryDesignationParams{ID: id, InjuryDesignation: designation}); err != nil {
-					return err
-				}
-				matched++
 			}
 			return nil
 		})
 		return matched, err
 	})
+}
+
+// playerMatcher finds a competition's player from another feed's entry: by
+// the feed's id when he has one there, otherwise by an exact normalized
+// name, which is how ESPN entries reach the NHL and MLB feeds' players.
+func playerMatcher(ctx context.Context, q *db.Queries, players []db.ListInjuryPlayersRow) func(provider, providerID, name string) (pgtype.UUID, bool) {
+	names := map[string][]pgtype.UUID{}
+	known := map[pgtype.UUID]bool{}
+	for _, p := range players {
+		names[injuryName(p.FullName)] = append(names[injuryName(p.FullName)], p.ID)
+		known[p.ID] = true
+	}
+	return func(provider, providerID, name string) (pgtype.UUID, bool) {
+		if providerID != "" {
+			if id, _ := q.FindPlayerByExternalID(ctx, db.FindPlayerByExternalIDParams{Provider: provider, ProviderID: providerID}); known[id] {
+				return id, true
+			}
+		}
+		// Only an unambiguous name can bridge two feeds.
+		if candidates := names[injuryName(name)]; len(candidates) == 1 {
+			return candidates[0], true
+		}
+		return pgtype.UUID{}, false
+	}
 }
 
 func injuryName(name string) string {

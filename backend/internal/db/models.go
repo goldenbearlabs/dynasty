@@ -19,6 +19,10 @@ type CacheRevision struct {
 	PublicTransaction   int64       `json:"public_transaction"`
 }
 
+type CustomSchedule struct {
+	SeasonID pgtype.UUID `json:"season_id"`
+}
+
 type Draft struct {
 	ID               pgtype.UUID        `json:"id"`
 	DynastyID        pgtype.UUID        `json:"dynasty_id"`
@@ -56,6 +60,13 @@ type DraftPick struct {
 	AutoPicked          bool               `json:"auto_picked"`
 	SkippedAt           pgtype.Timestamptz `json:"skipped_at"`
 	PassedAt            pgtype.Timestamptz `json:"passed_at"`
+}
+
+type DraftPickReaction struct {
+	PickID      pgtype.UUID        `json:"pick_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Emoji       string             `json:"emoji"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type DraftQueue struct {
@@ -104,6 +115,9 @@ type Game struct {
 	HomeScore     int32              `json:"home_score"`
 	AwayScore     int32              `json:"away_score"`
 	Detail        string             `json:"detail"`
+	HomeImplied   pgtype.Float8      `json:"home_implied"`
+	AwayImplied   pgtype.Float8      `json:"away_implied"`
+	HomeWin       pgtype.Float8      `json:"home_win"`
 }
 
 type IngestRun struct {
@@ -148,6 +162,7 @@ type LineupEntry struct {
 	SlotIndex   int32       `json:"slot_index"`
 	PlayerID    pgtype.UUID `json:"player_id"`
 	CountsFrom  pgtype.Date `json:"counts_from"`
+	CountsLast  bool        `json:"counts_last"`
 }
 
 type Matchup struct {
@@ -155,16 +170,34 @@ type Matchup struct {
 	PeriodID        pgtype.UUID `json:"period_id"`
 	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
 	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
+}
+
+type Notification struct {
+	ID          int64              `json:"id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Kind        string             `json:"kind"`
+	Title       string             `json:"title"`
+	Body        string             `json:"body"`
+	Href        string             `json:"href"`
+	Competition string             `json:"competition"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	WaiverUntil pgtype.Timestamptz `json:"waiver_until"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ReadAt      pgtype.Timestamptz `json:"read_at"`
 }
 
 type Period struct {
-	ID        pgtype.UUID `json:"id"`
-	SeasonID  pgtype.UUID `json:"season_id"`
-	Seq       int32       `json:"seq"`
-	StartsOn  pgtype.Date `json:"starts_on"`
-	EndsOn    pgtype.Date `json:"ends_on"`
-	IsPlayoff bool        `json:"is_playoff"`
-	ByHand    bool        `json:"by_hand"`
+	ID          pgtype.UUID `json:"id"`
+	SeasonID    pgtype.UUID `json:"season_id"`
+	Seq         int32       `json:"seq"`
+	StartsOn    pgtype.Date `json:"starts_on"`
+	EndsOn      pgtype.Date `json:"ends_on"`
+	IsPlayoff   bool        `json:"is_playoff"`
+	ByHand      bool        `json:"by_hand"`
+	DoubleGames bool        `json:"double_games"`
 }
 
 type PeriodScore struct {
@@ -189,6 +222,11 @@ type Player struct {
 	CareerCheckedAt   pgtype.Timestamptz `json:"career_checked_at"`
 	InjuryDesignation string             `json:"injury_designation"`
 	InjuryCheckedAt   pgtype.Timestamptz `json:"injury_checked_at"`
+	PoolEligible      bool               `json:"pool_eligible"`
+	DraftYear         pgtype.Int4        `json:"draft_year"`
+	DraftRound        pgtype.Int4        `json:"draft_round"`
+	DraftPick         pgtype.Int4        `json:"draft_pick"`
+	DraftOverall      pgtype.Int4        `json:"draft_overall"`
 }
 
 type PlayerExternalID struct {
@@ -228,6 +266,23 @@ type ProTeam struct {
 	Conference  string      `json:"conference"`
 }
 
+type ProbableStarter struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Confirmed   bool        `json:"confirmed"`
+}
+
+type ProspectRanking struct {
+	PlayerID  pgtype.UUID        `json:"player_id"`
+	Source    string             `json:"source"`
+	Year      int32              `json:"year"`
+	Rank      int32              `json:"rank"`
+	Eta       string             `json:"eta"`
+	SourceUrl string             `json:"source_url"`
+	SyncedAt  pgtype.Timestamptz `json:"synced_at"`
+}
+
 type Ranking struct {
 	ID          pgtype.UUID        `json:"id"`
 	FranchiseID pgtype.UUID        `json:"franchise_id"`
@@ -263,13 +318,20 @@ type RosterEntry struct {
 }
 
 type Season struct {
-	ID                  pgtype.UUID `json:"id"`
-	LeagueID            pgtype.UUID `json:"league_id"`
-	Year                int32       `json:"year"`
-	StartsOn            pgtype.Date `json:"starts_on"`
-	EndsOn              pgtype.Date `json:"ends_on"`
-	Status              string      `json:"status"`
-	ChampionFranchiseID pgtype.UUID `json:"champion_franchise_id"`
+	ID                  pgtype.UUID        `json:"id"`
+	LeagueID            pgtype.UUID        `json:"league_id"`
+	Year                int32              `json:"year"`
+	StartsOn            pgtype.Date        `json:"starts_on"`
+	EndsOn              pgtype.Date        `json:"ends_on"`
+	Status              string             `json:"status"`
+	ChampionFranchiseID pgtype.UUID        `json:"champion_franchise_id"`
+	RosterDeadline      pgtype.Timestamptz `json:"roster_deadline"`
+}
+
+type SeasonRoster struct {
+	SeasonID    pgtype.UUID        `json:"season_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	SetAt       pgtype.Timestamptz `json:"set_at"`
 }
 
 type Secret struct {
@@ -298,6 +360,16 @@ type Trade struct {
 	Note       string             `json:"note"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
+	Drops      json.RawMessage    `json:"drops"`
+	DeclinedBy pgtype.UUID        `json:"declined_by"`
+}
+
+type TradeBlock struct {
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	Note        string             `json:"note"`
+	AddedAt     pgtype.Timestamptz `json:"added_at"`
 }
 
 type TradeItem struct {
@@ -314,6 +386,22 @@ type TradeParty struct {
 	TradeID     pgtype.UUID        `json:"trade_id"`
 	FranchiseID pgtype.UUID        `json:"franchise_id"`
 	AcceptedAt  pgtype.Timestamptz `json:"accepted_at"`
+}
+
+type TradeTarget struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type TradeWant struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	Positions   []string           `json:"positions"`
+	Note        string             `json:"note"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID          pgtype.UUID        `json:"id"`
 }
 
 type Transaction struct {
@@ -361,4 +449,13 @@ type WaiverOrder struct {
 	LeagueID    pgtype.UUID `json:"league_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`
 	Position    int32       `json:"position"`
+}
+
+type WatchlistEntry struct {
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	Priority    int64              `json:"priority"`
+	Category    string             `json:"category"`
+	Notes       string             `json:"notes"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }

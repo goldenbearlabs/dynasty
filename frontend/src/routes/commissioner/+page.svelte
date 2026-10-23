@@ -19,7 +19,7 @@
 	const tabs: { value: Section; label: string }[] = [
 		{ value: 'franchises', label: 'Franchises' },
 		{ value: 'rules', label: 'Rules' },
-		{ value: 'seasons', label: 'Seasons' },
+		{ value: 'seasons', label: 'Seasons & schedule' },
 		{ value: 'drafts', label: 'Drafts' },
 		{ value: 'players', label: 'Player pool' },
 		{ value: 'review', label: 'Review' },

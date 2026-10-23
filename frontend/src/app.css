@@ -409,6 +409,37 @@ td.actions > * + * {
 	font-weight: 500;
 }
 
+/* Drag to reorder (lib/ui/reorder.ts): the handle, and a list in mid-drag. */
+[data-grip] {
+	display: flex;
+	flex: none;
+	padding: 0.2rem 0;
+	color: var(--ink-faint);
+	cursor: grab;
+	touch-action: none;
+}
+[data-grip]:hover {
+	color: var(--ink);
+}
+.reordering {
+	user-select: none;
+	-webkit-user-select: none;
+}
+.reordering,
+.reordering [data-grip] {
+	cursor: grabbing;
+}
+.reordering > * {
+	transition: transform 0.15s;
+}
+.reordering > .dragging {
+	position: relative;
+	z-index: 1;
+	transition: none;
+	background: var(--surface-2);
+	box-shadow: 0 0 0 1px var(--rule-strong), 0 6px 16px rgb(0 0 0 / 0.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;

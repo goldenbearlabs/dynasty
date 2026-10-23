@@ -104,8 +104,9 @@ func (s *Server) createSeason(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setSeasonDates(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		StartsOn string `json:"starts_on"`
-		EndsOn   string `json:"ends_on"`
+		StartsOn      string `json:"starts_on"`
+		EndsOn        string `json:"ends_on"`
+		ResetSchedule bool   `json:"reset_schedule"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -115,6 +116,11 @@ func (s *Server) setSeasonDates(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if body.ResetSchedule {
+		s.done(w, r, s.Scoring.RestartSeason(r.Context(), id, body.StartsOn, body.EndsOn))
+		return
+	}
+
 	s.done(w, r, s.Scoring.SetSeasonDates(r.Context(), id, body.StartsOn, body.EndsOn))
 }
 
@@ -193,15 +199,50 @@ func (s *Server) setLineup(w http.ResponseWriter, r *http.Request, me db.Franchi
 		s.fail(w, r, problem.New("The day must look like 2026-10-20."))
 		return
 	}
-	franchiseID := me.ID
-	if body.FranchiseID.Valid && body.FranchiseID != me.ID {
-		if !me.IsCommissioner {
-			writeError(w, http.StatusForbidden, "You can only set your own lineup.")
-			return
-		}
-		franchiseID = body.FranchiseID
+	franchiseID, ok := lineupOwner(w, me, body.FranchiseID)
+	if !ok {
+		return
 	}
 	s.done(w, r, s.Lineups.Set(r.Context(), league, franchiseID, day, body.Entries, body.Force && me.IsCommissioner))
+}
+
+// autoSetLineup sets the best lineup for the rest of the week from a day.
+func (s *Server) autoSetLineup(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	var body struct {
+		Day         string      `json:"day"`
+		FranchiseID pgtype.UUID `json:"franchise_id"` // commissioner only
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	league, err := s.leagueFromPath(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	day, err := sportsday.Parse(body.Day)
+	if err != nil {
+		s.fail(w, r, problem.New("The day must look like 2026-10-20."))
+		return
+	}
+	franchiseID, ok := lineupOwner(w, me, body.FranchiseID)
+	if !ok {
+		return
+	}
+	s.done(w, r, s.Lineups.AutoSet(r.Context(), league, franchiseID, day))
+}
+
+// lineupOwner is whose lineup a request sets: the signed-in franchise's, or
+// another's when a commissioner asks.
+func lineupOwner(w http.ResponseWriter, me db.Franchise, asked pgtype.UUID) (pgtype.UUID, bool) {
+	if !asked.Valid || asked == me.ID {
+		return me.ID, true
+	}
+	if !me.IsCommissioner {
+		writeError(w, http.StatusForbidden, "You can only set your own lineup.")
+		return pgtype.UUID{}, false
+	}
+	return asked, true
 }
 
 func (s *Server) leagueFromPath(r *http.Request) (db.League, error) {

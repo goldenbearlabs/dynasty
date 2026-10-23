@@ -25,7 +25,12 @@ export type LeagueSettings = {
 		pitcher_starts_per_week: number;
 	};
 	scoring: Record<string, number>;
-	format: { type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number };
+	format: {
+ type: 'total_points' | 'head_to_head'; matchup_days: number; playoff_teams: number;
+ standings_by?: 'record' | 'win_percentage' | 'points';
+ tiebreakers?: ('points_for' | 'head_to_head' | 'points_against')[];
+ reseed?: boolean; consolation?: boolean | null; consolation_seeding?: 'bottom_first' | 'top_first';
+ };
 	/** weekly_limit: acquisitions a franchise may make in a week; 0 for no limit. */
 	free_agency: { mode: 'open' | 'closed'; new_entrants_draft_only: boolean; weekly_limit: number };
 	/** What happens to a dropped player: days on waivers, and how claims are ordered. */
@@ -106,7 +111,23 @@ export type Dynasty = {
 	franchises: Franchise[];
 };
 
-export type Player = {
+export type ProspectRankingFields = {
+ prospect_rank: number | null; prospect_rank_year: number | null;
+ prospect_rank_source: string; prospect_rank_url: string; prospect_eta: string;
+};
+
+/** Where a player was drafted into his league: year, round, place in the round, overall. Null when undrafted or unknown. */
+export type DraftSlot = { draft_year: number | null; draft_round: number | null; draft_pick: number | null; draft_overall: number | null };
+
+/** A prospect on the MLB Pipeline Top 100. */
+export type ProspectRanking = { player_id: string; rank: number; year: number; eta: string; source_url: string };
+export const getProspectRankings = () => request<ProspectRanking[]>('GET', '/prospect-rankings');
+
+export type Player = ProspectRankingFields & DraftSlot & {
+	roster_list: string;
+	season_games: number;
+	season_scored?: boolean;
+	season_stats: Record<string, number>;
 	id: string;
 	competition: string;
 	status: 'prospect' | 'active' | 'inactive';
@@ -238,7 +259,7 @@ export type ProfileGame = { id: string; competition: string; day: string; starts
 export type PlayerGameLog = { games: ProfileGame[]; total: number; page: number; per_page: number };
 export type PlayerProfile = {
  fantasy_production: { season_id: string; year: number; competition: string; franchise_name: string; franchise_slug: string; games: number; points: number }[];
- player: Pick<Player, 'injury_designation' | 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
+ player: ProspectRankingFields & Pick<Player, 'injury_designation' | 'id' | 'competition' | 'status' | 'full_name' | 'positions' | 'birth_date' | 'class' | 'note' | 'headshot_url'> & { team_abbrev: string };
  seasons: ProfileSeason[]; game_log: PlayerGameLog; timeline: PlayerTimeline;
  ownership: { league_id: string; competition: string; league_name: string; franchise_name: string; franchise_slug: string;
  franchise_id: string; list: string; acquired_via: string; acquired_at: string; reserved_at: string | null; slot: string }[];
@@ -253,8 +274,15 @@ export type PlayerProfile = {
 };
 
 export type PlayerFilter = {
+	ascending?: string;
+	per_game?: string;
+	stat_key?: string;
+	ownership?: string;
+	owners?: string;
 	competition?: string;
 	status?: string;
+	/** "true": only prospects on the MLB Pipeline (MLB.com) Top 100. */
+	ranked_only?: string;
 	q?: string;
 	/** One of the sport's positions. */
 	position?: string;
@@ -270,7 +298,7 @@ export type PlayerFilter = {
 	page?: number;
 };
 
-export type RosterPlayer = {
+export type RosterPlayer = DraftSlot & {
  injury_reserve_locked: boolean;
  nickname: string;
 	player_id: string;
@@ -300,6 +328,34 @@ export type LeagueRoster = {
 	limits: LeagueSettings['roster'];
 	overage: number;
 	players: RosterPlayer[];
+	/** The season the commissioner has opened, and where this franchise stands with its roster for it; null when none is open. */
+	season: SeasonRoster | null;
+};
+
+export type RosterPerformancePlayer = {
+ player_id: string; games: number; stats: Record<string,number>; points: number; points_per_game: number;
+ overall_rank: number | null; position_ranks: Record<string,number>;
+};
+export type RosterPerformance = {
+ current_season: string; window: string; season: string; from_day: string; to_day: string; source: 'games' | 'season';
+ ranked_players: number; seasons: {label:string;year:number}[]; players: RosterPerformancePlayer[];
+};
+
+export type SeasonRoster = {
+	id: string;
+	year: number;
+	starts_on: string;
+	ends_on: string;
+	/** When the franchise set its roster for the season; null until it has. */
+	set_at: string | null;
+	/** The season's first day has come. */
+	started: boolean;
+	/** Players stay on the list they are on until the season ends. */
+	locked: boolean;
+	/** When rosters not yet set lock as they stand; null for no deadline. */
+	deadline: string | null;
+	/** The deadline has passed. */
+	expired: boolean;
 };
 
 /** An unused draft pick a franchise holds. */
@@ -379,9 +435,13 @@ export type Season = {
 	ends_on: string;
 	status: 'active' | 'complete';
 	champion_franchise_id: string | null;
+	/** When rosters not yet set for the season lock as they stand; null for no deadline. */
+	roster_deadline: string | null;
 };
 
 export type StandingsRow = {
+	points_for: number;
+	points_against: number;
 	franchise_id: string;
 	points: number;
 	/** A head-to-head league's record over its finished regular-season matchups. */
@@ -393,6 +453,7 @@ export type StandingsRow = {
 
 /** One league's table for its latest season, best first. */
 export type Standings = {
+	consolation_champion_id: string | null;
 	league_id: string;
 	competition: string;
 	format: LeagueSettings['format']['type'];
@@ -402,11 +463,14 @@ export type Standings = {
 
 // ---- head-to-head ----
 
-/** by_hand: the commissioner set its matchups, so the schedule leaves them alone. */
-export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean; by_hand: boolean };
+/** by_hand: the commissioner set its matchups, so the schedule leaves them alone.
+ * double_games: a long matchup in which slots count twice the games and the pitcher start cap doubles. */
+export type Period = { id: string; seq: number; starts_on: string; ends_on: string; is_playoff: boolean; by_hand: boolean; double_games: boolean };
 
 export type Matchup = {
 	id: string;
+	bracket: 'championship' | 'consolation';
+	bracket_slot: number;
 	home_franchise_id: string;
 	away_franchise_id: string | null; // null for a bye
 	home_points: number;
@@ -416,15 +480,29 @@ export type Matchup = {
 
 /** A period of a season's schedule; its matchups have no points until it starts. */
 export type SchedulePeriod = Period & { matchups: Matchup[] };
+export type GameDayCount = { day: string; games: number };
+export type MatchupPairing = Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'> & Partial<Pick<Matchup, 'bracket' | 'bracket_slot'>>;
+export type CustomPeriod = Pick<Period, 'starts_on' | 'ends_on' | 'is_playoff' | 'double_games'> & {
+ matchups: MatchupPairing[] | null;
+};
 
 /** One period of a head-to-head season. */
 export type Matchups = { periods: Period[]; period: Period | null; matchups: Matchup[] };
 
+export type ScoredGame = {
+ game_id: string; day: string; slot: string; points: number; stats: Record<string, number>;
+ starts_at: string; status: string; home: string; away: string; positions: string[];
+};
+export type MatchupScorer = StandingsRow['players'][number] & { game_lines?: ScoredGame[] };
+
 export type MatchupDetail = Matchup & {
 	competition: string;
 	period: Period;
-	home_players: StandingsRow['players'];
-	away_players: StandingsRow['players'];
+	home_players: MatchupScorer[];
+	away_players: MatchupScorer[];
+	/** Each side's points so far plus what its starters are projected to add; null once final, or for a bye. */
+	home_projected: number | null;
+	away_projected: number | null;
 };
 
 // ---- scores ----
@@ -481,10 +559,18 @@ export type ReviewItem = {
 export type OverallYear = {
 	year: number;
 	final: boolean;
-	rows: { franchise_id: string; points: number; finishes: Record<string, number> }[];
+	/** adjusted_points: points for above each league's median, summed across leagues. */
+	rows: { franchise_id: string; points: number; finishes: Record<string, number>; wins: number; losses: number; ties: number; adjusted_points: number }[];
+};
+
+/** Simulated chances, 0 to 1: a playoff place in each league, and the overall title. */
+export type Odds = {
+	leagues: { league_id: string; competition: string; rows: { franchise_id: string; playoffs: number; clinched: boolean; eliminated: boolean; wins: number; losses: number; place: number }[] }[];
+	overall: { franchise_id: string; title: number; points: number }[];
 };
 
 export type LineupGame = {
+ game_id?: string;
 	day: string;
 	starts_at: string;
 	status: string;
@@ -493,6 +579,14 @@ export type LineupGame = {
 	points: number;
 	/** False for a game left out by a slot that counts only some games a week. */
 	counts: boolean;
+	/** Whether a feed has him starting in goal or on the mound; other: a teammate at his position is. */
+	starter: '' | 'confirmed' | 'expected' | 'other';
+	/** Projected fantasy points in a game still to be played, from his recent seasons and the betting line. */
+	projected: number;
+	/** The same projection for any game, kept once it starts: what was expected of him, given that he plays. */
+	expected?: number;
+	/** His stat line by the competition's stat keys; empty until he plays. */
+	stats: Record<string, number>;
 };
 
 export type LineupPlayer = {
@@ -504,9 +598,13 @@ export type LineupPlayer = {
 	positions: string[];
 	headshot_url: string;
 	team_abbrev: string;
+	/** An injured-list designation (IR, IL10, OUT…), or empty. */
+	injury: string;
 	slot: string; // empty on the bench
 	/** The day his counted games begin, in a slot that counts only some; empty for his first game. */
 	counts_from: string;
+	/** In a slot that counts only some games, on auto: his last games of the week with a stat count. */
+	counts_last: boolean;
 	locked: boolean;
 	points: number;
 	games: LineupGame[];
@@ -521,11 +619,14 @@ export type Lineup = {
 	locked: string; // why the whole lineup cannot change, or empty
 	/** The week's pitcher starts against the league's cap; null in a league without one. */
 	starts: { limit: number; made: { player_id: string; full_name: string; day: string; innings: number; counts: boolean }[] } | null;
+	/** Set in a matchup the commissioner doubled: twice the games count, and the start cap doubles, over the whole matchup. */
+	doubled: { starts_on: string; ends_on: string } | null;
 };
 
 export type LineupChange = {
 	day: string;
-	entries: { slot: string; player_id: string; counts_from?: string }[];
+	/** auto: in a slot that counts only some games, count his last games with a stat, not a picked one. */
+	entries: { slot: string; player_id: string; counts_from?: string; auto?: boolean }[];
 	franchise_id?: string;
 	force?: boolean;
 };
@@ -535,7 +636,10 @@ export type LineupChange = {
 export type TradeStatus = 'proposed' | 'accepted' | 'executed' | 'rejected' | 'cancelled' | 'reversed';
 
 /** One asset changing hands, as shown in a trade. */
+export type TradeDrop = { franchise_id: string; league_id: string; player_id: string; list: string; name: string };
+
 export type TradeItem = {
+ league_id: string | null;
 	id: string;
 	from_franchise: string;
 	to_franchise: string;
@@ -551,6 +655,7 @@ export type TradeItem = {
 };
 
 export type Trade = {
+ drops: TradeDrop[];
 	id: string;
 	status: TradeStatus;
 	proposed_by: string;
@@ -570,7 +675,7 @@ export type OfferItem = {
 	draft_pick_id?: string;
 };
 
-export type TradeAnswer = 'accept' | 'reject' | 'cancel';
+export type TradeAnswer = 'accept' | 'reject' | 'cancel' | 'drops';
 export type TradeRuling = 'approve' | 'veto' | 'reverse';
 
 // ---- drafts ----
@@ -608,6 +713,10 @@ export type DraftPick = {
 	player_positions: string[];
 	player_headshot: string;
 	competition: string;
+	/** For the draft's stats: the player's birth date, his year in college and his team. */
+	player_birth_date: string | null;
+	player_class: string;
+	player_team: string;
 };
 
 export type DraftState = {
@@ -617,7 +726,11 @@ export type DraftState = {
 	on_clock_pick_id: string | null;
 	/** Franchises with auto pick on: their picks are made for them a few seconds after they come up. */
 	auto_pick_franchise_ids: string[];
+	/** Managers' emoji on made picks, oldest first. */
+	reactions: PickReaction[];
 };
+
+export type PickReaction = { pick_id: string; franchise_id: string; emoji: string };
 
 /** What the draft room's live connection sends. */
 export type DraftMessage = DraftState & { type: 'state' | 'update' };
@@ -715,7 +828,8 @@ export type Waivers = {
 };
 export type WaiverClaim = { player_id: string; drop_player_id?: string; bid: number; list?: 'main' | 'reserve' };
 
-export type RosterChange = { player_id: string; replacement_id?: string; list?: List; franchise_id?: string; force?: boolean };
+/** drop_player_id, for an add: released to make room, in the same move. */
+export type RosterChange = { player_id: string; replacement_id?: string; drop_player_id?: string; list?: List; franchise_id?: string; force?: boolean };
 /** A franchise's whole reserve list; everyone else it has signed goes to the main roster. */
 export type RosterSplit = { reserve: string[]; franchise_id?: string; force?: boolean };
 
@@ -784,6 +898,41 @@ export const updateLeagueSettings = (leagueId: string, settings: LeagueSettings)
 
 export const addLeague = (competition: string) => request<League>('POST', '/admin/leagues', { competition });
 
+/** A real team, for its logo. */
+export type ProTeam = { competition: string; abbrev: string; name: string; logo_url: string };
+export const getTeams = () => request<ProTeam[]>('GET', '/teams');
+/** A player on the trade market: on a manager's block, or someone a manager wants. */
+export type MarketPlayer = {
+	league_id: string;
+	competition: string;
+	player_id: string;
+	full_name: string;
+	positions: string[];
+	headshot_url: string;
+	team_abbrev: string;
+	list: List;
+};
+export type BlockEntry = MarketPlayer & { franchise_id: string; note: string; added_at: string };
+export type TradeWants = { id: string; franchise_id: string; league_id: string; competition: string; positions: string[]; note: string; updated_at: string };
+export type TradeTarget = MarketPlayer & { by_franchise_id: string; owner_franchise_id: string; created_at: string };
+/** The trade market as the signed-in manager sees it. Targets are seen only by whoever set them and the player's owner. */
+export type TradeMarket = {
+	block: BlockEntry[];
+	wants: TradeWants[];
+	/** Players this manager is after. */
+	targets: TradeTarget[];
+	/** This manager's players others are after. */
+	interest: TradeTarget[];
+};
+export const getTradeMarket = () => request<TradeMarket>('GET', '/trade-market');
+export const setTradeBlock = (change: { league_id: string; player_id: string; on: boolean; note?: string }) =>
+	request<void>('PUT', '/trade-market/block', change);
+export const addTradeWant = (want: { league_id: string; positions: string[]; note: string }) =>
+	request<void>('POST', '/trade-market/wants', want);
+export const removeTradeWant = (id: string) => request<void>('DELETE', `/trade-market/wants/${id}`);
+export const setTradeTarget = (change: { league_id: string; player_id: string; on: boolean }) =>
+	request<void>('PUT', '/trade-market/targets', change);
+
 export const getSession = () => request<Session | null>('GET', '/session');
 export const getMyLeagues = () => request<MyLeague[]>('GET', '/my-leagues');
 export const getMyLeague = (id: string) => request<MyLeague>('GET', `/my-leagues/${id}`);
@@ -810,6 +959,9 @@ export const changeRoster = (leagueId: string, action: 'add' | 'drop' | 'move' |
 	request<void>('POST', `/leagues/${leagueId}/roster/${action}`, change);
 export const setRoster = (leagueId: string, split: RosterSplit) =>
 	request<void>('POST', `/leagues/${leagueId}/roster/set`, split);
+/** Sets the roster for the season the commissioner has opened: final, once. */
+export const setSeasonRoster = (leagueId: string, split: RosterSplit) =>
+	request<void>('POST', `/leagues/${leagueId}/roster/season`, split);
 export const getWaivers = (leagueId: string) => request<Waivers>('GET', `/leagues/${leagueId}/waivers`);
 export const claimWaiver = (leagueId: string, claim: WaiverClaim) =>
 	request<void>('POST', `/leagues/${leagueId}/waivers/claims`, claim);
@@ -835,7 +987,7 @@ export const getMergeSuggestions = () => request<MergeSuggestion[]>('GET', '/adm
 export const mergePlayers = (keep_id: string, duplicate_id: string) =>
 	request<void>('POST', '/admin/players/merge', { keep_id, duplicate_id });
 
-export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'seasons';
+export type SyncJob = 'injuries' | 'rosters' | 'prospects' | 'games' | 'schedule' | 'seasons' | 'prospect-rankings';
 export const startSync = (competition: string, job: SyncJob) =>
 	request<void>('POST', `/admin/sync/${competition}/${job}`);
 export const getIngestRuns = () => request<IngestRun[]>('GET', '/admin/ingest-runs');
@@ -845,9 +997,14 @@ export const getDraft = (id: string) => request<DraftState>('GET', `/drafts/${id
 export const makePick = (id: string, pick: { player_id: string; pick_id?: string }) =>
 	request<void>('POST', `/drafts/${id}/pick`, pick);
 export const passPick = (id: string) => request<void>('POST', `/drafts/${id}/pass`);
+/** Adds the signed-in franchise's emoji to a made pick, or takes it back if it is there. */
+export const reactToPick = (id: string, pickId: string, emoji: string) =>
+	request<void>('POST', `/drafts/${id}/picks/${pickId}/react`, { emoji });
 export const getQueue = (id: string) => request<QueuedPlayer[]>('GET', `/drafts/${id}/queue`);
 export const setQueue = (id: string, player_ids: string[]) => request<void>('PUT', `/drafts/${id}/queue`, { player_ids });
-export const setAutoPick = (id: string, on: boolean) => request<void>('PUT', `/drafts/${id}/autopick`, { on });
+/** franchise_id lets a commissioner set it for another franchise; without it, it is the signed-in one. */
+export const setAutoPick = (id: string, on: boolean, franchise_id?: string) =>
+	request<void>('PUT', `/drafts/${id}/autopick`, { on, franchise_id });
 
 export const getRankings = () => request<RankingSummary[]>('GET', '/rankings');
 export const getRanking = (id: string) => request<Ranking>('GET', `/rankings/${id}`);
@@ -859,6 +1016,9 @@ export const importRanking = (draftId: string, ranking_id: string) =>
 
 export const createDraft = (draft: NewDraft) => request<Draft>('POST', '/admin/drafts', draft);
 export const setDraftPicks = (id: string, slots: PickSlot[]) => request<void>('PUT', `/admin/drafts/${id}/picks`, slots);
+/** Replaces the player taken with a pick already made. */
+export const overridePick = (id: string, pickId: string, player_id: string) =>
+	request<void>('PUT', `/admin/drafts/${id}/picks/${pickId}`, { player_id });
 export const setDraftClock = (id: string, pick_clock_seconds: number) =>
 	request<void>('PUT', `/admin/drafts/${id}`, { pick_clock_seconds });
 export const deleteDraft = (id: string) => request<void>('DELETE', `/admin/drafts/${id}`);
@@ -866,17 +1026,21 @@ export const controlDraft = (id: string, action: DraftAction) => request<void>('
 export const createFutureDrafts = () => request<{ created: number }>('POST', '/admin/drafts/future');
 
 export const getTrades = () => orNull(request<Trade[]>('GET', '/trades')).then((t) => t ?? []);
-export const proposeTrade = (note: string, items: OfferItem[]) => request<Trade>('POST', '/trades', { note, items });
-export const answerTrade = (id: string, answer: TradeAnswer) => request<void>('POST', `/trades/${id}/${answer}`);
+export const proposeTrade = (note: string, items: OfferItem[], drops: TradeDrop[] = []) => request<Trade>('POST', '/trades', { note, items, drops });
+export const answerTrade = (id: string, answer: TradeAnswer, drops?: TradeDrop[]) => request<void>('POST', `/trades/${id}/${answer}`, drops ? { drops } : undefined);
 export const ruleOnTrade = (id: string, ruling: TradeRuling) => request<void>('POST', `/admin/trades/${id}/${ruling}`);
 
 export const getStandings = () => request<Standings[]>('GET', '/standings');
 export const getOverall = () => request<OverallYear[]>('GET', '/overall');
+export const getOdds = () => request<Odds>('GET', '/odds');
 export const getSeasons = () => request<Season[]>('GET', '/seasons');
 export const createSeason = (season: { league_id: string; year: number; starts_on: string; ends_on: string }) =>
 	request<Season>('POST', '/admin/seasons', season);
-export const setSeasonDates = (id: string, starts_on: string, ends_on: string) =>
-	request<void>('PUT', `/admin/seasons/${id}`, { starts_on, ends_on });
+export const setSeasonDates = (id: string, starts_on: string, ends_on: string, reset_schedule = false) =>
+	request<void>('PUT', `/admin/seasons/${id}`, { starts_on, ends_on, reset_schedule });
+/** Sets, or with null clears, the time by which every season roster must be set. */
+export const setRosterDeadline = (id: string, deadline: string | null) =>
+	request<void>('PUT', `/admin/seasons/${id}/roster-deadline`, { deadline });
 export const closeSeason = (id: string, champion_franchise_id?: string) =>
 	request<void>('POST', `/admin/seasons/${id}/close`, { champion_franchise_id });
 export const reopenSeason = (id: string) => request<void>('POST', `/admin/seasons/${id}/reopen`);
@@ -884,6 +1048,9 @@ export const reopenSeason = (id: string) => request<void>('POST', `/admin/season
 export const getLineup = (leagueId: string, franchiseId: string, day?: string) =>
 	request<Lineup>('GET', `/leagues/${leagueId}/lineup${query({ franchise: franchiseId, day })}`);
 export const setLineup = (leagueId: string, change: LineupChange) => request<void>('PUT', `/leagues/${leagueId}/lineup`, change);
+/** Sets the best lineup for every day left in the week of day, or for that week in a weekly league. */
+export const autoSetLineup = (leagueId: string, change: { day: string; franchise_id?: string }) =>
+	request<void>('POST', `/leagues/${leagueId}/lineup/auto`, change);
 
 export const getScores = (competition: string, day?: string) =>
 	request<Scoreboard>('GET', `/scores/${competition}${query({ day })}`);
@@ -892,10 +1059,13 @@ export const getGame = (id: string) => request<GameDetail>('GET', `/games/${id}`
 export const getMatchups = (leagueId: string, period?: number) =>
 	request<Matchups>('GET', `/leagues/${leagueId}/matchups${query({ period })}`);
 export const getSchedule = (leagueId: string) => request<SchedulePeriod[]>('GET', `/leagues/${leagueId}/schedule`);
+export const getGameCounts = (leagueId: string, starts_on: string, ends_on: string) =>
+	request<GameDayCount[]>('GET', `/leagues/${leagueId}/game-counts${query({ starts_on, ends_on })}`);
 export const getMatchup = (id: string) => request<MatchupDetail>('GET', `/matchups/${id}`);
-export const setMatchups = (periodId: string, matchups: Pick<Matchup, 'home_franchise_id' | 'away_franchise_id'>[]) =>
+export const setMatchups = (periodId: string, matchups: MatchupPairing[]) =>
 	request<void>('PUT', `/admin/periods/${periodId}/matchups`, { matchups });
 export const resetMatchups = (periodId: string) => request<void>('DELETE', `/admin/periods/${periodId}/matchups`);
+export const setSchedule = (seasonId: string, periods: CustomPeriod[]) => request<void>('PUT', `/admin/seasons/${seasonId}/schedule`, { periods });
 export const generateSchedule = (seasonId: string) => request<void>('POST', `/admin/seasons/${seasonId}/schedule`);
 export const advancePlayoffs = () => request<void>('POST', '/admin/playoffs/advance');
 
@@ -916,3 +1086,20 @@ export const addWatchlistPlayer = (id: string) => request<void>('PUT', `/watchli
 export const removeWatchlistPlayer = (id: string) => request<void>('DELETE', `/watchlist/players/${id}`);
 export const editWatchlistPlayer = (id: string, category: string, notes: string) => request<void>('PATCH', `/watchlist/players/${id}`, { category, notes });
 export const orderWatchlist = (player_ids: string[]) => request<void>('PUT', '/watchlist/order', { player_ids });
+
+export const getRosterPerformance = (leagueId: string, franchiseId: string, window: string, season?: string, day?: string) =>
+ request<RosterPerformance>('GET', `/leagues/${leagueId}/roster-stats${query({franchise:franchiseId,window,season,day})}`);
+
+export type NotificationKind = 'roster' | 'trade' | 'target';
+export type InboxNotification = {
+ id: number; kind: NotificationKind; title: string; body: string; href: string;
+ competition: string; player_id: string | null; league_id: string | null;
+ waiver_until: string | null; current_waiver_until: string | null;
+ created_at: string; read_at: string | null;
+};
+export type NotificationSummary = { unread: number; latest_id: number };
+export type NotificationPage = { notifications: InboxNotification[]; total: number; page: number; per_page: number };
+export const getNotifications = (filter: { page?: number; kind?: string; unread?: string } = {}) => request<NotificationPage>('GET', `/notifications${query(filter)}`);
+export const getNotificationSummary = () => request<NotificationSummary>('GET', '/notifications/summary');
+export const readNotification = (id: number, read: boolean) => request<void>('PATCH', `/notifications/${id}`, { read });
+export const readAllNotifications = (through_id: number) => request<void>('POST', '/notifications/read', { through_id });

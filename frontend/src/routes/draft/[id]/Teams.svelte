@@ -1,14 +1,21 @@
 <script lang="ts">
-	import { getFranchise, type Franchise, type FranchiseDetail } from '#lib/api.ts';
+	import { getFranchise, type Franchise, type FranchiseDetail, type League, type RosterPlayer, type Slot } from '#lib/api.ts';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 	let {
 		franchises,
+		leagues,
 		myId,
 		revision,
 		onselect
-	}: { franchises: Franchise[]; myId?: string; revision: string; onselect: (id: string) => void } =
-		$props();
+	}: {
+		franchises: Franchise[];
+		leagues: League[];
+		myId?: string;
+		revision: string;
+		onselect: (id: string) => void;
+	} = $props();
 	let selected = $state('');
 	const owner = $derived(franchises.find((f) => f.id === (selected || myId)) ?? franchises[0]);
 	let team = $state<FranchiseDetail>();
@@ -34,6 +41,36 @@
 		};
 	});
 	const showing = $derived(team?.franchise.id === owner?.id ? team : undefined);
+
+	// How many of each lineup slot these players can fill at once. A player
+	// fills one slot, and the slots open to the fewest positions are filled first.
+	function coverage(slots: Slot[], players: RosterPlayer[]) {
+		const open = (s: Slot) => (s.positions.includes('*') ? 1e9 : s.positions.length);
+		const seats = slots
+			.toSorted((a, b) => open(a) - open(b))
+			.flatMap((s) => Array.from({ length: s.count }, () => s));
+		const fits = (p: RosterPlayer, s: Slot) =>
+			s.positions.includes('*') || p.positions.some((position) => s.positions.includes(position));
+		const seated = new Map<string, number>(); // player to seat
+		// Seats a player, moving one already seated to another seat if that makes room.
+		const seat = (at: number, tried: Set<string>): boolean => {
+			for (const p of players) {
+				if (tried.has(p.player_id) || !fits(p, seats[at]!)) continue;
+				tried.add(p.player_id);
+				const held = seated.get(p.player_id);
+				if (held === undefined || seat(held, tried)) {
+					seated.set(p.player_id, at);
+					return true;
+				}
+			}
+			return false;
+		};
+		const filled = new Map<string, number>();
+		seats.forEach((s, at) => {
+			if (seat(at, new Set())) filled.set(s.name, (filled.get(s.name) ?? 0) + 1);
+		});
+		return slots.map((s) => ({ ...s, filled: filled.get(s.name) ?? 0 }));
+	}
 </script>
 
 <section class="teams" aria-label="Team rosters">
@@ -55,6 +92,7 @@
 			{#each showing.rosters as roster (roster.league_id)}
 				{@const main = roster.players.filter((p) => p.list === 'main')}
 				{@const reserve = roster.players.filter((p) => p.list === 'reserve')}
+				{@const slots = leagues.find((l) => l.id === roster.league_id)?.settings.lineup.slots ?? []}
 				<details open class="roster" data-sport={roster.competition}>
 					<summary
 						><SportBadge sport={roster.competition} /><strong
@@ -63,9 +101,11 @@
 					>
 					{#if roster.overage}<p class="warning">Over the roster limit by {roster.overage}</p>{/if}
 					<div class="coverage">
-						{#each [...new Set(main.flatMap((p) => p.positions))] as position (position)}<span
-								>{position}
-								<strong>{main.filter((p) => p.positions.includes(position)).length}</strong></span
+						{#each coverage(slots, main) as slot (slot.name)}<span
+								class:short={slot.filled < slot.count}
+								title="{slot.name}: {slot.positions.includes('*') ? 'any position' : slot.positions.join(', ')}"
+								>{slot.name}
+								<strong>{slot.filled}/{slot.count}</strong></span
 							>{/each}
 					</div>
 					{#if !main.length}<p class="muted empty">Main roster is empty.</p>{/if}
@@ -74,7 +114,7 @@
 							onclick={() => onselect(player.player_id)}
 							><Headshot name={player.full_name} src={player.headshot_url} size={22} /><strong
 								>{player.full_name}</strong
-							><span>{player.positions.join('/')}</span></button
+							><ProspectRank id={player.player_id} /><span>{player.positions.join('/')}</span></button
 						>{/each}
 					{#if reserve.length}<details class="reserve">
 							<summary>Reserve list · {reserve.length}</summary
@@ -83,7 +123,7 @@
 									onclick={() => onselect(player.player_id)}
 									><Headshot name={player.full_name} src={player.headshot_url} size={22} /><strong
 										>{player.full_name}</strong
-									><span>{player.positions.join('/')}</span></button
+									><ProspectRank id={player.player_id} /><span>{player.positions.join('/')}</span></button
 								>{/each}
 						</details>{/if}
 				</details>
@@ -150,6 +190,11 @@
 	}
 	.coverage strong {
 		color: var(--ink);
+	}
+	.coverage .short,
+	.coverage .short strong {
+		background: var(--gold-soft);
+		color: var(--bad);
 	}
 	.player {
 		display: flex;

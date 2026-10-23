@@ -2,10 +2,12 @@
 	// One of the manager's pre-draft lists, read in the draft room: its
 	// players in the order he ranked them, with anyone already taken greyed
 	// out, so he can queue from it as the draft goes.
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import type { Snippet } from 'svelte';
 	import { getRanking, type RankedPlayer } from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 
 	type Props = {
@@ -59,11 +61,11 @@
 					<span class="n">{i + 1}</span>
 					<Headshot name={player.full_name} src={player.headshot_url} size={24} />
 					<div class="who">
-						<button class="name" onclick={() => onselect?.(player.player_id)}>{player.full_name}</button>
+						<button class="name" onclick={() => onselect?.(player.player_id)}>{player.full_name} <ProspectRank id={player.player_id} /></button>
 						<span class="muted small-text row">
 							{#if showSport}<SportBadge sport={player.competition} />{/if}
 							{player.positions.join('/')}
-							{player.team_abbrev}
+							<TeamLogo competition={player.competition} abbrev={player.team_abbrev} size={22} />
 						</span>
 					</div>
 					{#if by}<span class="by">{by}</span>{:else}{@render action?.(player)}{/if}

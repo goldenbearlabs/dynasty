@@ -14,6 +14,14 @@
 	const ANY = '*';
 	const starters = $derived(settings.lineup.slots.reduce((sum, slot) => sum + (slot.count || 0), 0));
 
+	const tieNames = { points_for: 'Points for (higher first)', head_to_head: 'Head-to-head record', points_against: 'Points against (higher first)' };
+	const tieRules = $derived(settings.format.tiebreakers ?? ['points_for', 'head_to_head', 'points_against'] as const);
+	function moveTie(index: number, by: number) {
+		const next = [...tieRules];
+		[next[index], next[index+by]] = [next[index+by], next[index]];
+		settings.format.tiebreakers = next;
+	}
+
 	function togglePosition(positions: string[], position: string) {
 		const at = positions.indexOf(position);
 		if (at >= 0) positions.splice(at, 1);
@@ -174,6 +182,39 @@
 			<label class="field">Playoff teams <input type="number" min="2" bind:value={settings.format.playoff_teams} /></label>
 		{/if}
 	</div>
+	{#if settings.format.type === 'head_to_head'}
+		<div class="row end">
+			<label class="field">Standings ranked by
+				<select value={settings.format.standings_by ?? 'record'} onchange={(e) => settings.format.standings_by = e.currentTarget.value as NonNullable<LeagueSettings['format']['standings_by']>}>
+					<option value="record">Wins, then fewer losses</option><option value="win_percentage">Win percentage</option><option value="points">Points for</option>
+				</select>
+			</label>
+			<label class="row"><input type="checkbox" bind:checked={settings.format.reseed} /> Reseed brackets after each round</label>
+			<label class="row"><input type="checkbox" checked={settings.format.consolation !== false} onchange={(e) => settings.format.consolation = e.currentTarget.checked} /> Consolation bracket for non-playoff teams</label>
+			{#if settings.format.consolation !== false}
+				<label class="field">Consolation seeding
+					<select value={settings.format.consolation_seeding ?? 'bottom_first'} onchange={(e) => settings.format.consolation_seeding = e.currentTarget.value as 'bottom_first' | 'top_first'}>
+						<option value="bottom_first">Lowest standings get top seeds and byes</option><option value="top_first">Highest non-playoff teams get top seeds and byes</option>
+					</select>
+				</label>
+			{/if}
+		</div>
+		<p class="muted small-text">Default for 14 teams: top 8 compete for the title; bottom 6 play a consolation bracket. Teams 13 and 14 receive first-round consolation byes. Winners advance in both brackets, with fixed paths unless reseeding is enabled. A tied playoff matchup goes to the higher bracket seed.</p>
+		<h3>Tiebreakers, in order</h3>
+		{#each tieRules as rule, i (i)}
+			<div class="row">
+				<span>{i+1}. {tieNames[rule]}</span>
+				<button type="button" class="small quiet" disabled={i === 0} onclick={() => moveTie(i,-1)}>Move up</button>
+				<button type="button" class="small quiet" disabled={i === tieRules.length-1} onclick={() => moveTie(i,1)}>Move down</button>
+				<button type="button" class="small quiet" onclick={() => settings.format.tiebreakers = tieRules.filter((_,j) => j !== i)}>Remove</button>
+			</div>
+		{/each}
+		{#each Object.keys(tieNames) as key}
+			{@const rule = key as keyof typeof tieNames}
+			{#if !tieRules.includes(rule)}<button type="button" class="small" onclick={() => settings.format.tiebreakers = [...tieRules, rule]}>Add {tieNames[rule]}</button>{/if}
+		{/each}
+		<p class="muted small-text">Points for and points against use completed regular-season matchups. Head-to-head uses games between the tied teams. Higher points against ranks better.</p>
+	{/if}
 </fieldset>
 
 <fieldset>

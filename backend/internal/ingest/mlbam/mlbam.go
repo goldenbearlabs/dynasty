@@ -19,8 +19,9 @@ const (
 )
 
 type Source struct {
-	Base   string // overridable in tests
-	client *ingest.Client
+	Base         string // overridable in tests
+	RankingsBase string // MLB Pipeline GraphQL; overridable in tests
+	client       *ingest.Client
 
 	mu          sync.Mutex
 	roles       map[int]string // pitcher id -> "SP" or "RP"
@@ -29,7 +30,7 @@ type Source struct {
 }
 
 func New(client *ingest.Client) *Source {
-	return &Source{Base: defaultBase, client: client}
+	return &Source{Base: defaultBase, RankingsBase: "https://data-graph.mlb.com/graphql", client: client}
 }
 
 func (s *Source) Teams(ctx context.Context) ([]ingest.Team, error) {
@@ -301,8 +302,9 @@ func (s *Source) draftPicks(ctx context.Context) ([]ingest.Player, error) {
 			Drafts struct {
 				Rounds []struct {
 					Picks []struct {
-						PickRound string `json:"pickRound"`
-						Person    struct {
+						PickRound    string `json:"pickRound"`
+						SigningBonus string `json:"signingBonus"`
+						Person       struct {
 							ID              int    `json:"id"`
 							FullName        string `json:"fullName"`
 							BirthDate       string `json:"birthDate"`
@@ -322,7 +324,8 @@ func (s *Source) draftPicks(ctx context.Context) ([]ingest.Player, error) {
 		}
 		for _, round := range res.Drafts.Rounds {
 			for _, pick := range round.Picks {
-				if pick.Person.ID == 0 { // a passed pick
+				bonus, _ := strconv.ParseFloat(pick.SigningBonus, 64)
+				if pick.Person.ID == 0 || bonus <= 0 { // passed or not confirmed signed
 					continue
 				}
 				p := ingest.Player{
@@ -374,7 +377,7 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 			} `json:"games"`
 		} `json:"dates"`
 	}
-	url := fmt.Sprintf("%s/schedule?sportId=1&gameType=R&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
+	url := fmt.Sprintf("%s/schedule?sportId=1&hydrate=linescore&date=%s", s.Base, day.Format(time.DateOnly))
 	if err := s.client.GetTransient(ctx, url, &res); err != nil {
 		return nil, err
 	}
@@ -383,7 +386,8 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	var games []ingest.Game
 	for _, date := range res.Dates {
 		for _, g := range date.Games {
-			if g.GameType != "R" {
+			if g.GameType != "R" { // spring training, exhibitions and the postseason
+				games = append(games, ingest.Game{ProviderID: strconv.Itoa(g.GamePk), NonRegular: true})
 				continue
 			}
 			starts, err := time.Parse(time.RFC3339, g.GameDate)

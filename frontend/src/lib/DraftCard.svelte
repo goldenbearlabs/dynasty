@@ -3,7 +3,8 @@
 	import type { DraftSummary } from '#lib/api.ts';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
 
-	let { draft }: { draft: DraftSummary } = $props();
+	// href: where the card leads; the draft room unless given another.
+	let { draft, href }: { draft: DraftSummary; href?: string } = $props();
 
 	const status = {
 		scheduled: { label: 'Not started', tone: '' },
@@ -13,7 +14,7 @@
 	} as const;
 </script>
 
-<a class="card" href="/draft/{draft.id}">
+<a class="card" href={href ?? `/draft/${draft.id}`}>
 	<div class="spread">
 		<span class="row sports">
 			{#each draft.competitions as sport (sport)}<SportBadge {sport} solid />{/each}

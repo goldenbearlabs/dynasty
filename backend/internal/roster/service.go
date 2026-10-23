@@ -79,6 +79,9 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 		if player.Competition != c.League.Competition {
 			return nil, problem.New("%s does not play in this league's competition.", player.FullName)
 		}
+		if !player.PoolEligible {
+			return nil, problem.New("%s has not entered this league's professional player pool yet.", player.FullName)
+		}
 		injuryLocked, err := q.HasInjuryReserveLock(ctx, db.HasInjuryReserveLockParams{LeagueID: c.League.ID, PlayerID: c.PlayerID, Day: sportsday.Date(sportsday.Today())})
 		if err != nil {
 			return nil, err
@@ -132,6 +135,20 @@ func AddIn(ctx context.Context, q *db.Queries, c Change) error {
 			return nil, err
 		}
 		return append(roster, Entry{PlayerID: c.PlayerID, List: c.List, Prospect: player.Status == "prospect", Startup: c.Startup, InjuryReserveLocked: injuryLocked, StarterIneligible: !rules.CanStart(c.League.Competition, conference)}), nil
+	})
+}
+
+// AddDrop adds a player and releases another to make room, as one move:
+// the release goes first, onto waivers as any drop does, and if the add is
+// refused neither happens.
+func (s *Service) AddDrop(ctx context.Context, c Change, drop pgtype.UUID) error {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		released := c
+		released.PlayerID, released.List = drop, ""
+		if err := DropIn(ctx, q, released); err != nil {
+			return err
+		}
+		return AddIn(ctx, q, c)
 	})
 }
 
@@ -245,42 +262,45 @@ func (s *Service) Move(ctx context.Context, c Change) error {
 // roster. Each move obeys the reserve lock, but the limits are checked only
 // on the result, so two full lists can swap players.
 func (s *Service) Set(ctx context.Context, c Change, reserve []pgtype.UUID) error {
-	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
-		rules, err := settings.Parse[settings.League](c.League.Settings)
-		if err != nil {
+	return db.InTx(ctx, s.pool, func(q *db.Queries) error { return setIn(ctx, q, c, reserve) })
+}
+
+// setIn is Set inside a transaction the caller owns.
+func setIn(ctx context.Context, q *db.Queries, c Change, reserve []pgtype.UUID) error {
+	rules, err := settings.Parse[settings.League](c.League.Settings)
+	if err != nil {
+		return err
+	}
+	before, err := entries(ctx, q, c, rules)
+	if err != nil {
+		return err
+	}
+	for _, id := range reserve {
+		if i := index(before, id); i < 0 || before[i].List == settings.ListRights {
+			return problem.New("One of those players is not signed to this roster.")
+		}
+	}
+	for _, e := range before {
+		list := settings.ListMain
+		if named(reserve, e.PlayerID) {
+			list = settings.ListReserve
+		}
+		if e.List == settings.ListRights || e.List == list {
+			continue
+		}
+		c.PlayerID, c.List = e.PlayerID, list
+		if err := moveIn(ctx, q, c, false); err != nil {
 			return err
 		}
-		before, err := entries(ctx, q, c, rules)
-		if err != nil {
-			return err
-		}
-		for _, id := range reserve {
-			if i := index(before, id); i < 0 || before[i].List == settings.ListRights {
-				return problem.New("One of those players is not signed to this roster.")
-			}
-		}
-		for _, e := range before {
-			list := settings.ListMain
-			if slices.Contains(reserve, e.PlayerID) {
-				list = settings.ListReserve
-			}
-			if e.List == settings.ListRights || e.List == list {
-				continue
-			}
-			c.PlayerID, c.List = e.PlayerID, list
-			if err := moveIn(ctx, q, c, false); err != nil {
-				return err
-			}
-		}
-		if c.Source == Commissioner {
-			return nil
-		}
-		after, err := entries(ctx, q, c, rules)
-		if err != nil {
-			return err
-		}
-		return Check(rules.Roster, before, after)
-	})
+	}
+	if c.Source == Commissioner {
+		return nil
+	}
+	after, err := entries(ctx, q, c, rules)
+	if err != nil {
+		return err
+	}
+	return Check(rules.Roster, before, after)
 }
 
 // moveIn is one move inside a transaction the caller owns. checked says
@@ -304,6 +324,11 @@ func moveIn(ctx context.Context, q *db.Queries, c Change, checked bool) error {
 			return nil, problem.New("This player used an injury swap and must remain on reserve for the rest of the season.")
 		}
 		managed := c.Source != Commissioner
+		if c.List != entry.List && entry.List != settings.ListRights {
+			if err := heldForSeason(ctx, q, c, rules); err != nil {
+				return nil, err
+			}
+		}
 		reserved := entry.ReservedAt // unchanged unless he changes lists
 		rookie := entry.Rookie
 		switch {
@@ -339,7 +364,7 @@ func moveIn(ctx context.Context, q *db.Queries, c Change, checked bool) error {
 
 // callable refuses a call-up from the reserve list while a lock holds.
 func callable(ctx context.Context, q *db.Queries, c Change, limits settings.Roster, reservedAt pgtype.Timestamptz) error {
-	ends, err := SeasonEnds(ctx, q, c.League.ID)
+	ends, err := SeasonEnds(ctx, q, c.League.ID, c.Franchise.ID)
 	if err != nil {
 		return err
 	}
@@ -361,14 +386,15 @@ func callable(ctx context.Context, q *db.Queries, c Change, limits settings.Rost
 	return problem.New("%s is locked on the reserve list until %s.", player.FullName, sportsday.Clock(until))
 }
 
-// SeasonEnds is the last day of the season a league is playing, or the zero
-// time between seasons.
-func SeasonEnds(ctx context.Context, q *db.Queries, leagueID pgtype.UUID) (time.Time, error) {
-	ends, err := q.RunningSeasonEnd(ctx, db.RunningSeasonEndParams{LeagueID: leagueID, Day: sportsday.Date(sportsday.Today())})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return time.Time{}, nil
+// SeasonEnds is the last day of the season whose lists hold a franchise's
+// reserve players: the open season, once the franchise has set its roster
+// for it. It is the zero time otherwise.
+func SeasonEnds(ctx context.Context, q *db.Queries, leagueID, franchiseID pgtype.UUID) (time.Time, error) {
+	season, err := SeasonOf(ctx, q, leagueID, franchiseID)
+	if err != nil || !season.Locked() {
+		return time.Time{}, err
 	}
-	return ends.Time, err
+	return season.Season.EndsOn.Time, nil
 }
 
 // apply runs one roster change inside q's transaction: it locks the

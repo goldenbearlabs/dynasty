@@ -160,6 +160,27 @@ func TestDraft(t *testing.T) {
 	}
 }
 
+func TestDraftPicksOnlyNeverReadsCollegeBoard(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/draft/rounds"):
+			fmt.Fprint(w, `{"items":[{"picks":[{"overall":1,"athlete":{"$ref":"http://espn.test/athletes/1"}}]}]}`)
+		case strings.HasSuffix(r.URL.Path, "/draft/athletes/1"):
+			fmt.Fprint(w, `{"fullName":"Drafted Pro","athlete":{"$ref":"http://espn.test/athletes/100"},"position":{"abbreviation":"QB"}}`)
+		default:
+			t.Errorf("professional prospects must not request a college draft board: %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	draft := NewDraft(ingest.NewClient(0), Draft{Path: "football/leagues/nfl", Provider: "espn_football", Month: time.April, Classes: 1, PicksOnly: true})
+	draft.Base = server.URL
+	players, err := draft.Prospects(context.Background())
+	if err != nil || len(players) != 1 || players[0].ProviderID != "100" || !strings.Contains(players[0].Note, "draft, pick 1") {
+		t.Fatalf("professional picks = %+v, err=%v", players, err)
+	}
+}
+
 func TestGamesAndBoxScore(t *testing.T) {
 	const scoreboard = `{"events":[
 	  {"id":"401","season":{"type":2},"date":"2026-10-04T17:00Z","status":{"type":{"state":"post","shortDetail":"Final/OT"}},
@@ -446,7 +467,39 @@ func TestGamesRegularSeasonOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(games) != 1 || games[0].ProviderID != "regular" {
-		t.Fatalf("regular-season games = %+v", games)
+	// Every other game comes back flagged, so a copy stored earlier can be removed.
+	if len(games) != 4 || games[0].ProviderID != "regular" || games[0].NonRegular {
+		t.Fatalf("games = %+v, want game regular first, unflagged", games)
+	}
+	for _, g := range games[1:] {
+		if !g.NonRegular {
+			t.Errorf("game %s was not flagged as outside the regular season", g.ProviderID)
+		}
+	}
+}
+
+func TestSeasonStatsRejectsProviderFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, label         string
+		returned, requested int
+		want                int
+	}{
+		{"explicit fallback", "2025-26", 2026, 2027, 0},
+		{"label fallback", "2025-26", 0, 2027, 0},
+		{"echoed request year with old label", "2025-26", 2027, 2027, 0},
+		{"matching season", "2025-26", 2026, 2026, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"pagination":{"pages":1},"requestedSeason":{"year":%d,"displayName":%q},"categories":[{"name":"general","names":["gamesPlayed"]},{"name":"offensive","names":["points"]}],"athletes":[{"athlete":{"id":"1","teamShortName":"OKC"},"categories":[{"name":"general","totals":["10"]},{"name":"offensive","totals":["100"]}]}]}`, tc.returned, tc.label)
+			}))
+			defer server.Close()
+			src := New(ingest.NewClient(0), League{Path: "basketball/nba", Provider: "test", SeasonSpansYears: true, Stats: map[string]string{"points": "pts"}, SeasonGroups: []string{"general", "offensive"}})
+			src.WebBase = server.URL
+			rows, err := src.SeasonStats(context.Background(), tc.requested)
+			if err != nil || len(rows) != tc.want {
+				t.Fatalf("rows=%+v err=%v", rows, err)
+			}
+		})
 	}
 }

@@ -22,6 +22,7 @@
 </th>
 <style>
  th.sticky { position: sticky; left: 0; z-index: 2; background: var(--surface); min-width: 14rem; }
+ @media (max-width:640px) { th.sticky { min-width: 0; } }
  th.num { text-align: right; }
  .column-label { padding: 0; border: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: inherit; display: inline-flex; gap: 0.4rem; align-items: center; }
  .column-label:hover, .column-label.active { color: var(--brand); }

@@ -1,4 +1,4 @@
-.PHONY: db api web gen build test sync runs
+.PHONY: db api web gen build test sync runs seed
 
 -include .env.local
 
@@ -30,7 +30,11 @@ build: ## build the frontend into the Go binary: backend/crossover
 test: ## run all tests, using a separate crossover_test database
 	docker compose exec -T db psql -U crossover -tc "select 1 from pg_database where datname = 'crossover_test'" | grep -q 1 \
 		|| docker compose exec -T db createdb -U crossover crossover_test
-	cd backend && TEST_DATABASE_URL=$(TEST_DB) go test ./...
+	# One package at a time: they share the test database and clear it between tests.
+	cd backend && TEST_DATABASE_URL=$(TEST_DB) go test -p 1 ./...
+
+seed: ## replace the local dynasty: make seed (just after the startup drafts) or make seed state=season
+	cd backend && go run . seed $(state)
 
 sync: ## make sync c=nba            (rosters)   or   make sync c=nhl j=prospects
 	curl -fsS -X POST -H "Authorization: Bearer $(ADMIN_TOKEN)" $(API)/api/admin/sync/$(c)/$(j)

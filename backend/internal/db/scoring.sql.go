@@ -27,8 +27,8 @@ func (q *Queries) CompleteSeason(ctx context.Context, arg CompleteSeasonParams) 
 }
 
 const copyLineupEntries = `-- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id, e.counts_from
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+select e.league_id, e.franchise_id, $1, e.slot, e.slot_index, e.player_id, e.counts_from, e.counts_last
 from lineup_entries e
 where e.league_id = $2 and e.franchise_id = $3 and e.effective_on = $4
 `
@@ -54,7 +54,7 @@ const createSeason = `-- name: CreateSeason :one
 
 insert into seasons (league_id, year, starts_on, ends_on)
 values ($1, $2, $3, $4)
-returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id
+returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline
 `
 
 type CreateSeasonParams struct {
@@ -81,8 +81,24 @@ func (q *Queries) CreateSeason(ctx context.Context, arg CreateSeasonParams) (Sea
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
+}
+
+const deleteGame = `-- name: DeleteGame :exec
+delete from games where competition = $1 and provider_id = $2
+`
+
+type DeleteGameParams struct {
+	Competition string `json:"competition"`
+	ProviderID  string `json:"provider_id"`
+}
+
+// Removes a game the feed says is not part of the regular season, with its stat lines.
+func (q *Queries) DeleteGame(ctx context.Context, arg DeleteGameParams) error {
+	_, err := q.db.Exec(ctx, deleteGame, arg.Competition, arg.ProviderID)
+	return err
 }
 
 const deleteLineups = `-- name: DeleteLineups :exec
@@ -132,8 +148,49 @@ func (q *Queries) DeletePeriodsFrom(ctx context.Context, arg DeletePeriodsFromPa
 	return err
 }
 
+const doublePeriodOn = `-- name: DoublePeriodOn :one
+select p.id, p.season_id, p.seq, p.starts_on, p.ends_on, p.is_playoff, p.by_hand, p.double_games from periods p
+join seasons s on s.id = p.season_id
+where s.league_id = $1 and s.status = 'active' and p.double_games and $2::date between p.starts_on and p.ends_on
+limit 1
+`
+
+type DoublePeriodOnParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	Day      pgtype.Date `json:"day"`
+}
+
+// The doubled matchup a day falls in, in a league's open season, if any.
+func (q *Queries) DoublePeriodOn(ctx context.Context, arg DoublePeriodOnParams) (Period, error) {
+	row := q.db.QueryRow(ctx, doublePeriodOn, arg.LeagueID, arg.Day)
+	var i Period
+	err := row.Scan(
+		&i.ID,
+		&i.SeasonID,
+		&i.Seq,
+		&i.StartsOn,
+		&i.EndsOn,
+		&i.IsPlayoff,
+		&i.ByHand,
+		&i.DoubleGames,
+	)
+	return i, err
+}
+
+const firstScheduledDay = `-- name: FirstScheduledDay :one
+select min(day)::date from games where competition = $1
+`
+
+// The earliest day a competition has a game stored for, or null with none.
+func (q *Queries) FirstScheduledDay(ctx context.Context, competition string) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, firstScheduledDay, competition)
+	var column_1 pgtype.Date
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getGame = `-- name: GetGame :one
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games where id = $1
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games where id = $1
 `
 
 func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (Game, error) {
@@ -152,6 +209,9 @@ func (q *Queries) GetGame(ctx context.Context, id pgtype.UUID) (Game, error) {
 		&i.HomeScore,
 		&i.AwayScore,
 		&i.Detail,
+		&i.HomeImplied,
+		&i.AwayImplied,
+		&i.HomeWin,
 	)
 	return i, err
 }
@@ -210,7 +270,7 @@ func (q *Queries) GetGameSummary(ctx context.Context, id pgtype.UUID) (GetGameSu
 }
 
 const getMatchup = `-- name: GetMatchup :one
-select id, period_id, home_franchise_id, away_franchise_id from matchups where id = $1
+select id, period_id, home_franchise_id, away_franchise_id, bracket, bracket_slot from matchups where id = $1
 `
 
 func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, error) {
@@ -221,12 +281,14 @@ func (q *Queries) GetMatchup(ctx context.Context, id pgtype.UUID) (Matchup, erro
 		&i.PeriodID,
 		&i.HomeFranchiseID,
 		&i.AwayFranchiseID,
+		&i.Bracket,
+		&i.BracketSlot,
 	)
 	return i, err
 }
 
 const getPeriod = `-- name: GetPeriod :one
-select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where id = $1
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games from periods where id = $1
 `
 
 func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error) {
@@ -240,12 +302,13 @@ func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error)
 		&i.EndsOn,
 		&i.IsPlayoff,
 		&i.ByHand,
+		&i.DoubleGames,
 	)
 	return i, err
 }
 
 const getSeason = `-- name: GetSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where id = $1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where id = $1
 `
 
 func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error) {
@@ -259,8 +322,33 @@ func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error)
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
+}
+
+const insertBracketMatchup = `-- name: InsertBracketMatchup :exec
+insert into matchups (period_id,home_franchise_id,away_franchise_id,bracket,bracket_slot)
+values ($1,$2,$3,$4,$5)
+`
+
+type InsertBracketMatchupParams struct {
+	PeriodID        pgtype.UUID `json:"period_id"`
+	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
+	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
+}
+
+func (q *Queries) InsertBracketMatchup(ctx context.Context, arg InsertBracketMatchupParams) error {
+	_, err := q.db.Exec(ctx, insertBracketMatchup,
+		arg.PeriodID,
+		arg.HomeFranchiseID,
+		arg.AwayFranchiseID,
+		arg.Bracket,
+		arg.BracketSlot,
+	)
+	return err
 }
 
 const insertLineup = `-- name: InsertLineup :exec
@@ -280,8 +368,8 @@ func (q *Queries) InsertLineup(ctx context.Context, arg InsertLineupParams) erro
 }
 
 const insertLineupEntry = `-- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from)
-values ($1, $2, $3, $4, $5, $6, $7)
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
+values ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type InsertLineupEntryParams struct {
@@ -292,6 +380,7 @@ type InsertLineupEntryParams struct {
 	SlotIndex   int32       `json:"slot_index"`
 	PlayerID    pgtype.UUID `json:"player_id"`
 	CountsFrom  pgtype.Date `json:"counts_from"`
+	CountsLast  bool        `json:"counts_last"`
 }
 
 func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryParams) error {
@@ -303,6 +392,7 @@ func (q *Queries) InsertLineupEntry(ctx context.Context, arg InsertLineupEntryPa
 		arg.SlotIndex,
 		arg.PlayerID,
 		arg.CountsFrom,
+		arg.CountsLast,
 	)
 	return err
 }
@@ -326,7 +416,7 @@ func (q *Queries) InsertMatchup(ctx context.Context, arg InsertMatchupParams) er
 const insertPeriod = `-- name: InsertPeriod :one
 insert into periods (season_id, seq, starts_on, ends_on, is_playoff)
 values ($1, $2, $3, $4, $5)
-returning id, season_id, seq, starts_on, ends_on, is_playoff, by_hand
+returning id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games
 `
 
 type InsertPeriodParams struct {
@@ -354,6 +444,7 @@ func (q *Queries) InsertPeriod(ctx context.Context, arg InsertPeriodParams) (Per
 		&i.EndsOn,
 		&i.IsPlayoff,
 		&i.ByHand,
+		&i.DoubleGames,
 	)
 	return i, err
 }
@@ -374,8 +465,20 @@ func (q *Queries) InsertPeriodScore(ctx context.Context, arg InsertPeriodScorePa
 	return err
 }
 
+const lastScheduledDay = `-- name: LastScheduledDay :one
+select max(day)::date from games where competition = $1
+`
+
+// The latest day a competition has a game stored for, or null with none.
+func (q *Queries) LastScheduledDay(ctx context.Context, competition string) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, lastScheduledDay, competition)
+	var column_1 pgtype.Date
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const latestSeason = `-- name: LatestSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where league_id = $1 order by year desc limit 1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where league_id = $1 order by year desc limit 1
 `
 
 func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Season, error) {
@@ -389,6 +492,7 @@ func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Seaso
 		&i.EndsOn,
 		&i.Status,
 		&i.ChampionFranchiseID,
+		&i.RosterDeadline,
 	)
 	return i, err
 }
@@ -415,7 +519,7 @@ func (q *Queries) LineupInForce(ctx context.Context, arg LineupInForceParams) (p
 }
 
 const listActiveSeasons = `-- name: ListActiveSeasons :many
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id from seasons where status = 'active'
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where status = 'active'
 `
 
 func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
@@ -435,6 +539,7 @@ func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
 			&i.EndsOn,
 			&i.Status,
 			&i.ChampionFranchiseID,
+			&i.RosterDeadline,
 		); err != nil {
 			return nil, err
 		}
@@ -508,7 +613,7 @@ func (q *Queries) ListGameLines(ctx context.Context, gameID pgtype.UUID) ([]List
 }
 
 const listGamesInPlay = `-- name: ListGamesInPlay :many
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games
 where competition = $1
   and (status = 'live'
        or (status = 'scheduled' and starts_at between now() - interval '8 hours' and now() + interval '2 minutes'))
@@ -538,6 +643,9 @@ func (q *Queries) ListGamesInPlay(ctx context.Context, competition string) ([]Ga
 			&i.HomeScore,
 			&i.AwayScore,
 			&i.Detail,
+			&i.HomeImplied,
+			&i.AwayImplied,
+			&i.HomeWin,
 		); err != nil {
 			return nil, err
 		}
@@ -550,7 +658,7 @@ func (q *Queries) ListGamesInPlay(ctx context.Context, competition string) ([]Ga
 }
 
 const listGamesNeedingStats = `-- name: ListGamesNeedingStats :many
-select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail from games
+select id, competition, provider_id, day, starts_at, status, home_team_id, away_team_id, stats_synced_at, home_score, away_score, detail, home_implied, away_implied, home_win from games
 where competition = $1
   and starts_at > now() - interval '4 days'
   and (status = 'live'
@@ -584,6 +692,9 @@ func (q *Queries) ListGamesNeedingStats(ctx context.Context, competition string)
 			&i.HomeScore,
 			&i.AwayScore,
 			&i.Detail,
+			&i.HomeImplied,
+			&i.AwayImplied,
+			&i.HomeWin,
 		); err != nil {
 			return nil, err
 		}
@@ -670,7 +781,7 @@ func (q *Queries) ListGamesOnDay(ctx context.Context, arg ListGamesOnDayParams) 
 }
 
 const listLineupEntries = `-- name: ListLineupEntries :many
-select slot, slot_index, player_id, counts_from from lineup_entries
+select slot, slot_index, player_id, counts_from, counts_last from lineup_entries
 where league_id = $1 and franchise_id = $2 and effective_on = $3
 order by slot, slot_index
 `
@@ -686,6 +797,7 @@ type ListLineupEntriesRow struct {
 	SlotIndex  int32       `json:"slot_index"`
 	PlayerID   pgtype.UUID `json:"player_id"`
 	CountsFrom pgtype.Date `json:"counts_from"`
+	CountsLast bool        `json:"counts_last"`
 }
 
 func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesParams) ([]ListLineupEntriesRow, error) {
@@ -702,6 +814,7 @@ func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesPa
 			&i.SlotIndex,
 			&i.PlayerID,
 			&i.CountsFrom,
+			&i.CountsLast,
 		); err != nil {
 			return nil, err
 		}
@@ -716,21 +829,32 @@ func (q *Queries) ListLineupEntries(ctx context.Context, arg ListLineupEntriesPa
 const listLineupPoints = `-- name: ListLineupPoints :many
 
 with days as (
-  select generate_series($2::date, $3::date, interval '1 day')::date as day
+  select d::date as day, w.week_start
+  from (select $2::date as week_start) w
+  cross join generate_series(w.week_start, $3::date, interval '1 day') d
 ), in_force as (
-  select f.id as franchise_id, d.day,
+  select f.id as franchise_id, d.day, d.week_start,
          (select max(n.effective_on) from lineups n
           where n.league_id = $4 and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
   from franchises f
   cross join days d
   where f.dynasty_id = (select dynasty_id from leagues where id = $4)
 ), started as (
-  select i.franchise_id, e.player_id, g.id as game_id, g.day, sl.stats, l.settings,
+  select i.franchise_id, e.player_id, e.slot, g.id as game_id, g.day, sl.stats, l.settings,
          coalesce((select (def.rule->>'games_per_week')::int
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
-         row_number() over (partition by i.franchise_id, e.player_id, (g.day - $2::date) / 7
+         case when dp.doubled then 2 else 1 end as mult,
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win
                             order by g.starts_at, g.id) as nth,
+         e.counts_last,
+         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
+         -- Counting back from his last game of the week, among those he recorded a stat in.
+         row_number() over (partition by i.franchise_id, e.player_id,
+                                         dp.win,
+                                         exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
+                            order by g.starts_at desc, g.id desc) as nth_last,
          coalesce((l.settings->'lineup'->>'pitcher_starts_per_week')::int, 0) as starts_allowed,
          -- A start, for the cap: he started the game, and if he is a reliever
          -- he went more than an inning, so an opener does not use one up.
@@ -739,7 +863,7 @@ with days as (
          sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
                    and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
                   then 1 else 0 end)
-           over (partition by i.franchise_id, (g.day - $2::date) / 7
+           over (partition by i.franchise_id, dp.win
                  order by g.starts_at, g.id, e.player_id) as starts_so_far
   from in_force i
   join lineup_entries e on e.league_id = $4 and e.franchise_id = i.franchise_id and e.effective_on = i.effective_on
@@ -747,6 +871,14 @@ with days as (
   join leagues l on l.id = $4
   join games g on g.competition = l.competition and g.day = i.day
   join stat_lines sl on sl.game_id = g.id and sl.player_id = e.player_id
+  -- The window it counts in: the doubled matchup it falls in, if any, or its week.
+  cross join lateral (
+    select coalesce((select p.starts_on from periods p join seasons se on se.id = p.season_id
+                     where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
+                     limit 1), g.day - (g.day - i.week_start) % 7) as win,
+           exists (select 1 from periods p join seasons se on se.id = p.season_id
+                   where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on) as doubled
+  ) dp
   where (e.counts_from is null or g.day >= e.counts_from)
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -758,37 +890,53 @@ with days as (
            and team.id in (g.home_team_id, g.away_team_id) and ps.conference <> '' limit 1),
         (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
          in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
+), counted as (
+  select st.franchise_id, st.player_id, st.slot, st.game_id, st.day, st.stats, st.settings, st.games_per_week, st.mult, st.nth, st.counts_last, st.recorded, st.nth_last, st.starts_allowed, st.is_start, st.starts_so_far, (select sum(s.value::numeric * r.value::numeric)
+               from jsonb_each_text(st.stats) s
+               join jsonb_each_text(st.settings->'scoring') r on r.key = s.key) as points
+  from started st
+where st.day >= $5::date
+  and (st.games_per_week = 0
+    or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
+    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
        count(distinct st.game_id) as games,
-       sum(s.value::numeric * r.value::numeric)::float8 as points
-from started st
+       sum(st.points)::float8 as points,
+       case when $1::boolean then jsonb_agg(jsonb_build_object(
+         'game_id', st.game_id, 'day', st.day, 'slot', st.slot, 'points', st.points,
+         'stats', st.stats, 'starts_at', g.starts_at, 'status', g.status,
+         'home', home.abbrev, 'away', away.abbrev, 'positions', p.positions
+       ) order by g.starts_at, g.id) else '[]'::jsonb end as game_lines
+from counted st
 join players p on p.id = st.player_id
+join games g on g.id = st.game_id
+left join pro_teams home on home.id = g.home_team_id
+left join pro_teams away on away.id = g.away_team_id
 left join player_nicknames n on n.franchise_id = st.franchise_id and n.player_id = st.player_id
-cross join lateral jsonb_each_text(st.stats) s
-join lateral jsonb_each_text(st.settings->'scoring') r on r.key = s.key
-where st.day >= $1::date
-  and (st.games_per_week = 0 or st.nth <= st.games_per_week)
-  and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed)
+where st.points is not null
 group by st.franchise_id, st.player_id, p.full_name, p.headshot_url, n.nickname
 order by points desc
 `
 
 type ListLineupPointsParams struct {
-	FromDay   pgtype.Date `json:"from_day"`
-	WeekStart pgtype.Date `json:"week_start"`
-	ToDay     pgtype.Date `json:"to_day"`
-	LeagueID  pgtype.UUID `json:"league_id"`
+	IncludeGames bool        `json:"include_games"`
+	WeekStart    pgtype.Date `json:"week_start"`
+	ToDay        pgtype.Date `json:"to_day"`
+	LeagueID     pgtype.UUID `json:"league_id"`
+	FromDay      pgtype.Date `json:"from_day"`
 }
 
 type ListLineupPointsRow struct {
-	FranchiseID pgtype.UUID `json:"franchise_id"`
-	PlayerID    pgtype.UUID `json:"player_id"`
-	FullName    string      `json:"full_name"`
-	HeadshotUrl string      `json:"headshot_url"`
-	Nickname    string      `json:"nickname"`
-	Games       int64       `json:"games"`
-	Points      float64     `json:"points"`
+	FranchiseID pgtype.UUID     `json:"franchise_id"`
+	PlayerID    pgtype.UUID     `json:"player_id"`
+	FullName    string          `json:"full_name"`
+	HeadshotUrl string          `json:"headshot_url"`
+	Nickname    string          `json:"nickname"`
+	Games       int64           `json:"games"`
+	Points      float64         `json:"points"`
+	GameLines   json.RawMessage `json:"game_lines"`
 }
 
 // ---- points ----
@@ -796,17 +944,22 @@ type ListLineupPointsRow struct {
 // each day's stat lines for whoever was in the lineup in force that day,
 // weighted by the league's scoring rules. A slot may count only some of a
 // player's games each week (games_per_week): those are his first so many on
-// or after the day his manager picked. A league may also cap a team's
+// or after the day his manager picked, or, left on auto (counts_last), his
+// last so many that week in which he recorded a stat, so a game he sat out
+// gives way to the one before it. A league may also cap a team's
 // pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 // in the order they were played, score nothing. Weeks are counted from
 // week_start, the first day of the week from_day falls in, so a span that
-// begins mid-week still knows which games came earlier.
+// begins mid-week still knows which games came earlier. A matchup the
+// commissioner has doubled (double_games) counts as one window in place of
+// its weeks, with twice the games and twice the starts.
 func (q *Queries) ListLineupPoints(ctx context.Context, arg ListLineupPointsParams) ([]ListLineupPointsRow, error) {
 	rows, err := q.db.Query(ctx, listLineupPoints,
-		arg.FromDay,
+		arg.IncludeGames,
 		arg.WeekStart,
 		arg.ToDay,
 		arg.LeagueID,
+		arg.FromDay,
 	)
 	if err != nil {
 		return nil, err
@@ -823,6 +976,7 @@ func (q *Queries) ListLineupPoints(ctx context.Context, arg ListLineupPointsPara
 			&i.Nickname,
 			&i.Games,
 			&i.Points,
+			&i.GameLines,
 		); err != nil {
 			return nil, err
 		}
@@ -865,7 +1019,7 @@ func (q *Queries) ListPeriodScores(ctx context.Context, seasonID pgtype.UUID) ([
 
 const listPeriods = `-- name: ListPeriods :many
 
-select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand from periods where season_id = $1 order by seq
+select id, season_id, seq, starts_on, ends_on, is_playoff, by_hand, double_games from periods where season_id = $1 order by seq
 `
 
 // ---- head-to-head ----
@@ -886,6 +1040,7 @@ func (q *Queries) ListPeriods(ctx context.Context, seasonID pgtype.UUID) ([]Peri
 			&i.EndsOn,
 			&i.IsPlayoff,
 			&i.ByHand,
+			&i.DoubleGames,
 		); err != nil {
 			return nil, err
 		}
@@ -935,8 +1090,20 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
-       coalesce((select sl.points from stat_lines sl
-                 where sl.game_id = g.id and sl.player_id = p.id), 0)::float8 as points
+       coalesce(sl.points, 0)::float8 as points,
+       coalesce(sl.stats, '{}')::jsonb as stats,
+       p.injury_designation,
+       -- The market's view of the game from his side: his team's implied
+       -- score, the opponent's, and his team's chance of winning; zero without a line.
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_implied else g.away_implied end, 0)::float8 as team_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.away_implied else g.home_implied end, 0)::float8 as opponent_implied,
+       coalesce(case when g.home_team_id = p.pro_team_id then g.home_win else 1 - g.home_win end, 0)::float8 as win_chance,
+       -- Whether a feed has him starting that day: confirmed, expected, or
+       -- other when his team has someone else at his position named.
+       (case when ps.player_id is not null then case when ps.confirmed then 'confirmed' else 'expected' end
+             when exists (select 1 from probable_starters o join players op on op.id = o.player_id
+                          where o.day = g.day and op.pro_team_id = p.pro_team_id and op.positions && p.positions) then 'other'
+             else '' end)::text as starter
 from roster_entries re
 join players p on p.id = re.player_id
 join leagues l on l.id = re.league_id
@@ -946,6 +1113,8 @@ left join games g on g.competition = l.competition
                  and p.pro_team_id in (g.home_team_id, g.away_team_id)
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
+left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
+left join probable_starters ps on ps.player_id = p.id and ps.day = g.day
 left join player_nicknames n on n.franchise_id = re.franchise_id and n.player_id = p.id
 where re.league_id = $3 and re.franchise_id = $4 and re.list = 'main'
 order by p.full_name, p.id, g.starts_at
@@ -959,24 +1128,30 @@ type ListRosterGamesParams struct {
 }
 
 type ListRosterGamesRow struct {
-	PlayerID    pgtype.UUID        `json:"player_id"`
-	FullName    string             `json:"full_name"`
-	Positions   []string           `json:"positions"`
-	HeadshotUrl string             `json:"headshot_url"`
-	Nickname    string             `json:"nickname"`
-	TeamAbbrev  string             `json:"team_abbrev"`
-	Conference  string             `json:"conference"`
-	GameID      pgtype.UUID        `json:"game_id"`
-	GameDay     pgtype.Date        `json:"game_day"`
-	StartsAt    pgtype.Timestamptz `json:"starts_at"`
-	GameStatus  string             `json:"game_status"`
-	Opponent    string             `json:"opponent"`
-	AtHome      bool               `json:"at_home"`
-	Points      float64            `json:"points"`
+	PlayerID          pgtype.UUID        `json:"player_id"`
+	FullName          string             `json:"full_name"`
+	Positions         []string           `json:"positions"`
+	HeadshotUrl       string             `json:"headshot_url"`
+	Nickname          string             `json:"nickname"`
+	TeamAbbrev        string             `json:"team_abbrev"`
+	Conference        string             `json:"conference"`
+	GameID            pgtype.UUID        `json:"game_id"`
+	GameDay           pgtype.Date        `json:"game_day"`
+	StartsAt          pgtype.Timestamptz `json:"starts_at"`
+	GameStatus        string             `json:"game_status"`
+	Opponent          string             `json:"opponent"`
+	AtHome            bool               `json:"at_home"`
+	Points            float64            `json:"points"`
+	Stats             json.RawMessage    `json:"stats"`
+	InjuryDesignation string             `json:"injury_designation"`
+	TeamImplied       float64            `json:"team_implied"`
+	OpponentImplied   float64            `json:"opponent_implied"`
+	WinChance         float64            `json:"win_chance"`
+	Starter           string             `json:"starter"`
 }
 
 // A franchise's main roster in one league with each player's games in a
-// span of days and the fantasy points he scored in each. A player with no
+// span of days, the fantasy points he scored in each and his stat line. A player with no
 // game in the span appears once, with no game.
 func (q *Queries) ListRosterGames(ctx context.Context, arg ListRosterGamesParams) ([]ListRosterGamesRow, error) {
 	rows, err := q.db.Query(ctx, listRosterGames,
@@ -1007,6 +1182,12 @@ func (q *Queries) ListRosterGames(ctx context.Context, arg ListRosterGamesParams
 			&i.Opponent,
 			&i.AtHome,
 			&i.Points,
+			&i.Stats,
+			&i.InjuryDesignation,
+			&i.TeamImplied,
+			&i.OpponentImplied,
+			&i.WinChance,
+			&i.Starter,
 		); err != nil {
 			return nil, err
 		}
@@ -1019,10 +1200,10 @@ func (q *Queries) ListRosterGames(ctx context.Context, arg ListRosterGamesParams
 }
 
 const listSeasonMatchups = `-- name: ListSeasonMatchups :many
-select m.id, m.period_id, m.home_franchise_id, m.away_franchise_id, p.seq, p.is_playoff from matchups m
+select m.id, m.period_id, m.home_franchise_id, m.away_franchise_id, m.bracket, m.bracket_slot, p.seq, p.is_playoff from matchups m
 join periods p on p.id = m.period_id
 where p.season_id = $1
-order by p.seq, m.id
+order by p.seq, m.bracket, m.bracket_slot, m.id
 `
 
 type ListSeasonMatchupsRow struct {
@@ -1030,6 +1211,8 @@ type ListSeasonMatchupsRow struct {
 	PeriodID        pgtype.UUID `json:"period_id"`
 	HomeFranchiseID pgtype.UUID `json:"home_franchise_id"`
 	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
+	Bracket         string      `json:"bracket"`
+	BracketSlot     int32       `json:"bracket_slot"`
 	Seq             int32       `json:"seq"`
 	IsPlayoff       bool        `json:"is_playoff"`
 }
@@ -1048,6 +1231,8 @@ func (q *Queries) ListSeasonMatchups(ctx context.Context, seasonID pgtype.UUID) 
 			&i.PeriodID,
 			&i.HomeFranchiseID,
 			&i.AwayFranchiseID,
+			&i.Bracket,
+			&i.BracketSlot,
 			&i.Seq,
 			&i.IsPlayoff,
 		); err != nil {
@@ -1062,7 +1247,7 @@ func (q *Queries) ListSeasonMatchups(ctx context.Context, seasonID pgtype.UUID) 
 }
 
 const listSeasons = `-- name: ListSeasons :many
-select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id from seasons s
+select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id, s.roster_deadline from seasons s
 join leagues l on l.id = s.league_id
 where l.dynasty_id = $1
 order by s.year desc
@@ -1085,10 +1270,43 @@ func (q *Queries) ListSeasons(ctx context.Context, dynastyID pgtype.UUID) ([]Sea
 			&i.EndsOn,
 			&i.Status,
 			&i.ChampionFranchiseID,
+			&i.RosterDeadline,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnplayedGamesOnDay = `-- name: ListUnplayedGamesOnDay :many
+select provider_id from games
+where competition = $1 and day = $2 and status = 'scheduled' and starts_at < now() - interval '1 day'
+`
+
+type ListUnplayedGamesOnDayParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+// Games on a day that were due to start over a day ago and never did:
+// placeholders the feed may have since dropped.
+func (q *Queries) ListUnplayedGamesOnDay(ctx context.Context, arg ListUnplayedGamesOnDayParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUnplayedGamesOnDay, arg.Competition, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var provider_id string
+		if err := rows.Scan(&provider_id); err != nil {
+			return nil, err
+		}
+		items = append(items, provider_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1267,24 +1485,6 @@ func (q *Queries) ReopenSeason(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
-const runningSeasonEnd = `-- name: RunningSeasonEnd :one
-select ends_on from seasons
-where league_id = $1 and status = 'active' and $2::date between starts_on and ends_on
-`
-
-type RunningSeasonEndParams struct {
-	LeagueID pgtype.UUID `json:"league_id"`
-	Day      pgtype.Date `json:"day"`
-}
-
-// The last day of the season a league is playing on this day, if it is.
-func (q *Queries) RunningSeasonEnd(ctx context.Context, arg RunningSeasonEndParams) (pgtype.Date, error) {
-	row := q.db.QueryRow(ctx, runningSeasonEnd, arg.LeagueID, arg.Day)
-	var ends_on pgtype.Date
-	err := row.Scan(&ends_on)
-	return ends_on, err
-}
-
 const setPeriodByHand = `-- name: SetPeriodByHand :exec
 update periods set by_hand = $1 where id = $2
 `
@@ -1296,6 +1496,20 @@ type SetPeriodByHandParams struct {
 
 func (q *Queries) SetPeriodByHand(ctx context.Context, arg SetPeriodByHandParams) error {
 	_, err := q.db.Exec(ctx, setPeriodByHand, arg.ByHand, arg.ID)
+	return err
+}
+
+const setPeriodDoubleGames = `-- name: SetPeriodDoubleGames :exec
+update periods set double_games = $1 where id = $2
+`
+
+type SetPeriodDoubleGamesParams struct {
+	DoubleGames bool        `json:"double_games"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetPeriodDoubleGames(ctx context.Context, arg SetPeriodDoubleGamesParams) error {
+	_, err := q.db.Exec(ctx, setPeriodDoubleGames, arg.DoubleGames, arg.ID)
 	return err
 }
 

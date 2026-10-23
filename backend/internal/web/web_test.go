@@ -144,7 +144,7 @@ func startServer(t *testing.T, pool *pgxpool.Pool, mailer ...func(context.Contex
 		Drafts:           drafts,
 		Trades:           trade.NewService(pool),
 		Waivers:          waiver.NewService(pool, log),
-		Lineups:          lineup.NewService(pool),
+		Lineups:          lineup.NewService(pool, registry),
 		Scoring:          scoring.NewService(pool),
 		Live:             live.NewService(pool, syncer, registry, events, log),
 		Log:              log,

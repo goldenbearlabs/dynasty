@@ -1,12 +1,14 @@
 <script lang="ts">
 	// One league's waivers: who is on them and until when, the manager's own
 	// claims, and the order claims are settled in.
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { cancelWaiverClaim, claimWaiver, getWaivers, setWaiverOrder, type Waivers } from '#lib/api.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { clockTime } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -132,9 +134,9 @@
 										<div class="player">
 											<Headshot name={player.full_name} src={player.headshot_url} />
 											<div>
-												<strong>{player.full_name}</strong>
+												<strong>{player.full_name} <ProspectRank id={player.player_id} /></strong>
 												<div class="muted small-text">
-													{[player.positions.join('/'), player.team_abbrev].filter(Boolean).join(' · ')}
+													{player.positions.join('/')}{#if player.team_abbrev} · <TeamLogo competition={league.competition} abbrev={player.team_abbrev} size={22} />{/if}
 													· <strong>{left(player.clears_at)}</strong> <span title={clockTime(player.clears_at)}>(until {clockTime(player.clears_at)})</span>
 												</div>
 											</div>

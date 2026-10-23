@@ -36,8 +36,13 @@ type roomMessage struct {
 		AutoPicked         bool    `json:"auto_picked"`
 		SkippedAt          *string `json:"skipped_at"`
 	}
-	OnClock  *string  `json:"on_clock_pick_id"`
-	AutoPick []string `json:"auto_pick_franchise_ids"`
+	OnClock   *string  `json:"on_clock_pick_id"`
+	AutoPick  []string `json:"auto_pick_franchise_ids"`
+	Reactions []struct {
+		PickID      string `json:"pick_id"`
+		FranchiseID string `json:"franchise_id"`
+		Emoji       string
+	}
 }
 
 // next waits for the next message from the room.
@@ -226,6 +231,21 @@ func TestDraftFlow(t *testing.T) {
 		t.Fatalf("after pick 1 = %+v", m)
 	}
 
+	// Managers react to a made pick; a second tap takes the reaction back.
+	reactURL := func(pick int) string { return draftURL + "/picks/" + state.Picks[pick].ID + "/react" }
+	fire := map[string]string{"emoji": "🔥"}
+	cy.want(http.StatusUnprocessableEntity, "POST", reactURL(1), fire, nil) // not made yet
+	cy.want(http.StatusUnprocessableEntity, "POST", reactURL(0), map[string]string{"emoji": ""}, nil)
+	cy.want(http.StatusNoContent, "POST", reactURL(0), fire, nil)
+	if m := live.next(); m.Type != "update" || len(m.Picks) != 0 || len(m.Reactions) != 1 ||
+		m.Reactions[0].PickID != state.Picks[0].ID || m.Reactions[0].FranchiseID != franchise["Cy"] || m.Reactions[0].Emoji != "🔥" {
+		t.Fatalf("after a reaction = %+v", m)
+	}
+	cy.want(http.StatusNoContent, "POST", reactURL(0), fire, nil)
+	if m := live.next(); len(m.Reactions) != 0 {
+		t.Fatalf("after taking a reaction back = %+v", m.Reactions)
+	}
+
 	// Pick 2 is Bob's own. A drafted player cannot be drafted again.
 	bob.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard One"), nil)
 	bob.want(http.StatusNoContent, "POST", pickURL, drafted("Zd Skater One"), nil) // another sport, same draft
@@ -269,15 +289,34 @@ func TestDraftFlow(t *testing.T) {
 		t.Fatalf("make-up pick = %+v", m)
 	}
 	cy.want(http.StatusUnprocessableEntity, "POST", pickURL, drafted("Zd Guard Four"), nil) // nothing left to make up
+	bob.want(http.StatusNoContent, "POST", reactURL(3), map[string]string{"emoji": "😬"}, nil)
+	live.next()
 
 	bob.want(http.StatusForbidden, "POST", adminURL+"/undo", nil, nil)
 	ann.want(http.StatusNoContent, "POST", adminURL+"/undo", nil, nil)
-	if m := live.next(); m.Type != "state" || m.Picks[3].PlayerName != "" {
-		t.Fatalf("after undo = %+v, want pick 4 open again", m.Picks[3])
+	if m := live.next(); m.Type != "state" || m.Picks[3].PlayerName != "" || len(m.Reactions) != 0 {
+		t.Fatalf("after undo = %+v, want pick 4 open again without its reactions", m)
 	}
 	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Skater+Three&draft_id="+created.ID, nil, &page)
 	if page.Total != 1 {
 		t.Error("an undone pick's player did not return to the pool")
+	}
+
+	// The commissioner changes Cy's auto pick: the new player takes its
+	// place and time, the old one returns to the pool, and the clock is
+	// left alone.
+	changeURL := adminURL + "/picks/" + state.Picks[2].ID
+	cy.want(http.StatusForbidden, "PUT", changeURL, drafted("Zd Guard Four"), nil)
+	ann.want(http.StatusUnprocessableEntity, "PUT", changeURL, drafted("Zd Guard One"), nil) // already Bob's
+	ann.want(http.StatusUnprocessableEntity, "PUT", adminURL+"/picks/"+state.Picks[3].ID, drafted("Zd Guard Four"), nil) // not made yet
+	ann.want(http.StatusNoContent, "PUT", changeURL, drafted("Zd Guard Four"), nil)
+	if m := live.next(); m.Type != "update" || len(m.Picks) != 1 || m.Picks[0].PlayerName != "Zd Guard Four" ||
+		m.Picks[0].AutoPicked || *m.OnClock != state.Picks[3].ID {
+		t.Fatalf("after changing pick 3 = %+v", m)
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?q=Zd+Guard+Two&draft_id="+created.ID, nil, &page)
+	if page.Total != 1 {
+		t.Error("a replaced pick's player did not return to the pool")
 	}
 
 	// --- finishing -------------------------------------------------------
@@ -341,8 +380,8 @@ func TestDraftFlow(t *testing.T) {
 	for _, a := range activity {
 		kinds[a.Kind]++
 	}
-	if kinds["pick"] != 8 || kinds["undo_pick"] != 2 {
-		t.Errorf("activity kinds = %v, want 8 picks and 2 undos", kinds)
+	if kinds["pick"] != 9 || kinds["undo_pick"] != 3 {
+		t.Errorf("activity kinds = %v, want 9 picks and 3 undos (two undone, one changed)", kinds)
 	}
 
 	// --- setting the reserve list ----------------------------------------
@@ -365,12 +404,14 @@ func TestDraftFlow(t *testing.T) {
 	}
 	ann.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard Five", "reserve"), nil) // a free agent has no exemption
 
-	// Once the season is under way nobody comes up from reserve, though a
-	// player can still go down; the commissioner can override.
+	// A season opened after its first day still waits for each roster. Once
+	// a manager sets his, nobody moves between the lists, up or down; drops
+	// still go through, and the commissioner can override.
 	today := time.Now().AddDate(0, 0, -1).Format(time.DateOnly)
 	ann.want(http.StatusCreated, "POST", "/api/admin/seasons", map[string]any{
 		"league_id": nbaLeague, "year": 2026, "starts_on": today, "ends_on": time.Now().AddDate(0, 1, 0).Format(time.DateOnly),
 	}, nil)
+	bob.want(http.StatusNoContent, "POST", nbaRoster+"season", reserve("Zd Guard One"), nil)
 	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"set", reserve("Zd Guard Three"), nil)
 	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
 	bob.want(http.StatusNoContent, "POST", nbaRoster+"drop", pick("Zd Guard Three", ""), nil)
@@ -381,6 +422,5 @@ func TestDraftFlow(t *testing.T) {
 	if l := listed(); l["Zd Guard One"] != "main" {
 		t.Fatalf("after the commissioner's override Bob's guard is on %q", l["Zd Guard One"])
 	}
-	bob.want(http.StatusNoContent, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil) // down is still allowed
-	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "main"), nil)
+	bob.want(http.StatusUnprocessableEntity, "POST", nbaRoster+"move", pick("Zd Guard One", "reserve"), nil) // nor down
 }

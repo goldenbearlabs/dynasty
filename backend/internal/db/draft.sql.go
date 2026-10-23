@@ -25,6 +25,23 @@ func (q *Queries) AddDraftLeague(ctx context.Context, arg AddDraftLeagueParams) 
 	return err
 }
 
+const addDraftReaction = `-- name: AddDraftReaction :exec
+insert into draft_pick_reactions (pick_id, franchise_id, emoji)
+values ($1, $2, $3)
+on conflict do nothing
+`
+
+type AddDraftReactionParams struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) AddDraftReaction(ctx context.Context, arg AddDraftReactionParams) error {
+	_, err := q.db.Exec(ctx, addDraftReaction, arg.PickID, arg.FranchiseID, arg.Emoji)
+	return err
+}
+
 const clearDraftAutopick = `-- name: ClearDraftAutopick :exec
 delete from draft_autopick where draft_id = $1 and franchise_id = $2
 `
@@ -60,6 +77,16 @@ type ClearDraftQueueParams struct {
 
 func (q *Queries) ClearDraftQueue(ctx context.Context, arg ClearDraftQueueParams) error {
 	_, err := q.db.Exec(ctx, clearDraftQueue, arg.DraftID, arg.FranchiseID)
+	return err
+}
+
+const clearDraftReactions = `-- name: ClearDraftReactions :exec
+delete from draft_pick_reactions where pick_id = $1
+`
+
+// A pick that is undone or changed starts over without reactions.
+func (q *Queries) ClearDraftReactions(ctx context.Context, pickID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearDraftReactions, pickID)
 	return err
 }
 
@@ -200,22 +227,23 @@ func (q *Queries) InsertDraftPick(ctx context.Context, arg InsertDraftPickParams
 
 const insertDraftQueue = `-- name: InsertDraftQueue :exec
 insert into draft_queue (draft_id, franchise_id, player_id, rank)
-values ($1, $2, $3, $4)
+select $1, $2, p.id, $3
+from players p where p.id = $4 and p.pool_eligible
 `
 
 type InsertDraftQueueParams struct {
 	DraftID     pgtype.UUID `json:"draft_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`
-	PlayerID    pgtype.UUID `json:"player_id"`
 	Rank        int32       `json:"rank"`
+	PlayerID    pgtype.UUID `json:"player_id"`
 }
 
 func (q *Queries) InsertDraftQueue(ctx context.Context, arg InsertDraftQueueParams) error {
 	_, err := q.db.Exec(ctx, insertDraftQueue,
 		arg.DraftID,
 		arg.FranchiseID,
-		arg.PlayerID,
 		arg.Rank,
+		arg.PlayerID,
 	)
 	return err
 }
@@ -270,7 +298,7 @@ join (select ps.player_id, sum(ps.points) as points
       where ps.competition = $1 and ps.league = '' and ps.points is not null
         and ps.year = (select max(s.year) from stat_seasons s where s.competition = $1)
       group by ps.player_id) scored on scored.player_id = p.id
-where p.competition = $1
+where p.pool_eligible and p.competition = $1
   and not exists (select 1 from roster_entries r where r.player_id = p.id)
 order by scored.points desc, p.id
 limit $2
@@ -366,9 +394,14 @@ select k.id, k.draft_id, k.round, k.position, k.original_franchise_id, k.current
        coalesce(p.full_name, '')::text    as player_name,
        coalesce(p.positions, '{}')::text[] as player_positions,
        coalesce(p.headshot_url, '')::text as player_headshot,
-       coalesce(l.competition, '')::text  as competition
+       coalesce(l.competition, '')::text  as competition,
+       -- For the draft's stats: how old he was, his year in college, his team.
+       p.birth_date                       as player_birth_date,
+       coalesce(p.class, '')::text        as player_class,
+       coalesce(t.abbrev, '')::text       as player_team
 from draft_picks k
 left join players p on p.id = k.player_id
+left join pro_teams t on t.id = p.pro_team_id
 left join leagues l on l.id = k.league_id
 where k.draft_id = $1
 order by k.position
@@ -391,6 +424,9 @@ type ListDraftPicksRow struct {
 	PlayerPositions     []string           `json:"player_positions"`
 	PlayerHeadshot      string             `json:"player_headshot"`
 	Competition         string             `json:"competition"`
+	PlayerBirthDate     pgtype.Date        `json:"player_birth_date"`
+	PlayerClass         string             `json:"player_class"`
+	PlayerTeam          string             `json:"player_team"`
 }
 
 func (q *Queries) ListDraftPicks(ctx context.Context, draftID pgtype.UUID) ([]ListDraftPicksRow, error) {
@@ -419,6 +455,9 @@ func (q *Queries) ListDraftPicks(ctx context.Context, draftID pgtype.UUID) ([]Li
 			&i.PlayerPositions,
 			&i.PlayerHeadshot,
 			&i.Competition,
+			&i.PlayerBirthDate,
+			&i.PlayerClass,
+			&i.PlayerTeam,
 		); err != nil {
 			return nil, err
 		}
@@ -436,7 +475,7 @@ select q.player_id, q.rank, p.full_name, p.positions, p.competition, p.status, p
 from draft_queue q
 join players p on p.id = q.player_id
 left join pro_teams t on t.id = p.pro_team_id
-where q.draft_id = $1 and q.franchise_id = $2
+where p.pool_eligible and q.draft_id = $1 and q.franchise_id = $2
 order by q.rank
 `
 
@@ -475,6 +514,40 @@ func (q *Queries) ListDraftQueue(ctx context.Context, arg ListDraftQueueParams) 
 			&i.HeadshotUrl,
 			&i.TeamAbbrev,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDraftReactions = `-- name: ListDraftReactions :many
+select r.pick_id, r.franchise_id, r.emoji
+from draft_pick_reactions r
+join draft_picks k on k.id = r.pick_id
+where k.draft_id = $1
+order by r.created_at, r.franchise_id
+`
+
+type ListDraftReactionsRow struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) ListDraftReactions(ctx context.Context, draftID pgtype.UUID) ([]ListDraftReactionsRow, error) {
+	rows, err := q.db.Query(ctx, listDraftReactions, draftID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDraftReactionsRow{}
+	for rows.Next() {
+		var i ListDraftReactionsRow
+		if err := rows.Scan(&i.PickID, &i.FranchiseID, &i.Emoji); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -601,7 +674,7 @@ const makeDraftPick = `-- name: MakeDraftPick :exec
 update draft_picks set
   player_id   = $1,
   league_id   = $2,
-  picked_at   = now(),
+  picked_at   = coalesce(picked_at, now()), -- a changed pick keeps its time
   auto_picked = $3
 where id = $4
 `
@@ -641,6 +714,25 @@ update draft_picks set passed_at = now() where id = $1
 func (q *Queries) PassDraftPick(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, passDraftPick, id)
 	return err
+}
+
+const removeDraftReaction = `-- name: RemoveDraftReaction :execrows
+delete from draft_pick_reactions
+where pick_id = $1 and franchise_id = $2 and emoji = $3
+`
+
+type RemoveDraftReactionParams struct {
+	PickID      pgtype.UUID `json:"pick_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	Emoji       string      `json:"emoji"`
+}
+
+func (q *Queries) RemoveDraftReaction(ctx context.Context, arg RemoveDraftReactionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeDraftReaction, arg.PickID, arg.FranchiseID, arg.Emoji)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeFromDraftQueues = `-- name: RemoveFromDraftQueues :exec

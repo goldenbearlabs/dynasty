@@ -1,5 +1,9 @@
 <script lang="ts">
+ import Dropdown from '#lib/ui/Dropdown.svelte';
+ import { snapshot } from '$app/navigation';
+ import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
  import WatchStar from "#lib/WatchStar.svelte";
+ import ProspectRank from "#lib/ui/ProspectRank.svelte";
  import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
  import PlayerSearch from '#lib/PlayerSearch.svelte';
  import { onMount, untrack } from 'svelte';
@@ -143,6 +147,105 @@
    .finally(() => { if (active) loading = false; });
   return () => active = false;
  });
+	snapshot({
+		id: 'research-workspace',
+		capture: () =>
+			$state.snapshot({
+				selectedId,
+				pools,
+				addCompetition,
+				addSeason,
+				workspace,
+				view,
+				rawMode,
+				competition,
+				status,
+				search,
+				query,
+				selectedPositions,
+				team,
+				owner,
+				minGames,
+				maxGames,
+				minAge,
+				maxAge,
+				minRate,
+				maxRate,
+				minIndex,
+				maxIndex,
+				minPAR,
+				statKey,
+				minStat,
+				maxStat,
+				qualifiedOnly,
+				missingOnly,
+				aboveReplacement,
+				benchmarkGames,
+				pitcherWorkloadPercent,
+				replacementRank,
+				sort,
+				ascending,
+				page,
+				result,
+				chartKind,
+				chartX,
+				chartY,
+				chartGroup,
+				chartAggregation,
+				chartBins,
+				chartTitle,
+				previousFilters,
+				scroll: capturePageScroll(),
+			}),
+		restore: (saved) => {
+			previousFilters = saved.previousFilters;
+			selectedId = saved.selectedId;
+			pools = saved.pools;
+			addCompetition = saved.addCompetition;
+			addSeason = saved.addSeason;
+			workspace = saved.workspace;
+			view = saved.view;
+			rawMode = saved.rawMode;
+			competition = saved.competition;
+			status = saved.status;
+			search = saved.search;
+			query = saved.query;
+			selectedPositions = saved.selectedPositions;
+			team = saved.team;
+			owner = saved.owner;
+			minGames = saved.minGames;
+			maxGames = saved.maxGames;
+			minAge = saved.minAge;
+			maxAge = saved.maxAge;
+			minRate = saved.minRate;
+			maxRate = saved.maxRate;
+			minIndex = saved.minIndex;
+			maxIndex = saved.maxIndex;
+			minPAR = saved.minPAR;
+			statKey = saved.statKey;
+			minStat = saved.minStat;
+			maxStat = saved.maxStat;
+			qualifiedOnly = saved.qualifiedOnly;
+			missingOnly = saved.missingOnly;
+			aboveReplacement = saved.aboveReplacement;
+			benchmarkGames = saved.benchmarkGames;
+			pitcherWorkloadPercent = saved.pitcherWorkloadPercent;
+			replacementRank = saved.replacementRank;
+			sort = saved.sort;
+			ascending = saved.ascending;
+			page = saved.page;
+			result = saved.result;
+			chartKind = saved.chartKind;
+			chartX = saved.chartX;
+			chartY = saved.chartY;
+			chartGroup = saved.chartGroup;
+			chartAggregation = saved.chartAggregation;
+			chartBins = saved.chartBins;
+			chartTitle = saved.chartTitle;
+			loading = !saved.result;
+			restorePageScroll(saved.scroll);
+		},
+	});
 </script>
 
 <svelte:head><title>Research lab</title></svelte:head>
@@ -180,7 +283,7 @@
    <div class="row filters">
     <label class="search"><Icon name="search" size={16} /><input type="search" placeholder="Find a player…" aria-label="Search players" bind:value={search} /></label>
     <label class="control"><span>League</span><select bind:value={competition}><option value="">All selected leagues</option>{#each datasetCompetitions as c (c.key)}<option value={c.key}>{c.name}</option>{/each}</select></label>
-    <details class="position-picker"><summary>Positions {selectedPositions.length ? `(${selectedPositions.length})` : '· any'}</summary><div class="position-options">{#each positions as pos (pos)}<label class="check"><input type="checkbox" value={pos} bind:group={selectedPositions} />{pos}</label>{/each}</div></details>
+    <Dropdown class="position-picker" align="left" title="Positions" label="Positions {selectedPositions.length ? `(${selectedPositions.length})` : '· any'}"><div class="position-options">{#each positions as pos (pos)}<label class="check"><input type="checkbox" value={pos} bind:group={selectedPositions} />{pos}</label>{/each}</div></Dropdown>
     <label class="control"><span>Roster</span><select bind:value={owner}><option value="">Any owner</option><option value="available">Available players</option><option value="rostered">Rostered players</option>{#each data.dynasty?.franchises ?? [] as f (f.id)}<option value={f.slug}>{f.name}</option>{/each}</select></label>
     <label class="control numeric"><span>Min games</span><input type="number" min="0" max="10000" placeholder="Any" bind:value={minGames} /></label>
    </div>
@@ -239,7 +342,7 @@
     <ColumnHeader label="Roster owner" help="Current fantasy owner in the competition, rather than historical ownership in this season." active={sort==='owner'} {ascending} onsort={() => sortBy('owner')} />
    </tr></thead><tbody>
     {#each result.players as player (player.row_key)}<tr class:selected={selectedId===player.id}>
-     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><WatchStar playerID={player.id} playerName={player.full_name} /><InjuryBadge designation={player.injury_designation} /><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
+     <td class="identity"><div class="player"><Headshot name={player.full_name} src={player.headshot_url} size={32} /><div><a class="player-name" href="/player/{player.id}">{player.full_name}</a><WatchStar playerID={player.id} playerName={player.full_name} /><ProspectRank id={player.id} /><InjuryBadge designation={player.injury_designation} /><button class="preview-link" onclick={() => selectedId=player.id} aria-label="Quick look at {player.full_name}">Quick look</button><div class="small-text muted">{#if !player.has_scoring_stats}<span>No scoring stats</span>{:else if !player.qualified}<span title="Minimum {player.benchmark_minimum_games} appearances and {formatValue(player.benchmark_minimum_innings)} innings">{player.qualification_note || `Small sample · ${player.games} games`}</span>{/if}{#if player.status!=='active'} · {player.status}{/if}</div></div></div></td>
      <td><div class="row tight"><SportBadge sport={player.competition} /><strong>{player.season || 'No season'}</strong></div>{#if player.scoring_source==='defaults'}<small class="muted">Sport default scoring</small>{/if}</td>
      <td>{player.positions.join('/') || '—'}</td><td class="muted">{player.team || '—'}</td><td class="num">{age(player.birth_date) || '—'}</td>
      <td class="num">{player.season ? formatValue(player.games) : '—'}</td><td class="num">{player.has_scoring_stats ? formatValue(player.points) : '—'}</td><td class="num">{player.has_scoring_stats && player.games>0 ? formatValue(player.points_per_game) : '—'}</td>
@@ -293,9 +396,10 @@
  .search { flex: 1 1 14rem; display: flex; align-items: center; gap: 0.5rem; padding-left: 0.7rem; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-small); color: var(--ink-faint); }
  .search:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
  .search input { min-width: 0; flex: 1; border: 0; background: transparent; padding-left: 0; outline: none; }
- .position-picker { position: relative; align-self: flex-end; }
- .position-picker summary { padding: 0.5rem 0.65rem; border: 1px solid var(--rule-strong); border-radius: var(--radius-small); cursor: pointer; font-size: 0.83rem; background: var(--surface); }
- .position-options { position: absolute; z-index: 10; top: calc(100% + 0.4rem); left: 0; min-width: 13rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; padding: 0.8rem; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-small); box-shadow: 0 8px 24px #0002; }
+ :global(.position-picker) { align-self: flex-end; }
+ :global(.position-picker > summary) { padding: 0.5rem 0.65rem; border: 1px solid var(--rule-strong); border-radius: var(--radius-small); cursor: pointer; font-size: 0.83rem; background: var(--surface); }
+ .position-options { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+ @media (max-width: 640px) { :global(.position-picker) { flex-basis: 100%; } }
  .more-filters { border-top: 1px solid var(--rule); padding-top: 0.7rem; }
  .more-filters summary, .method-guide summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; }
  .expanded-filters, .chart-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(10rem,1fr)); gap: 0.8rem; }
@@ -320,5 +424,13 @@
  .guide { margin-top: 1rem; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.6; }
  .history { max-width: 58rem; }
  .history-heading { padding: 0.8rem; border-bottom: 1px solid var(--rule); }
- @media (max-width:640px) { .pool-builder .control { flex: 1; } .more-filters summary .muted { display: none; } .filters .control { flex: 1; } }
+ @media (max-width:640px) {
+  .pool-builder .control { flex: 1; } .more-filters summary .muted { display: none; } .filters .control { flex: 1; }
+  /* The pinned player column gives way to the figures: no photo, and a name that wraps. */
+  .identity { min-width: 0; padding: 0.45rem 0.5rem; white-space: normal; }
+  .player { width: 7.5rem; }
+  .player :global(.headshot) { display: none; }
+  .player-name { white-space: normal; font-size: 0.8rem; line-height: 1.2; }
+  .preview-link { display: block; padding: 0.15rem 0; }
+ }
 </style>

@@ -114,7 +114,7 @@ select $1, p.id, $2
 from players p
 join rankings r on r.id = $1
 left join leagues l on l.id = r.league_id
-where p.id = $3 and (
+where p.pool_eligible and p.id = $3 and (
  p.competition = l.competition or (r.league_id is null and exists (
   select 1 from draft_leagues dl join leagues covered on covered.id = dl.league_id
   where dl.draft_id = r.draft_id and covered.competition = p.competition
@@ -147,7 +147,7 @@ join players p on p.id = rp.player_id
 left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries re on re.player_id = p.id and (re.league_id = r.league_id or (r.league_id is null and re.league_id in (select league_id from draft_leagues where draft_id = r.draft_id)))
 left join franchises f on f.id = re.franchise_id
-where rp.ranking_id = $1
+where p.pool_eligible and rp.ranking_id = $1
 order by rp.rank
 `
 

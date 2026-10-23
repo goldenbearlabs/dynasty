@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One trade: what each side receives, where it stands, and the buttons
 	// this viewer is allowed to press.
-	import { answerTrade, ruleOnTrade, type Franchise, type Session, type Trade } from '#lib/api.ts';
+	import { answerTrade, ruleOnTrade, type Franchise, type Session, type Trade, type TradeDrop } from '#lib/api.ts';
+	import TradeDrops from '#lib/TradeDrops.svelte';
 	import TradeAsset from '#lib/TradeAsset.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import { ago } from '#lib/ui/time.ts';
@@ -16,6 +17,18 @@
 	};
 	let { trade, franchises, me, onchange }: Props = $props();
 
+	let choosing = $state(false);
+	let drops = $state<TradeDrop[]>([]);
+	let ready = $state(false);
+	let busy = $state(false);
+	const offerItems = $derived(trade.items.map(i => ({ from_franchise_id: i.from_franchise, to_franchise_id: i.to_franchise, ...(i.player_id ? { player_id: i.player_id, league_id: i.league_id! } : { draft_pick_id: i.draft_pick_id! }) })));
+	function choose() { drops = (trade.drops ?? []).filter(d => d.franchise_id === me?.id); choosing = true; }
+	async function accept() {
+		busy = true;
+		try { await answerTrade(trade.id, mine?.accepted_at ? 'drops' : 'accept', drops); choosing = false; toast.good(mine?.accepted_at ? 'Drops saved.' : 'Trade accepted.'); onchange(); }
+		catch (e) { toast.error(e); }
+		finally { busy = false; }
+	}
 	const name = (id: string | null) => franchises.find((f) => f.id === id)?.name ?? '';
 	const mine = $derived(trade.parties.find((p) => p.franchise_id === me?.id));
 	const waitingOn = $derived(trade.parties.filter((p) => !p.accepted_at).map((p) => name(p.franchise_id)));
@@ -37,7 +50,7 @@
 		}, toast.error);
 
 	function reverse() {
-		if (confirm('Reverse this trade? Every player and pick goes back to where it came from.')) {
+		if (confirm('Reverse this trade? Every traded player and pick goes back to where it came from. Players released to make room are not restored.')) {
 			run(ruleOnTrade(trade.id, 'reverse'), 'Trade reversed.');
 		}
 	}
@@ -84,12 +97,22 @@
 
 	{#if trade.note}<p class="note">“{trade.note}”</p>{/if}
 
+	{#if trade.drops?.length}
+		<div class="note small-text">{#each trade.drops as drop (drop.league_id + drop.player_id)}<p>{name(drop.franchise_id)} {trade.status === 'executed' || trade.status === 'reversed' ? 'released' : open ? 'will release if completed:' : 'had selected for release (not executed):'} {drop.name} ({drop.list}).</p>{/each}</div>
+	{/if}
+	{#if choosing && me && open}
+		<div class="note stack">
+			<TradeDrops items={offerItems} {franchises} owner={me.id} bind:drops onchange={value => ready = value} />
+			<div class="row"><button class="primary" disabled={!ready || busy} onclick={accept}>{mine?.accepted_at ? 'Save drops' : 'Confirm acceptance'}</button><button disabled={busy} onclick={() => choosing = false}>Cancel</button></div>
+		</div>
+	{/if}
 	{#if me && (open || trade.status === 'executed')}
 		<footer class="row">
 			{#if trade.status === 'proposed' && mine && !mine.accepted_at}
-				<button class="primary" onclick={() => run(answerTrade(trade.id, 'accept'), 'Trade accepted.')}>Accept</button>
+				<button class="primary" onclick={choose}>Accept</button>
 				<button onclick={() => run(answerTrade(trade.id, 'reject'), 'Offer declined.')}>Decline</button>
 			{/if}
+			{#if open && mine?.accepted_at}<button onclick={choose}>Review drops</button>{/if}
 			{#if open && trade.proposed_by === me.id}
 				<button class="quiet" onclick={() => run(answerTrade(trade.id, 'cancel'), 'Offer withdrawn.')}>Withdraw offer</button>
 			{/if}

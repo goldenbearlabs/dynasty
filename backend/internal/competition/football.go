@@ -61,9 +61,10 @@ func nfl(client *ingest.Client) Competition {
 		Source:   source,
 		Games:    source,
 		Seasons:  source,
-		// Drafted rookies arrive through rosters; this adds the class to come.
+		// College players enter the pool only after the professional draft.
 		Prospects: espn.NewDraft(client, espn.Draft{
 			Path: "football/leagues/nfl", Provider: "espn_football", Month: time.April, Positions: footballPositions,
+			Classes: 3, PicksOnly: true,
 		}),
 	}
 }

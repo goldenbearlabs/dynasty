@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -153,6 +154,17 @@ func (s *Server) playerSeasons(w http.ResponseWriter, r *http.Request) {
 
 // listCompetitions returns the registry: each sport's positions, stats and
 // default rules, plus how many players are in its pool.
+// listTeams is every real team with its logo, so the app can show logos
+// in place of bare abbreviations.
+func (s *Server) listTeams(w http.ResponseWriter, r *http.Request) {
+	teams, err := s.Queries.ListProTeams(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, teams)
+}
+
 func (s *Server) listCompetitions(w http.ResponseWriter, r *http.Request) {
 	counts, err := s.Queries.CountPlayersByCompetition(r.Context())
 	if err != nil {
@@ -190,6 +202,20 @@ func (s *Server) listStatSeasons(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, seasons)
 }
 
+// listProspectRankings is every ranked prospect, best first: a short list
+// the pages keep to tag a prospect wherever his name appears.
+func (s *Server) listProspectRankings(w http.ResponseWriter, r *http.Request) {
+	ranked, err := s.Queries.ListProspectRankings(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if ranked == nil {
+		ranked = []db.ListProspectRankingsRow{}
+	}
+	writeJSON(w, http.StatusOK, ranked)
+}
+
 func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	page, _ := strconv.Atoi(query.Get("page"))
@@ -209,8 +235,12 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		return pgtype.Int4{Int32: int32(n), Valid: err == nil && n >= 0}
 	}
 	position, minAge, maxAge := query.Get("position"), age("min_age"), age("max_age")
+	rankedOnly := query.Get("ranked_only") == "true" // only the MLB Pipeline Top 100
 
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
+		RankedOnly:  rankedOnly,
+		Ownership:   splitPlayerFilter(query.Get("ownership")),
+		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
 		Status:      status,
 		Search:      search,
@@ -219,7 +249,10 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		MaxAge:      maxAge,
 		AvailableIn: availableIn,
 		DraftID:     draftID,
-		SortBy:      query.Get("sort"),         // "points" or "index": highest first; otherwise by name
+		Ascending:   query.Get("ascending") == "true" || (query.Get("ascending") == "" && query.Get("sort") == "name"),
+		StatKey:     query.Get("stat_key"),
+		PerGame:     query.Get("per_game") == "true",
+		SortBy:      query.Get("sort"),         // points/index: highest first; prospect_rank: lowest first; otherwise by name
 		SeasonBack:  int32(max(seasonBack, 0)), // 0 is each sport's latest season, 1 the one before
 		PageSize:    playersPerPage,
 		PageOffset:  int32((page - 1) * playersPerPage),
@@ -229,6 +262,9 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total, err := s.Queries.CountPlayers(r.Context(), db.CountPlayersParams{
+		RankedOnly:  rankedOnly,
+		Ownership:   splitPlayerFilter(query.Get("ownership")),
+		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
 		Status:      status,
 		Search:      search,
@@ -248,4 +284,12 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		"page":     page,
 		"per_page": playersPerPage,
 	})
+}
+
+// Empty lists preserve the unfiltered behavior used by drafts and search.
+func splitPlayerFilter(value string) []string {
+	if value == "" {
+		return []string{}
+	}
+	return strings.Split(value, ",")
 }

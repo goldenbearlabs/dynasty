@@ -1,5 +1,7 @@
 <script lang="ts">
+ import TeamLogo from '#lib/ui/TeamLogo.svelte';
  import WatchStar from "#lib/WatchStar.svelte";
+ import ProspectRank from "#lib/ui/ProspectRank.svelte";
 	import {
 		getPlayerResearch,
 		getPlayerSeasons,
@@ -113,7 +115,7 @@
 				<Headshot name={player.full_name} src={player.headshot_url} size={48} />
 				<div>
 					<SportBadge sport={player.competition} />
-					<div class="row"><h3>{player.full_name}</h3><WatchStar playerID={player.id} playerName={player.full_name} /></div>
+					<div class="row"><h3>{player.full_name}</h3><WatchStar playerID={player.id} playerName={player.full_name} /><ProspectRank id={player.id} /></div>
 					<p>{player.positions.join('/')} · {player.team_name || 'No current team'}</p>
 				</div>
 			</header>
@@ -205,7 +207,7 @@
 											target="_blank"
 											rel="noopener noreferrer"
 											title="Open box score in a new tab">{dayLabel(game.day)}</a
-										><small>{game.away_abbrev} @ {game.home_abbrev}</small></td
+										><small><TeamLogo competition={result.player.competition} abbrev={game.away_abbrev} size={22} /> @ <TeamLogo competition={result.player.competition} abbrev={game.home_abbrev} size={22} /></small></td
 									>{#each stats as stat (stat.key)}<td class="num">{game.stats[stat.key] ?? '—'}</td
 										>{/each}<td class="num total">{points(game.points)}</td></tr
 								>{/each}

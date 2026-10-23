@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -131,7 +132,49 @@ func (s *Server) getMatchup(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, matchup)
+	projected, err := s.projectMatchup(r.Context(), matchup)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, projected)
+}
+
+// projectedMatchup is a matchup with each side's projected final score:
+// its points so far and what its starters are projected to add. The
+// projections are absent once the matchup is final.
+type projectedMatchup struct {
+	scoring.MatchupDetail
+	HomeProjected *float64 `json:"home_projected"`
+	AwayProjected *float64 `json:"away_projected"`
+}
+
+func (s *Server) projectMatchup(ctx context.Context, m scoring.MatchupDetail) (projectedMatchup, error) {
+	out := projectedMatchup{MatchupDetail: m}
+	if m.Final {
+		return out, nil
+	}
+	season, err := s.Queries.GetSeason(ctx, m.Period.SeasonID)
+	if err != nil {
+		return out, err
+	}
+	league, err := s.Queries.GetLeague(ctx, season.LeagueID)
+	if err != nil {
+		return out, err
+	}
+	side := func(franchise pgtype.UUID, points float64) (*float64, error) {
+		if !franchise.Valid {
+			return nil, nil // a bye
+		}
+		ahead, err := s.Lineups.Projected(ctx, league, franchise, m.Period.StartsOn.Time, m.Period.EndsOn.Time)
+		total := points + ahead
+		return &total, err
+	}
+	if out.HomeProjected, err = side(m.Home, m.HomePoints); err != nil {
+		return out, err
+	}
+	out.AwayProjected, err = side(m.Away, m.AwayPoints)
+	return out, err
 }
 
 // setMatchups replaces a period's matchups with the commissioner's own.
@@ -210,4 +253,42 @@ func (s *Server) carryOver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.done(w, r, s.Roster.CarryOver(r.Context(), league, body.PlayerID))
+}
+
+// setSchedule saves the commissioner's dates and matchups for future periods.
+func (s *Server) setSchedule(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Periods []scoring.CustomPeriod `json:"periods"`
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	s.done(w, r, s.Scoring.SetSchedule(r.Context(), id, body.Periods))
+}
+
+// getGameCounts supplies a compact calendar for previewing game totals
+// while a commissioner adjusts unsaved matchup dates. It works for every sport.
+func (s *Server) getGameCounts(w http.ResponseWriter, r *http.Request) {
+	league, err := s.leagueFromPath(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	from, err1 := sportsday.Parse(r.URL.Query().Get("starts_on"))
+	to, err2 := sportsday.Parse(r.URL.Query().Get("ends_on"))
+	if err1 != nil || err2 != nil || to.Before(from) || to.After(from.AddDate(3, 0, 0)) {
+		s.fail(w, r, problem.New("Choose valid first and last days, no more than three years apart."))
+		return
+	}
+	counts, err := s.Queries.ListGameCounts(r.Context(), league.Competition, sportsday.Date(from), sportsday.Date(to))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, counts)
 }

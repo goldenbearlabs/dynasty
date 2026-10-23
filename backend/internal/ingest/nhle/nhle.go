@@ -166,6 +166,7 @@ func (s *Source) draftClass(ctx context.Context, year int) ([]ingest.Player, err
 			Position    string `json:"position"`
 			BirthDate   string `json:"birthDate"`
 			Round       int    `json:"roundNumber"`
+			InRound     int    `json:"pickInRound"`
 			Overall     int    `json:"overallPickNumber"`
 			Team        string `json:"triCode"`
 			AmateurClub string `json:"amateurClubName"`
@@ -192,6 +193,7 @@ func (s *Source) draftClass(ctx context.Context, year int) ([]ingest.Player, err
 			Note: fmt.Sprintf("%d draft, round %d, #%d overall to %s. %s",
 				year, pick.Round, pick.Overall, pick.Team, club(pick.AmateurClub, pick.League)),
 			Aliases: []ingest.ExternalID{{Provider: rankingProvider, ProviderID: rankingKey(pick.FirstName, pick.LastName, birth)}},
+			Draft:   &ingest.Draft{Year: year, Round: pick.Round, Pick: pick.InRound, Overall: pick.Overall},
 		})
 	}
 	return players, nil
@@ -314,7 +316,8 @@ func (s *Source) Games(ctx context.Context, day time.Time) ([]ingest.Game, error
 	}
 	var games []ingest.Game
 	for _, g := range res.Games {
-		if g.GameType != 2 {
+		if g.GameType != 2 { // preseason and playoff games
+			games = append(games, ingest.Game{ProviderID: strconv.Itoa(g.ID), NonRegular: true})
 			continue
 		}
 		starts, err := time.Parse(time.RFC3339, g.StartTimeUTC)
@@ -538,6 +541,18 @@ func (s *Source) SeasonStats(ctx context.Context, year int) ([]ingest.SeasonLine
 		lines = append(lines, line(g.PlayerID, g.Team, g.GamesPlayed, map[string]float64{
 			"saves": g.Saves, "goals_against": g.GoalsAgainst, "goalie_wins": g.Wins, "shutouts": g.Shutouts,
 		}))
+	}
+	if len(lines) > 0 {
+		players, err := s.seasonPlayers(ctx, year)
+		if err != nil {
+			return nil, err
+		}
+		for i := range lines {
+			if p, ok := players[lines[i].ProviderID]; ok {
+				p.Note = fmt.Sprintf("NHL history: %s (%s)", lines[i].Label, lines[i].Team)
+				lines[i].Player = &p
+			}
+		}
 	}
 	return lines, nil
 }

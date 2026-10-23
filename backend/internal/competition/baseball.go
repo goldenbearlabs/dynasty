@@ -43,6 +43,12 @@ func mlb(client *ingest.Client) Competition {
 			{"pit_sv", "Saves"}, {"pit_hld", "Holds"}, {"pit_gs", "Games started"}, {"pit_er", "Earned runs allowed"}, {"pit_h", "Hits allowed"},
 			{"pit_bb", "Walks allowed"},
 		},
+		// A pitcher faces the other side's hitters.
+		Follows: map[string]string{
+			"pit_er": "opponent", "pit_h": "opponent", "pit_bb": "opponent",
+			"pit_w": "win", "pit_sv": "win", "pit_hld": "win", "pit_l": "loss",
+			"pit_ip": "none", "pit_so": "none", "pit_games": "none", "pit_gs": "none",
+		},
 		Defaults:  rules,
 		Season:    [2]string{"03-26", "09-27"},
 		Source:    source,

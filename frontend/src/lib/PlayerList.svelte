@@ -1,10 +1,24 @@
 <script lang="ts">
- import WatchStar from "#lib/WatchStar.svelte";
- import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
+	import ProspectRank from '#lib/ui/ProspectRank.svelte';
+	import { draftTag, draftTitle } from '#lib/draftSlot.ts';
+	import Dropdown from '#lib/ui/Dropdown.svelte';
+	import TeamLogo from '#lib/ui/TeamLogo.svelte';
+	import WatchStar from '#lib/WatchStar.svelte';
+	import InjuryBadge from '#lib/ui/InjuryBadge.svelte';
 	// A searchable, paged list of players. Used wherever players are picked
 	// from: the player browser, free agency and the draft room.
+	import { snapshot } from '$app/navigation';
+	import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
 	import { untrack, type Snippet } from 'svelte';
-	import { getPlayers, getStatSeasons, type Competition, type Player, type PlayerPage, type StatSeason } from '#lib/api.ts';
+	import {
+		getPlayers,
+		getStatSeasons,
+		type Competition,
+		type Franchise,
+		type Player,
+		type PlayerPage,
+		type StatSeason,
+	} from '#lib/api.ts';
 	import Empty from '#lib/ui/Empty.svelte';
 	import Headshot from '#lib/ui/Headshot.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
@@ -12,6 +26,8 @@
 	import { age } from '#lib/ui/time.ts';
 
 	type Props = {
+		workspace?: boolean;
+		franchises?: Franchise[];
 		/** Show one sport, or every sport when empty. */
 		competition?: string;
 		/**
@@ -19,6 +35,8 @@
 		 * when every sport is shown, a choice of one of them.
 		 */
 		competitions?: Competition[];
+		/** Leave the choice of sport to the caller, e.g. to its own tabs. */
+		noLeaguePicker?: boolean;
 		/** Offer an "available only" switch for this league. */
 		leagueId?: string;
 		/** Show only players this draft can still pick. */
@@ -44,8 +62,11 @@
 		selectedId?: string;
 	};
 	let {
+		workspace = false,
+		franchises = [],
 		competition: only = '',
 		competitions = [],
+		noLeaguePicker = false,
 		leagueId,
 		draftId,
 		action,
@@ -54,40 +75,100 @@
 		statColumns = false,
 		compact = false,
 		onselect,
-		selectedId
+		selectedId,
 	}: Props = $props();
 
 	// The sport shown: the one asked for, or the one picked from the filters.
 	let picked = $state('');
 	const competition = $derived(only || picked);
-	const positions = $derived(competitions.find((c) => c.key === competition)?.positions ?? []);
-	let position = $state('');
+	// One sport offers its own positions; several sports offer all of theirs.
+	const positions = $derived(
+		competition
+			? (competitions.find((c) => c.key === competition)?.positions ?? [])
+			: [...new Set(competitions.flatMap((c) => c.positions))].sort(),
+	);
+	let position = $state<string[]>([]); // any of these; none is any position
 	let minAge = $state<number | null>(null);
 	let maxAge = $state<number | null>(null);
 
 	let status = $state('');
+	// MLB prospects only: narrow to those on MLB.com's Top 100.
+	let topHundred = $state(false);
+	const rankable = $derived(competition === 'mlb' && status === 'prospect');
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
 	let availableOnly = $state(false);
-	const usual = () => (!byPoints ? 'name' : competition ? 'points' : 'index');
+	let ownership = $state<string[]>(untrack(() => (workspace ? ['available'] : [])));
+	let owners = $state<string[]>([]);
+	let perGame = $state(false);
+	const statKeys = $derived(
+		competition ? (competitions.find((c) => c.key === competition)?.stats ?? []) : [],
+	);
+	let chosenStats = $state<string[] | null>(null);
+	let mobileStats = $state(false);
+	let moreFilters = $state(false);
+	const displayStats = $derived(
+		statKeys.filter((stat) =>
+			chosenStats ? chosenStats.includes(stat.key) : statKeys.indexOf(stat) < 6,
+		),
+	);
+	const statValue = (player: Player, key: string) => {
+		const n = player.season_stats?.[key];
+		return n == null || (perGame && !player.season_games)
+			? '—'
+			: (perGame ? n / player.season_games : n).toLocaleString(undefined, {
+					maximumFractionDigits: 1,
+				});
+	};
+	function toggleOwnership(value: string) {
+		ownership = ownership.includes(value)
+			? ownership.filter((v) => v !== value)
+			: [...ownership, value];
+		page = 1;
+	}
+	const usual = () =>
+		workspace ? 'points' : !byPoints ? 'name' : competition ? 'points' : 'index';
 	let order = $state(untrack(usual));
+	let ascending = $state(false);
+	const textSort = (key: string) => ['name', 'position', 'team'].includes(key);
+	const sorted = (key: string) => workspace && order === key;
+	const sortDirection = (key: string) =>
+		sorted(key) ? (ascending ? 'ascending' : 'descending') : 'none';
+	function sortColumn(key: string) {
+		ascending = order === key ? !ascending : textSort(key);
+		order = key;
+		chose = true;
+		page = 1;
+	}
 	let chose = false; // whether the order was picked by hand, and so is kept
 	let seasonBack = $state(0);
 	let seasons = $state<StatSeason[]>([]);
-	if (untrack(() => byPoints)) getStatSeasons().then((s) => (seasons = s), () => {});
+	if (untrack(() => byPoints))
+		getStatSeasons().then(
+			(s) => (seasons = s),
+			() => {},
+		);
 	// One sport offers its own seasons by name; several sports can only count back.
 	const seasonChoices = $derived.by(() => {
-		if (competition) return seasons.filter((s) => s.competition === competition).map((s) => s.label);
-		const deepest = Math.max(0, ...Object.values(Object.groupBy(seasons, (s) => s.competition)).map((list) => list!.length));
+		if (competition)
+			return seasons.filter((s) => s.competition === competition).map((s) => s.label);
+		const deepest = Math.max(
+			0,
+			...Object.values(Object.groupBy(seasons, (s) => s.competition)).map((list) => list!.length),
+		);
 		return Array.from({ length: Math.min(deepest, 10) }, (_, back) =>
-			back === 0 ? 'Latest season' : `${back} ${back === 1 ? 'season' : 'seasons'} back`
+			back === 0 ? 'Latest season' : `${back} ${back === 1 ? 'season' : 'seasons'} back`,
 		);
 	});
-	const ranked = $derived(order !== 'name');
+	const ranked = $derived(order === 'points' || order === 'index');
 	// Whether the season's figures get columns: always in the full list, on request in the compact one.
-	const columns = $derived(ranked && (!compact || statColumns));
+	const columns = $derived(workspace || (ranked && (!compact || statColumns)));
+	// What follows a player's team under his name.
 	const under = (player: Player) =>
-		[player.team_abbrev || player.team_name || 'No team', age(player.birth_date) && `age ${age(player.birth_date)}`, !competition && ranked && player.season]
+		[
+			age(player.birth_date) && `age ${age(player.birth_date)}`,
+			!competition && ranked && player.season,
+		]
 			.filter(Boolean)
 			.join(' · ');
 	const fantasyPoints = (n: number) => Math.round(n).toLocaleString();
@@ -113,10 +194,17 @@
 	$effect.pre(() => {
 		if (competition !== shown) {
 			shown = competition;
-			position = ''; // positions belong to a sport
+			position = []; // positions belong to a sport
+			chosenStats = null;
+			if (order.startsWith('stat:')) {
+				order = 'points';
+				chose = false;
+				ascending = false;
+			}
 			page = 1;
 			seasonBack = 0;
-			if (!chose) order = usual();
+			if (!chose || (order === 'prospect_rank' && competition !== 'mlb' && competition !== '') || (order === 'draft' && competition !== 'nhl'))
+				order = usual();
 		}
 	});
 
@@ -127,16 +215,22 @@
 		loading = true;
 		getPlayers({
 			competition,
+			ownership: workspace ? ownership.join(',') : undefined,
+			owners: workspace ? owners.join(',') : undefined,
 			status,
+			ranked_only: rankable && topHundred ? 'true' : undefined,
 			q: query,
-			position: position || undefined,
+			position: position.length ? position.join(',') : undefined,
 			min_age: minAge ?? undefined,
 			max_age: maxAge ?? undefined,
 			page,
 			draft_id: draftId,
-			sort: ranked ? order : undefined,
-			season_back: ranked && seasonBack > 0 ? seasonBack : undefined,
-			available_in: availableOnly ? leagueId : undefined
+			sort: order.startsWith('stat:') ? 'stat' : order,
+			stat_key: order.startsWith('stat:') ? order.slice(5) : undefined,
+			ascending: workspace ? String(ascending) : undefined,
+			per_game: workspace ? String(perGame) : undefined,
+			season_back: (ranked || workspace) && seasonBack > 0 ? seasonBack : undefined,
+			available_in: availableOnly ? leagueId : undefined,
 		})
 			.then((data) => {
 				if (request !== latest) return; // a newer request has replaced this one
@@ -150,9 +244,94 @@
 				if (request === latest) loading = false;
 			});
 	});
+	if (untrack(() => workspace))
+		snapshot({
+			id: 'players-table',
+			capture: () =>
+				$state.snapshot({
+					picked,
+					position,
+					minAge,
+					maxAge,
+					status,
+					topHundred,
+					search,
+					query,
+					availableOnly,
+					ownership,
+					owners,
+					perGame,
+					chosenStats,
+					mobileStats,
+					moreFilters,
+					order,
+					ascending,
+					chose,
+					seasonBack,
+					seasons,
+					page,
+					result,
+					competition,
+					scroll: capturePageScroll(),
+				}),
+			restore: (saved) => {
+				clearTimeout(typing);
+				shown = saved.competition;
+				picked = saved.picked;
+				position = Array.isArray(saved.position)
+					? saved.position
+					: saved.position
+						? [saved.position]
+						: [];
+				minAge = saved.minAge;
+				maxAge = saved.maxAge;
+				status = saved.status;
+				topHundred = saved.topHundred;
+				search = saved.search;
+				query = saved.query;
+				availableOnly = saved.availableOnly;
+				ownership = saved.ownership;
+				owners = saved.owners;
+				perGame = saved.perGame;
+				chosenStats = saved.chosenStats;
+				mobileStats = saved.mobileStats;
+				moreFilters = saved.moreFilters;
+				order = saved.order;
+				ascending = saved.ascending;
+				chose = saved.chose;
+				seasonBack = saved.seasonBack;
+				seasons = saved.seasons;
+				page = saved.page;
+				result = saved.result;
+				loading = !saved.result;
+				restorePageScroll(saved.scroll);
+			},
+		});
 </script>
 
-<div class="stack tight" class:compact>
+{#snippet team(player: Player)}{#if player.team_abbrev}<TeamLogo
+			competition={player.competition}
+			abbrev={player.team_abbrev}
+			size={18}
+		/>{:else}{player.team_name || 'No team'}{/if}{/snippet}
+
+{#snippet sortHeader(key: string, label: string, description = '')}
+	{#if workspace}<button
+			class="sort-header"
+			class:active={sorted(key)}
+			title={description || `Sort by ${label}`}
+			onclick={() => sortColumn(key)}
+			>{label}{#if sorted(key)}<Icon name={ascending ? 'up' : 'down'} size={12} />{/if}</button
+		>{:else}{label}{/if}
+{/snippet}
+
+<div class="stack tight" class:compact class:workspace class:more-filters={moreFilters}>
+	{#if workspace}<button
+			class="small quiet mobile-toggle"
+			aria-expanded={moreFilters}
+			onclick={() => (moreFilters = !moreFilters)}
+			>{moreFilters ? 'Fewer filters' : 'More filters'}</button
+		>{/if}
 	<div class="row filters">
 		<label class="search">
 			<Icon name="search" size={16} />
@@ -164,52 +343,103 @@
 				oninput={onSearch}
 			/>
 		</label>
-		<select aria-label="Status" bind:value={status} onchange={() => (page = 1)}>
+		<select
+			class="extra-filter"
+			aria-label="Status"
+			bind:value={status}
+			onchange={() => (page = 1)}
+		>
 			<option value="">Any status</option>
 			<option value="active">Active</option>
 			<option value="prospect">Prospects</option>
 			<option value="inactive">Inactive</option>
 		</select>
-		{#if byPoints}
+		{#if rankable}
+			<label class="check top-hundred">
+				<input
+					type="checkbox"
+					bind:checked={topHundred}
+					onchange={() => {
+						page = 1;
+						if (topHundred && !chose) order = 'prospect_rank'; // ranked prospects read best in rank order
+					}}
+				/>
+				MLB.com Top 100 prospects only
+			</label>
+		{/if}
+		{#if byPoints || competition === 'mlb' || competition === 'nhl'}
 			<select
 				aria-label="Order"
 				bind:value={order}
 				onchange={() => {
 					chose = true;
+					ascending = textSort(order);
 					page = 1;
 				}}
 			>
-				<option value="points">By fantasy points</option>
-				<option value="index">By league index</option>
+				{#if byPoints}<option value="points">By fantasy points</option><option value="index"
+						>By league index</option
+					>{/if}
+				{#if competition === 'mlb' || !competition}<option value="prospect_rank"
+						>By MLB Pipeline Top 100 rank</option
+					>{/if}
+				{#if competition === 'nhl'}<option value="draft">By draft capital</option>{/if}
 				<option value="name">By name</option>
+				{#if workspace}<option value="games">By games played</option><option value="position"
+						>By position</option
+					>{#each displayStats as stat}<option value="stat:{stat.key}"
+							>By {stat.label.toLowerCase()}</option
+						>{/each}{/if}
 			</select>
-			{#if ranked && seasonChoices.length > 0}
+			{#if (ranked || workspace) && seasonChoices.length > 0}
 				<select aria-label="Season" bind:value={seasonBack} onchange={() => (page = 1)}>
 					{#each seasonChoices as label, back (back)}<option value={back}>{label}</option>{/each}
 				</select>
 			{/if}
 		{/if}
 		{#if competitions.length > 0}
-			{#if !only && competitions.length > 1}
+			{#if !only && !noLeaguePicker && competitions.length > 1}
 				<select aria-label="League" bind:value={picked}>
 					<option value="">All leagues</option>
 					{#each competitions as c (c.key)}<option value={c.key}>{c.name}</option>{/each}
 				</select>
 			{/if}
 			{#if positions.length > 0}
-				<select aria-label="Position" bind:value={position} onchange={() => (page = 1)}>
-					<option value="">Any position</option>
-					{#each positions as p (p)}<option value={p}>{p}</option>{/each}
-				</select>
+				<span class="extra-filter">
+					<Dropdown class="position-filter" align="left" title="Positions" label={position.length ? position.join(', ') : 'Any position'}>
+						<div class="position-options">
+							{#each positions as p (p)}<label class="check"
+									><input type="checkbox" value={p} bind:group={position} onchange={() => (page = 1)} />{p}</label
+								>{/each}
+						</div>
+						{#if position.length}<button class="small quiet clear-positions" onclick={() => { position = []; page = 1; }}>Any position</button>{/if}
+					</Dropdown>
+				</span>
 			{/if}
-			<span class="ages">
+			<span class="ages extra-filter">
 				Age
-				<input type="number" min="0" max="60" placeholder="min" aria-label="Youngest age" bind:value={minAge} onchange={() => (page = 1)} />
+				<input
+					type="number"
+					min="0"
+					max="60"
+					placeholder="min"
+					aria-label="Youngest age"
+					bind:value={minAge}
+					onchange={() => (page = 1)}
+				/>
 				–
-				<input type="number" min="0" max="60" placeholder="max" aria-label="Oldest age" bind:value={maxAge} onchange={() => (page = 1)} />
+				<input
+					type="number"
+					min="0"
+					max="60"
+					placeholder="max"
+					aria-label="Oldest age"
+					bind:value={maxAge}
+					onchange={() => (page = 1)}
+				/>
 			</span>
 		{/if}
-		{#if leagueId && !draftId}
+		{#if leagueId && !draftId && !workspace}
 			<label class="check">
 				<input type="checkbox" bind:checked={availableOnly} onchange={() => (page = 1)} />
 				Available only
@@ -217,29 +447,162 @@
 		{/if}
 	</div>
 
+	{#if workspace}
+		<div class="ownership-filters">
+			<div class="row" role="group" aria-label="Ownership filters">
+				<button
+					class="small quiet"
+					class:active={ownership.length === 0}
+					onclick={() => {
+						ownership = [];
+						owners = [];
+						page = 1;
+					}}>All players</button
+				>
+				{#each [{ value: 'available', label: 'Available' }, { value: 'taken', label: 'All taken' }, { value: 'main', label: 'Rostered' }, { value: 'reserve', label: 'Reserve' }, { value: 'rights', label: 'Unsigned' }] as option}
+					<button
+						class="small quiet"
+						class:active={ownership.includes(option.value)}
+						aria-pressed={ownership.includes(option.value)}
+						onclick={() => toggleOwnership(option.value)}>{option.label}</button
+					>
+				{/each}
+			</div>
+			<Dropdown class="team-filter" label="Fantasy teams{owners.length ? ` (${owners.length})` : ''}" title="Fantasy teams">
+				<div class="team-options">
+					{#each franchises as f (f.id)}<label class="check"
+							><input
+								type="checkbox"
+								value={f.slug}
+								bind:group={owners}
+								onchange={() => {
+									if (ownership.length === 1 && ownership[0] === 'available') ownership = [];
+									page = 1;
+								}}
+							/>{f.name}</label
+						>{/each}
+				</div>
+			</Dropdown>
+			{#if statKeys.length}
+				<Dropdown class="team-filter" label="Stat columns">
+					<div class="team-options">
+						{#each statKeys as stat}<label class="check"
+								><input
+									type="checkbox"
+									checked={displayStats.some((s) => s.key === stat.key)}
+									onchange={() => {
+										const current = displayStats.map((s) => s.key);
+										chosenStats = current.includes(stat.key)
+											? current.filter((k) => k !== stat.key)
+											: [...current, stat.key];
+										if (order === `stat:${stat.key}` && !chosenStats.includes(stat.key)) {
+											order = 'points';
+											ascending = false;
+											page = 1;
+										}
+									}}
+								/>{stat.label}</label
+							>{/each}
+					</div>
+				</Dropdown>
+			{/if}
+			<label class="check"
+				><input type="checkbox" bind:checked={perGame} onchange={() => (page = 1)} />Per game</label
+			>
+			<label class="check mobile-toggle"
+				><input type="checkbox" bind:checked={mobileStats} />Show detailed stats</label
+			>
+		</div>
+		<div class="spread muted small-text">
+			<span
+				>{result ? `${result.total.toLocaleString()} players` : 'Loading players…'} · {ownership.length
+					? 'Combine ownership filters'
+					: 'All ownership statuses'}</span
+			><span>+ Add · − Drop · ⇄ Trade</span>
+		</div>
+	{/if}
+
 	{#if error}
 		<p role="alert">Could not load players: {error}</p>
 	{:else if result}
 		{#if result.players.length === 0}
 			<Empty icon="search" title="No players match">Try a different search, sport or status.</Empty>
 		{:else}
-			<div class="panel scroll" class:loading>
+			<div
+				class="panel scroll"
+				class:loading
+				class:show-mobile-stats={mobileStats}
+				aria-busy={loading}
+			>
 				<table>
 					<thead>
 						<tr>
-							<th>Player</th>
-							<th>Pos</th>
-							{#if !compact}<th class="wide">Team</th><th class="wide num">Age</th>{/if}
-							{#if columns}<th class="num">Points</th><th class="num" title="100 is the average rostered player; 15 is one standard deviation">Index</th>{/if}
+							<th
+								class:sorted={sorted('name')}
+								aria-sort={workspace ? sortDirection('name') : undefined}
+								>{@render sortHeader('name', 'Player')}</th
+							>
+							<th
+								class:mobile-hide={workspace}
+								class:sorted={sorted('position')}
+								aria-sort={workspace ? sortDirection('position') : undefined}
+								>{@render sortHeader('position', 'Pos')}</th
+							>
+							{#if !compact}<th
+									class="wide"
+									class:sorted={sorted('team')}
+									aria-sort={workspace ? sortDirection('team') : undefined}
+									>{@render sortHeader('team', 'Team')}</th
+								><th
+									class="wide num"
+									class:sorted={sorted('age')}
+									aria-sort={workspace ? sortDirection('age') : undefined}
+									>{@render sortHeader('age', 'Age')}</th
+								>{/if}
+							{#if workspace}<th
+									class="num mobile-hide"
+									class:sorted={sorted('games')}
+									aria-sort={sortDirection('games')}
+									>{@render sortHeader('games', 'GP', 'Games played')}</th
+								>{/if}
+							{#if columns}<th
+									class="num"
+									class:sorted={sorted('points')}
+									aria-sort={workspace ? sortDirection('points') : undefined}
+									>{@render sortHeader(
+										'points',
+										workspace && perGame ? 'FP/G' : 'FP',
+										workspace && perGame ? 'Fantasy points per game' : 'Fantasy points',
+									)}</th
+								><th
+									class="num"
+									class:sorted={sorted('index')}
+									aria-sort={workspace ? sortDirection('index') : undefined}
+									>{@render sortHeader(
+										'index',
+										'Index',
+										'100 is the average rostered player; 15 is one standard deviation. Based on season totals.',
+									)}</th
+								>{/if}
+							{#if workspace}{#each displayStats as stat}<th
+										class="num raw-stat"
+										class:sorted={sorted(`stat:${stat.key}`)}
+										aria-sort={sortDirection(`stat:${stat.key}`)}
+										>{@render sortHeader(
+											`stat:${stat.key}`,
+											stat.key.toUpperCase(),
+											stat.label,
+										)}</th
+									>{/each}{/if}
 							<th class="num"
-								>{result.total.toLocaleString()} {result.total === 1 ? 'player' : 'players'}</th
+								>{workspace ? 'Action' : `${result.total.toLocaleString()} players`}</th
 							>
 						</tr>
 					</thead>
 					<tbody>
 						{#each result.players as player (player.id)}
 							<tr class:selected={selectedId === player.id}>
-								<td>
+								<td class:sorted={sorted('name')}>
 									<div class="player">
 										<Headshot
 											name={player.full_name}
@@ -252,22 +615,47 @@
 														class="player-name"
 														aria-pressed={selectedId === player.id}
 														onclick={() => onselect(player)}>{player.full_name}</button
-													>{:else}<a href="/player/{player.id}"><strong>{player.full_name}</strong></a>{/if}
+													>{:else}<a href="/player/{player.id}"
+														><strong>{player.full_name}</strong></a
+													>{/if}
+												<ProspectRank id={player.id} ranking={player} />
 												<WatchStar playerID={player.id} playerName={player.full_name} />
 												{#if !competition}<SportBadge sport={player.competition} />{/if}
 												{#if player.class}<span class="pill">{player.class}</span>{/if}
 												<InjuryBadge designation={player.injury_designation} />
 												{#if player.status === 'prospect'}<span class="pill gold">Prospect</span
-													>{/if}
+													>{#if draftTag(player)}<span class="pill draft" title={draftTitle(player)}>{draftTag(player)}</span>{/if}{/if}
 												{#if player.status === 'inactive'}<span class="pill">Inactive</span>{/if}
 												{#if player.waiver_until}<span class="pill brand">Waivers</span>{/if}
 											</div>
-											{#if compact && statColumns}<div class="muted small-text">{under(player)}</div>
+											{#if workspace}<div class="muted small-text player-detail">
+													{player.positions.join('/')} · {@render team(
+														player,
+													)}{#if player.season && !competition}
+														· {player.season}{/if} · {#if player.owner_slug}<a
+															href="/franchise/{player.owner_slug}">{player.owner_name}</a
+														>
+														· {player.roster_list === 'main'
+															? 'Rostered'
+															: player.roster_list === 'reserve'
+																? 'Reserve'
+																: 'Unsigned'}{:else}{player.waiver_until
+															? 'Waivers'
+															: 'Available'}{/if}
+												</div>
+											{:else if compact && statColumns}<div class="muted small-text">
+													{@render team(player)}{#if under(player)}
+														· {under(player)}{/if}
+												</div>
 											{:else if compact}<div class="muted small-text">
-													{player.team_abbrev || player.team_name || 'No team'} · {player.status}
+													{@render team(player)} · {player.status}
 													{#if ranked && player.season}
-														· <strong>{fantasyPoints(player.season_points)}</strong> pts
-														{#if player.season_index}· <span title="League index: 100 is the average rostered player, 15 is one standard deviation">index <strong>{Math.round(player.season_index)}</strong></span>{/if}
+														· <strong>{fantasyPoints(player.season_points)}</strong>
+														pts
+														{#if player.season_index}· <span
+																title="League index: 100 is the average rostered player, 15 is one standard deviation"
+																>index <strong>{Math.round(player.season_index)}</strong></span
+															>{/if}
 														{#if !competition}· {player.season}{/if}
 													{/if}
 												</div>{:else if player.note}<div class="muted small-text">
@@ -276,13 +664,36 @@
 										</div>
 									</div>
 								</td>
-								<td>{player.positions.join('/')}</td>
-								{#if !compact}<td class="wide muted" title={player.team_name}>{player.team_name}</td
-									><td class="wide num">{age(player.birth_date)}</td>{/if}
-								{#if columns}<td class="num">{player.season ? fantasyPoints(player.season_points) : ''}</td
-									><td class="num">{player.season_index ? Math.round(player.season_index) : ''}</td>{/if}
+								<td class:mobile-hide={workspace} class:sorted={sorted('position')}
+									>{player.positions.join('/')}</td
+								>
+								{#if !compact}<td
+										class="wide muted"
+										class:sorted={sorted('team')}
+										title={player.team_name}>{player.team_name}</td
+									><td class="wide num" class:sorted={sorted('age')}>{age(player.birth_date)}</td
+									>{/if}
+								{#if workspace}<td class="num mobile-hide" class:sorted={sorted('games')}
+										>{player.season ? player.season_games : '—'}</td
+									>{/if}
+								{#if columns}<td class="num" class:sorted={sorted('points')}
+										>{player.season && player.season_scored !== false
+											? workspace && perGame
+												? player.season_games
+													? (player.season_points / player.season_games).toFixed(1)
+													: '—'
+												: fantasyPoints(player.season_points)
+											: '—'}</td
+									><td class="num" class:sorted={sorted('index')}
+										>{player.season_index ? Math.round(player.season_index) : '—'}</td
+									>{/if}
+								{#if workspace}{#each displayStats as stat}<td
+											class="num raw-stat"
+											class:sorted={sorted(`stat:${stat.key}`)}>{statValue(player, stat.key)}</td
+										>{/each}{/if}
 								<td class="actions">
-									{#if player.owner_slug}
+									{#if workspace && action}{@render action(player)}
+									{:else if player.owner_slug}
 										<a class="small-text" href="/franchise/{player.owner_slug}"
 											>{player.owner_name}</a
 										>
@@ -310,6 +721,150 @@
 </div>
 
 <style>
+	.sort-header {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-transform: inherit;
+		letter-spacing: inherit;
+		min-height: 1.8rem;
+	}
+	.sort-header:hover,
+	.sort-header.active {
+		color: var(--brand);
+	}
+	th.num .sort-header {
+		justify-content: flex-end;
+	}
+	.workspace th.sorted {
+		background: var(--brand-soft);
+		color: var(--brand);
+	}
+	.workspace td.sorted {
+		background: color-mix(in srgb, var(--brand-soft) 40%, var(--surface));
+	}
+
+	.mobile-toggle {
+		display: none;
+	}
+	.ownership-filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.6rem 1rem;
+	}
+	.ownership-filters .row {
+		gap: 0.25rem;
+		flex-wrap: wrap;
+	}
+	.ownership-filters button.active {
+		background: var(--brand-soft);
+		color: var(--brand);
+		border-color: var(--brand);
+	}
+	:global(.team-filter) {
+		font-size: 0.8rem;
+	}
+	:global(.team-filter > summary) {
+		padding: 0.5rem;
+	}
+	.team-options {
+		display: grid;
+		gap: 0.6rem;
+	}
+	/* Looks like the selects beside it. */
+	:global(.position-filter > summary) {
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--rule-strong);
+		border-radius: var(--radius-small);
+		background: var(--surface);
+		font-size: 0.85rem;
+		white-space: nowrap;
+	}
+	.position-options {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.55rem 0.8rem;
+		font-size: 0.85rem;
+	}
+	.clear-positions {
+		margin-top: 0.6rem;
+	}
+	.workspace table {
+		width: 100%;
+	}
+	.workspace .player {
+		gap: 0.45rem;
+	}
+	.workspace .player-detail {
+		font-size: 0.72rem;
+		line-height: 1.4;
+	}
+	.workspace td {
+		padding: 0.4rem 0.5rem;
+	}
+	.workspace .actions {
+		position: sticky;
+		right: 0;
+		background: var(--surface);
+	}
+	.workspace th {
+		white-space: nowrap;
+	}
+	@media (max-width: 640px) {
+		.workspace .raw-stat,
+		.workspace .mobile-hide {
+			display: none;
+		}
+		.workspace .show-mobile-stats .raw-stat,
+		.workspace .show-mobile-stats .mobile-hide {
+			display: table-cell;
+		}
+		.workspace .mobile-toggle {
+			display: flex;
+		}
+		.workspace .name {
+			font-size: 0.8rem;
+		}
+		.workspace td,
+		.workspace th {
+			padding: 0.4rem 0.3rem;
+		}
+		.workspace .player :global(.headshot) {
+			display: none;
+		}
+		.workspace .extra-filter {
+			display: none;
+		}
+		.workspace.more-filters .extra-filter {
+			display: initial;
+		}
+		.workspace.more-filters .ages {
+			display: flex;
+		}
+		.workspace .filters {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+		}
+		.workspace .search {
+			grid-column: 1/-1;
+			min-width: 0;
+		}
+		.workspace .ages {
+			grid-column: 1/-1;
+		}
+		.team-options {
+			left: 0;
+			right: auto;
+		}
+	}
+
 	.search {
 		flex: 1 1 14rem;
 		display: flex;
@@ -420,5 +975,13 @@
 		.wide {
 			display: none;
 		}
+	}
+	.top-hundred {
+		font-size: 0.8rem;
+		white-space: nowrap;
+	}
+	.draft {
+		font: 650 0.6rem var(--mono);
+		white-space: nowrap;
 	}
 </style>

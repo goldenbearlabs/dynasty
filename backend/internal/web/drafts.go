@@ -87,6 +87,36 @@ func (s *Server) passPick(w http.ResponseWriter, r *http.Request, me db.Franchis
 	s.done(w, r, s.Drafts.Pass(r.Context(), id, me))
 }
 
+// reactToPick toggles one of the signed-in franchise's emoji on a made pick.
+func (s *Server) reactToPick(w http.ResponseWriter, r *http.Request, me db.Franchise) {
+	var body struct {
+		Emoji string `json:"emoji"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	pickID, err := pathID(r, "pick")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d, err := s.Queries.GetDraft(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if d.DynastyID != me.DynastyID {
+		writeError(w, http.StatusForbidden, "This draft belongs to another dynasty.")
+		return
+	}
+	s.done(w, r, s.Drafts.React(r.Context(), id, pickID, me.ID, body.Emoji))
+}
+
 func (s *Server) getQueue(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -173,6 +203,27 @@ func (s *Server) setDraftPicks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.done(w, r, s.Drafts.SetPicks(r.Context(), id, slots))
+}
+
+// overridePick replaces the player taken with a pick already made.
+func (s *Server) overridePick(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PlayerID pgtype.UUID `json:"player_id"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	pickID, err := pathID(r, "pick")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.done(w, r, s.Drafts.Override(r.Context(), id, pickID, body.PlayerID))
 }
 
 func (s *Server) setDraftClock(w http.ResponseWriter, r *http.Request) {

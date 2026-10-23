@@ -48,7 +48,7 @@ with latest as (
   left join franchises f on f.id = r.franchise_id
   left join totals on totals.player_id = p.id and totals.competition = p.competition
   left join valued on valued.player_id = p.id and valued.competition = p.competition
-  where (p.competition <> 'cbb' or (totals.player_id is not null))
+  where p.pool_eligible and (p.competition <> 'cbb' or (totals.player_id is not null))
     and (@competition::text = '' or p.competition = @competition)
     and (@status::text = '' or p.status = @status)
     and (@search::text = '' or p.full_name ilike '%' || @search || '%')

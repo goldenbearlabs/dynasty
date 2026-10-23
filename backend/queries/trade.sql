@@ -31,6 +31,10 @@ update trades set
   resolved_at = case when @status in ('proposed', 'accepted') then null else now() end
 where id = @id;
 
+-- name: SetTradeDecliner :exec
+-- The franchise turning a trade down, recorded just before it closes.
+update trades set declined_by = @franchise_id where id = @id;
+
 -- name: ListTradeItems :many
 -- Every item of every trade in the dynasty, described for display.
 select i.*,
@@ -69,7 +73,8 @@ where league_id = @league_id and player_id = @player_id;
 update draft_picks set current_franchise_id = @franchise_id where id = @id;
 
 -- name: ListFranchisePicks :many
--- Unused picks a franchise holds, soonest draft first.
+-- Unused picks a franchise holds in rookie drafts, soonest draft first.
+-- Startup picks are left out: they are made once and cannot be traded.
 select k.id, k.round, k.position, k.original_franchise_id,
        d.id as draft_id, d.name as draft_name, d.year, d.status as draft_status,
        (select coalesce(array_agg(l.competition), '{}')::text[]
@@ -77,7 +82,8 @@ select k.id, k.round, k.position, k.original_franchise_id,
         where dl.draft_id = d.id) as competitions
 from draft_picks k
 join drafts d on d.id = k.draft_id
-where k.current_franchise_id = @franchise_id and k.player_id is null and d.status <> 'complete'
+where k.current_franchise_id = @franchise_id and k.player_id is null
+  and d.status <> 'complete' and d.kind <> 'startup'
 order by d.year, d.name, k.position;
 
 -- name: ListDraftPickLeagues :many
@@ -96,3 +102,6 @@ select exists (
 
 -- name: MoveTradeItems :exec
 update trade_items set player_id = @keep_id where player_id = @duplicate_id;
+
+-- name: SetTradeDrops :exec
+update trades set drops = @drops where id = @id;

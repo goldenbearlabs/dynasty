@@ -37,7 +37,7 @@
 		if (!view || !period) return '';
 		const regular = view.periods.filter((p) => !p.is_playoff).length;
 		if (!period.is_playoff) return `${league.settings.format.matchup_days === 7 ? 'Week' : 'Matchup'} ${period.seq} of ${regular}`;
-		return period.seq === last ? 'Final' : `Playoffs, round ${period.seq - regular}`;
+		return period.seq === last ? 'Finals' : `Playoffs, round ${period.seq - regular}`;
 	});
 </script>
 
@@ -74,7 +74,7 @@
 				{#each matchups as m (m.id)}
 					<a class="card" class:mine={isMine(m)} href="/matchups/{m.id}">
 						{#each [{ id: m.home_franchise_id, points: m.home_points, other: m.away_points }, { id: m.away_franchise_id, points: m.away_points, other: m.home_points }] as side (side.id)}
-							<div class="side" class:behind={m.final && side.points < side.other}>
+							<div class="side" class:ahead={!!m.away_franchise_id && side.points > side.other} class:behind={!!m.away_franchise_id && side.points < side.other}>
 								{#if side.id}
 									<Crest src={identity(side.id).image_url} name={name(side.id)} size={26} />
 									<span class="team">{name(side.id)}</span>
@@ -84,6 +84,7 @@
 								{/if}
 							</div>
 						{/each}
+						{#if period.is_playoff}<span class="pill" class:gold={m.bracket !== 'consolation'}>{m.bracket === 'consolation' ? 'Consolation' : 'Championship'} · Matchup {(m.bracket_slot ?? 0)+1}</span>{/if}
 						{#if m.final}<span class="eyebrow">Final</span>{/if}
 					</a>
 				{/each}
@@ -134,5 +135,13 @@
 	.score {
 		font: 750 1.1rem var(--display);
 		font-variant-numeric: tabular-nums;
+	}
+	/* Who is winning, at a glance. */
+	.side.ahead .team {
+		font-weight: 700;
+	}
+	.side.ahead .score {
+		color: var(--sport, var(--good));
+		font-weight: 800;
 	}
 </style>

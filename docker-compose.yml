@@ -30,6 +30,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-}
       FETCH_VIA: ${FETCH_VIA:-}
+      SCHEDULE_DAYS: ${SCHEDULE_DAYS:-365} # full schedules; active fantasy seasons can extend this
       TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
     depends_on:
       db:

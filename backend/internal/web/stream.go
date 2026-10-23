@@ -14,12 +14,22 @@ import (
 // Callers subscribe before building the snapshot, so nothing is missed in
 // between.
 func (s *Server) stream(w http.ResponseWriter, r *http.Request, snapshot []byte, messages <-chan []byte) {
+	s.streamOnOpen(w, r, messages, func() ([]byte, func()) { return snapshot, nil })
+}
+
+// streamOnOpen registers transient connection state only after the upgrade
+// succeeds. Its cleanup runs on disconnect, failed writes, or shutdown.
+func (s *Server) streamOnOpen(w http.ResponseWriter, r *http.Request, messages <-chan []byte, opened func() ([]byte, func())) {
 	// Compressed: a big draft's opening snapshot is most of a megabyte of JSON.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionNoContextTakeover})
 	if err != nil {
 		return // Accept has already answered
 	}
 	defer conn.CloseNow()
+	snapshot, leave := opened()
+	if leave != nil {
+		defer leave()
+	}
 	ctx := conn.CloseRead(r.Context()) // ends when the client goes away
 
 	send := func(message []byte) error {
@@ -48,7 +58,10 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request, snapshot []byte,
 				return
 			}
 		case <-keepAlive.C:
-			if conn.Ping(ctx) != nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
 				return
 			}
 		}

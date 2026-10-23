@@ -11,11 +11,14 @@
 		getRankings,
 		importRanking,
 		makePick,
+		overridePick,
 		passPick,
+		reactToPick,
 		setDraftClock,
 		setAutoPick,
 		setQueue,
 		type DraftAction,
+		type DraftPick,
 		type Player,
 		type QueuedPlayer,
 		type RankedPlayer,
@@ -26,6 +29,7 @@
 	import Countdown from '#lib/ui/Countdown.svelte';
 	import Crest from '#lib/ui/Crest.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import Dropdown from '#lib/ui/Dropdown.svelte';
 	import Splitter from '#lib/ui/Splitter.svelte';
 	import Tabs from '#lib/ui/Tabs.svelte';
 	import { toast } from '#lib/ui/toast.svelte.ts';
@@ -36,13 +40,14 @@
 	import Research from './Research.svelte';
 	import Teams from './Teams.svelte';
 	import Queue from './Queue.svelte';
+	import Stats from './Stats.svelte';
 
 	let { data }: PageProps = $props();
 
 	const id = $derived(page.params.id!);
 	let room = $state<DraftRoom>();
 	$effect(() => {
-		const opened = new DraftRoom(id);
+		const opened = new DraftRoom(id, !!data.me);
 		room = opened;
 		return () => opened.close();
 	});
@@ -149,6 +154,21 @@
 	const autoIds = $derived(room?.state?.auto_pick_franchise_ids ?? []);
 	const myAuto = $derived(!!me && autoIds.includes(me.id));
 	const toggleAuto = () => setAutoPick(id, !myAuto).catch(toast.error);
+	// A commissioner can turn it on or off for anyone, say for a manager who has stepped away.
+	const toggleAutoFor = (franchiseId: string) =>
+		setAutoPick(id, !autoIds.includes(franchiseId), franchiseId).catch(toast.error);
+
+	// A commissioner can change a pick already made: pick it on the board,
+	// then draft its replacement from the player research.
+	let changingId = $state<string>();
+	const changing = $derived(
+		draft?.status === 'live' || draft?.status === 'paused'
+			? picks.find((p) => p.id === changingId && p.player_id)
+			: undefined
+	);
+	function startChange(pick: DraftPick) {
+		changingId = changingId === pick.id ? undefined : pick.id;
+	}
 
 	async function pass() {
 		if (!onClock || !confirm(`Pass pick #${onClock.position}? It cannot be made later.`)) return;
@@ -160,14 +180,22 @@
 	}
 
 	async function pick(player: Player) {
-		if (!target || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
+		const into = changing ?? target;
+		if (!into || picking || player.owner_slug || made.some((p) => p.player_id === player.id))
 			return;
-		const pickId = target.id;
-		const ownerName = pickingFor?.name ?? 'You';
+		const ownerName = changing
+			? (franchise(changing.current_franchise_id)?.name ?? 'Their')
+			: (pickingFor?.name ?? 'You');
 		picking = true;
 		try {
-			await makePick(id, { player_id: player.id, pick_id: pickId });
-			toast.good(`${ownerName} drafted ${player.full_name}.`);
+			if (changing) {
+				await overridePick(id, changing.id, player.id);
+				toast.good(`Pick #${changing.position} changed to ${player.full_name}.`);
+				changingId = undefined;
+			} else {
+				await makePick(id, { player_id: player.id, pick_id: into.id });
+				toast.good(`${ownerName} drafted ${player.full_name}.`);
+			}
 			await invalidateAll();
 		} catch (e) {
 			toast.error(e);
@@ -243,11 +271,15 @@
 	async function saveQueue(playerIds: string[]) {
 		if (savingQueue) return;
 		savingQueue = true;
+		// Shown in its new order at once, so a dragged player does not jump back while it saves.
+		const queued = new Map(queue.map((q) => [q.player_id, q]));
+		queue = playerIds.flatMap((playerId) => queued.get(playerId) ?? []);
 		try {
 			await setQueue(id, playerIds);
 			queue = await getQueue(id);
 		} catch (e) {
 			toast.error(e);
+			queue = await getQueue(id).catch(() => queue);
 		} finally {
 			savingQueue = false;
 		}
@@ -275,6 +307,9 @@
 			toast.error(e);
 		}
 	}
+
+	// The board pane shows the board, or the draft by the numbers.
+	let boardView = $state<'board' | 'stats'>('board');
 
 	// The pick order editor has a row of controls for every pick, so it is
 	// only built once it is opened. It then stays, to keep unsaved edits.
@@ -321,7 +356,7 @@
 				{:else}<div>
 						<p class="eyebrow">{draft.status === 'complete' ? 'Draft complete' : 'Draft room'}</p>
 						<strong
-							>{draft.status === 'scheduled' ? 'Waiting to start' : 'Waiting for picks'}</strong
+							>{draft.status === 'scheduled' ? 'Waiting to start' : draft.status === 'complete' ? 'Every pick made' : 'Waiting for picks'}</strong
 						>
 					</div>{/if}
 				<div class="clock">
@@ -355,21 +390,19 @@
 							onclick={toggleAuto}>Auto pick {myAuto ? 'on' : 'off'}</button
 						>{/if}
 				</div>{/if}
+			{#if commissioner && draft.status === 'live'}<button class="small" onclick={() => control('pause')}
+					><Icon name="pause" size={14} />Pause</button
+				>{:else if commissioner && draft.status === 'paused'}<button
+					class="small primary"
+					onclick={() => control('resume')}><Icon name="play" size={14} />Resume</button
+				>{/if}
 			{#if commissioner}
-				<details class="admin">
-					<summary>Manage draft</summary>
+				<Dropdown class="admin" label="Manage draft">
 					<div class="admin-controls">
 						{#if draft.status === 'scheduled'}<button
 								class="small primary"
 								onclick={() => control('start')}><Icon name="play" size={14} />Start draft</button
-							><button class="small quiet danger" onclick={remove}>Delete</button>
-						{:else if draft.status === 'live'}<button class="small" onclick={() => control('pause')}
-								><Icon name="pause" size={14} />Pause</button
-							>
-						{:else if draft.status === 'paused'}<button
-								class="small primary"
-								onclick={() => control('resume')}><Icon name="play" size={14} />Resume</button
-							>{/if}
+							><button class="small quiet danger" onclick={remove}>Delete</button>{/if}
 						{#if draft.status === 'live' || draft.status === 'paused'}<button
 								class="small"
 								onclick={() => control('undo')}
@@ -387,6 +420,19 @@
 									onclick={saveClock}>Set</button
 								></label
 							>{/if}
+						{#if draft.status !== 'complete'}<div class="auto-set">
+								<span class="muted small-text">Auto pick</span>
+								{#each franchises as f (f.id)}<button
+										class="small auto-toggle"
+										class:on={autoIds.includes(f.id)}
+										aria-pressed={autoIds.includes(f.id)}
+										title={`Turn auto pick ${autoIds.includes(f.id) ? 'off' : 'on'} for ${f.name}`}
+										onclick={() => toggleAutoFor(f.id)}>{f.name}</button
+									>{/each}
+							</div>{/if}
+						{#if draft.status === 'live' || draft.status === 'paused'}<p class="muted small-text">
+								To change a pick already made, hover it on the board and click Change.
+							</p>{/if}
 						{#if draft.status === 'scheduled'}<details
 								class="order-editor"
 								ontoggle={(e) => (orderOpened ||= e.currentTarget.open)}
@@ -395,12 +441,17 @@
 								{#if orderOpened}<PickOrder draftId={id} {picks} {franchises} />{/if}
 							</details>{/if}
 					</div>
-				</details>
+				</Dropdown>
 			{/if}
 		</header>
 		{#if me && !rookie && draft.status === 'complete'}<p class="makeup">
-				<span class="pill gold">Next</span> Set your roster: choose who is on your reserve list in each league,
-				on <a href="/franchise/{me.slug}">your team page</a>, before the season starts.
+				<span class="pill gold">Next</span> Once the commissioner opens a league's season, set your season roster, who is on the main
+				roster and who on reserve, on <a href="/franchise/{me.slug}">your team page</a>.
+			</p>{/if}
+		{#if changing}<p class="makeup changing">
+				<span class="pill gold">Changing</span> Pick #{changing.position}, {changing.player_name} for
+				{franchise(changing.current_franchise_id)?.name}. Select a player and click Replace to take him instead.
+				<button class="small quiet" onclick={() => (changingId = undefined)}>Cancel</button>
 			</p>{/if}
 		{#if myMakeUp && !myTurn && draft.status === 'live'}<p class="makeup">
 				<span class="pill gold">Skipped</span> Pick #{myMakeUp.position} is owed to you. Select a player
@@ -414,10 +465,13 @@
 			style:--pool="{sizes.pool}%"
 			style:--queue="{sizes.queue}%"
 		>
-			<div class="main-workspace" bind:this={mainPane}>
+			<div class="main-workspace" class:stats-view={boardView === 'stats'} bind:this={mainPane}>
 				<section class="board-pane" aria-label="Draft progress">
 					<div class="section-heading">
-						<h2>Draft board</h2>
+						<div class="view-switch" role="group" aria-label="Show">
+							<button class:on={boardView === 'board'} aria-pressed={boardView === 'board'} onclick={() => (boardView = 'board')}>Draft board</button>
+							<button class:on={boardView === 'stats'} aria-pressed={boardView === 'stats'} onclick={() => (boardView = 'stats')}>Stats</button>
+						</div>
 						<div class="upcoming" aria-label="Upcoming picks">
 							{#each upcoming.slice(0, 5) as p (p.id)}<span
 									class:you={p.current_franchise_id === me?.id}
@@ -428,15 +482,24 @@
 								>{/each}
 						</div>
 					</div>
+					{#if boardView === 'stats'}
+						<Stats {draft} {picks} {franchises} showSport={sports.length > 1} />
+					{:else}
 					<Board
 						{picks}
 						{franchises}
+						onlineIds={room?.onlineIds ?? []}
 						onClockId={room?.state?.on_clock_pick_id ?? null}
 						myId={me?.id}
 						{autoIds}
+						reactions={room?.state?.reactions ?? []}
+						onreact={me ? (pickId, emoji) => reactToPick(id, pickId, emoji).catch(toast.error) : undefined}
 						showSport={sports.length > 1}
+						changingId={changing?.id}
 						onselect={research}
+						onchange={commissioner && (draft.status === 'live' || draft.status === 'paused') ? startChange : undefined}
 					/>
+					{/if}
 				</section>
 				<Splitter
 					orientation="horizontal"
@@ -475,6 +538,8 @@
 								/>{/if}
 							<PlayerList
 								competition={sport}
+								competitions={data.competitions.filter((c) => sports.includes(c.key))}
+								noLeaguePicker
 								draftId={id}
 								{version}
 								compact
@@ -505,7 +570,7 @@
 				onreset={() => resize('side', usual.side)}
 			/>
 			<aside class="team-workspace" bind:this={teamPane}>
-				<Teams {franchises} myId={me?.id} {revision} onselect={research} />
+				<Teams {franchises} leagues={data.dynasty?.leagues ?? []} myId={me?.id} {revision} onselect={research} />
 				{#if me}<Splitter
 						orientation="horizontal"
 						label="Resize my queue"
@@ -570,6 +635,13 @@
 {#snippet researchAction(player: Player)}
 	{@const taken = !!player.owner_slug || made.some((p) => p.player_id === player.id)}
 	{#if taken}<span class="pill">{player.owner_name || 'Already drafted'}</span>
+	{:else if changing}
+		<p class="target-note">
+			Replacing {changing.player_name} · R{changing.round} · #{changing.position}
+		</p>
+		<button class="small primary" disabled={picking || !room?.connected} onclick={() => pick(player)}
+			>{picking ? 'Replacing…' : 'Replace'}</button
+		>
 	{:else if me && draft?.status !== 'complete'}
 		{#if target}<p class="target-note">
 				{pickingFor ? `Picking for ${pickingFor.name}` : myTurn ? 'Your pick' : 'Make-up pick'} · R{target.round}
@@ -654,31 +726,18 @@
 	.next-pick .eyebrow {
 		font-size: 0.6rem;
 	}
-	.admin {
-		position: relative;
+	:global(.admin) {
 		flex: none;
 		font-size: 0.72rem;
 	}
-	.admin summary {
-		cursor: pointer;
+	:global(.admin > summary) {
 		color: var(--ink-soft);
 	}
 	.admin-controls {
-		position: absolute;
-		z-index: 25;
-		right: 0;
-		top: calc(100% + 0.5rem);
-		width: 32rem;
-		max-width: calc(100vw - 2rem);
+		width: min(30rem, calc(100vw - 3.5rem));
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
-		padding: 0.85rem;
-		background: var(--surface);
-		border: 1px solid var(--rule-strong);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
-		max-height: 70dvh;
-		overflow: auto;
 	}
 	.clock-set {
 		width: 100%;
@@ -714,6 +773,29 @@
 		min-height: 0;
 		background: var(--surface);
 		border-block: 1px solid var(--rule);
+	}
+	/* Board or stats, as two halves of one control. */
+	.view-switch {
+		display: inline-flex;
+		flex: none;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-small);
+		overflow: hidden;
+	}
+	.view-switch button {
+		padding: 0.25rem 0.65rem;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		font: 700 0.8rem var(--body);
+		color: var(--ink-soft);
+	}
+	.view-switch button + button {
+		border-left: 1px solid var(--rule);
+	}
+	.view-switch button.on {
+		background: var(--brand-soft);
+		color: var(--brand);
 	}
 	.section-heading {
 		display: flex;
@@ -823,6 +905,19 @@
 		border-color: var(--gold);
 		color: var(--gold);
 	}
+	.auto-set {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
+		width: 100%;
+	}
+	.changing {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
 	.makeup {
 		font-size: 0.78rem;
 		padding: 0.4rem 0.65rem;
@@ -842,6 +937,10 @@
 		.main-workspace {
 			grid-template-rows: 250px auto;
 			gap: 0.75rem;
+		}
+		/* The board scrolls in its short pane; the stats read better at full length. */
+		.main-workspace.stats-view {
+			grid-template-rows: auto auto;
 		}
 		.scouting {
 			grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);

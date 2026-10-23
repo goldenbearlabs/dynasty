@@ -38,8 +38,9 @@
 
 <section class="stack">
 	<p class="muted">
-		Rosters, injury designations and season-by-season stat history refresh every night, prospects every week, and scores every 15 minutes for the
-		sports this dynasty plays. Use these to refresh now.
+		Rosters, injury designations, season-by-season stat history and the schedule ahead refresh every night, prospects every week, and scores
+		every 15 minutes for the sports this dynasty plays. MLB Pipeline Top 100 ranks refresh with prospects and can also be refreshed separately. Use these to refresh now. A schedule refresh started here also goes back over the
+		games already stored, clearing any that turn out not to be regular season.
 	</p>
 
 	<div class="feeds">
@@ -54,7 +55,9 @@
 					<button class="small" onclick={() => start(c, 'rosters')}><Icon name="refresh" size={14} /> Rosters</button>
 					<button class="small" onclick={() => start(c, 'injuries')}><Icon name="refresh" size={14} /> Injuries</button>
 					<button class="small" onclick={() => start(c, 'games')}><Icon name="refresh" size={14} /> Scores</button>
+					<button class="small" title="Load the games ahead, and clear out any that are not regular season" onclick={() => start(c, 'schedule')}><Icon name="refresh" size={14} /> Schedule</button>
 					<button class="small" onclick={() => start(c, 'seasons')}><Icon name="refresh" size={14} /> Stat history</button>
+					{#if c.key === 'mlb'}<button class="small" onclick={() => start(c, 'prospect-rankings')}><Icon name="refresh" size={14} /> MLB Top 100 ranks</button>{/if}
 					{#if c.has_prospects}
 						<button class="small" onclick={() => start(c, 'prospects')}><Icon name="refresh" size={14} /> Prospects</button>
 					{/if}

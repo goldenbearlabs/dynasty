@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -16,6 +17,7 @@ import (
 func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Franchise) {
 	var body struct {
 		ReplacementID pgtype.UUID   `json:"replacement_id"`
+		DropPlayerID  pgtype.UUID   `json:"drop_player_id"` // for "add": released to make room, in the same move
 		PlayerID      pgtype.UUID   `json:"player_id"`
 		List          string        `json:"list"`
 		Reserve       []pgtype.UUID `json:"reserve"`      // for "set": the whole reserve list
@@ -65,7 +67,11 @@ func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Fran
 	}
 	switch r.PathValue("action") {
 	case "add":
-		err = s.Roster.Add(ctx, change)
+		if body.DropPlayerID.Valid {
+			err = s.Roster.AddDrop(ctx, change, body.DropPlayerID)
+		} else {
+			err = s.Roster.Add(ctx, change)
+		}
 	case "drop":
 		err = s.Roster.Drop(ctx, change)
 	case "injury-swap":
@@ -74,6 +80,8 @@ func (s *Server) changeRoster(w http.ResponseWriter, r *http.Request, me db.Fran
 		err = s.Roster.Move(ctx, change)
 	case "set":
 		err = s.Roster.Set(ctx, change, body.Reserve)
+	case "season":
+		err = s.Roster.SetSeason(ctx, change, body.Reserve)
 	default:
 		writeError(w, http.StatusNotFound, "not found")
 		return
@@ -97,4 +105,25 @@ func (s *Server) listActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, activity)
+}
+
+// setRosterDeadline sets, or clears with an empty deadline, the time by
+// which every franchise must set its roster for a season.
+func (s *Server) setRosterDeadline(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Deadline *time.Time `json:"deadline"` // null clears it
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var deadline time.Time
+	if body.Deadline != nil {
+		deadline = *body.Deadline
+	}
+	s.done(w, r, s.Roster.SetDeadline(r.Context(), id, deadline))
 }

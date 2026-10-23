@@ -130,6 +130,7 @@ func TestPitcherStartsCap(t *testing.T) {
 	}
 	total := func() float64 {
 		t.Helper()
+		assertCountedGameTotals(t, pool, league)
 		var all []struct{ Rows []struct{ Points float64 } }
 		ann.want(http.StatusOK, "GET", "/api/standings", nil, &all)
 		return all[0].Rows[0].Points
@@ -152,6 +153,17 @@ func TestPitcherStartsCap(t *testing.T) {
 	if got := total(); math.Abs(got-15) > 0.001 {
 		t.Fatalf("total = %v after a start over the limit, want still 15", got)
 	}
+
+	// In a doubled matchup the cap doubles, over the whole matchup: the third start counts.
+	sql(`insert into periods (season_id, seq, starts_on, ends_on, is_playoff, double_games)
+	     select id, 1, $2, $3, false, true from seasons where league_id = $1`, league, today.AddDate(0, 0, -6), today.AddDate(0, 0, 7))
+	if s := seen(); s.Limit != 4 || len(s.Made) != 3 || !s.Made[2].Counts {
+		t.Fatalf("starts = %+v in a doubled matchup; want a limit of 4 and the third counting", s)
+	}
+	if got := total(); math.Abs(got-22) > 0.001 {
+		t.Fatalf("total = %v in a doubled matchup, want 22", got)
+	}
+	sql(`delete from periods where double_games`)
 
 	// Without a limit it counts like any other game.
 	var current struct {

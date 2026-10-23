@@ -6,7 +6,6 @@
 		advancePlayoffs,
 		closeSeason,
 		createSeason,
-		generateSchedule,
 		getSeasons,
 		getStandings,
 		reopenSeason,
@@ -17,8 +16,11 @@
 		type Season,
 		type Standings
 	} from '#lib/api.ts';
+	import ScheduleEditor from './ScheduleEditor.svelte';
+	import RosterDeadline from './RosterDeadline.svelte';
 	import SportBadge from '#lib/ui/SportBadge.svelte';
-	import { dayLabel, points } from '#lib/ui/time.ts';
+	import Icon from '#lib/ui/Icon.svelte';
+	import { dayLabel, points, shiftDay, sportsToday } from '#lib/ui/time.ts';
 	import { toast } from '#lib/ui/toast.svelte.ts';
 
 	let { dynasty, competitions }: { dynasty: Dynasty; competitions: Competition[] } = $props();
@@ -28,6 +30,7 @@
 	// The form for each league: a new season's year and dates, or the
 	// current season's dates and the champion to name.
 	let forms = $state<Record<string, { year: number; starts_on: string; ends_on: string; champion: string }>>({});
+	let open = $state<Record<string, boolean>>({}); // which leagues are expanded, by id
 
 	const latest = (league: League) => seasons.find((s) => s.league_id === league.id); // newest first
 	const table = (league: League) => standings.find((s) => s.league_id === league.id);
@@ -61,6 +64,18 @@
 			.then(invalidateAll)
 			.then(() => toast.good(done), toast.error);
 
+	function saveDates(league: League, season: Season) {
+		const form = forms[league.id];
+		const restart = form.starts_on !== season.starts_on && form.starts_on > sportsToday();
+		if (restart && !confirm(`Start ${league.name} on ${dayLabel(form.starts_on)} and rebuild its entire schedule? This clears the previous matchup dates, custom pairings and matchup results for this season.`)) return;
+		return run(setSeasonDates(season.id, form.starts_on, form.ends_on, restart), restart ? 'Season start saved and schedule rebuilt.' : 'Season dates saved.');
+	}
+
+	function startTomorrow(league: League, season: Season) {
+		forms[league.id].starts_on = shiftDay(new Date().toLocaleDateString('en-CA'), 1);
+		return saveDates(league, season);
+	}
+
 	function close(league: League, season: Season) {
 		const champion = forms[league.id].champion;
 		if (confirm(`Close the ${season.year} ${league.name} season and name ${name(champion)} champion?`)) {
@@ -79,38 +94,37 @@
 		{@const season = latest(league)}
 		{@const form = forms[league.id]}
 		{#if form}
-			<div class="card stack" data-sport={league.competition}>
-				<div class="spread">
+			<details class="card league" data-sport={league.competition} bind:open={open[league.id]}>
+				<summary class="spread">
 					<div class="row">
+						<Icon name={open[league.id] ? 'down' : 'right'} size={16} />
 						<SportBadge sport={league.competition} solid />
 						<h2>{league.name}</h2>
 					</div>
 					{#if season?.status === 'active'}
-						<span class="pill good">{season.year} season in progress</span>
+						<span class="pill good">{season.starts_on > sportsToday() ? `${season.year} season starts ${dayLabel(season.starts_on)}` : `${season.year} season in progress`}</span>
 					{:else if season}
 						<span class="pill gold">{season.year} champion: {name(season.champion_franchise_id)}</span>
 					{:else}
 						<span class="pill">No season yet</span>
 					{/if}
-				</div>
+				</summary>
+				{#if open[league.id]}
+				<div class="stack body">
 
 				{#if season?.status === 'active'}
 					<div class="row end">
 						<label class="field">First day <input type="date" bind:value={form.starts_on} /></label>
 						<label class="field">Last day <input type="date" bind:value={form.ends_on} /></label>
-						<button onclick={() => run(setSeasonDates(season.id, form.starts_on, form.ends_on), 'Season dates saved.')}>Save dates</button>
+						<button onclick={() => saveDates(league, season)}>Save dates</button>
+						<button class="small" onclick={() => startTomorrow(league, season)}>Start tomorrow</button>
 					</div>
+					<RosterDeadline {season} onsaved={load} />
 					{#if league.settings.format.type === 'head_to_head'}
-						<div class="row schedule">
-							<span class="muted small-text">
-								Head-to-head: {league.settings.format.matchup_days}-day matchups, {league.settings.format.playoff_teams} playoff teams.
-								The schedule is built when the season starts and kept up to date when the dates, rules or franchises change.
-							</span>
-							<button class="small" onclick={() => run(generateSchedule(season.id), 'Schedule rebuilt from tomorrow on.')}>
-								Rebuild schedule
-							</button>
-							<button class="small" onclick={() => run(advancePlayoffs(), 'Playoff bracket is up to date.')}>Update playoff bracket</button>
-						</div>
+						{#key `${season.id}/${season.starts_on}/${season.ends_on}`}
+							<ScheduleEditor {league} {season} teams={dynasty.franchises} />
+						{/key}
+						<button class="small" onclick={() => run(advancePlayoffs(), 'Playoff bracket is up to date.')}>Update playoff bracket</button>
 					{/if}
 					<div class="row end close">
 						<label class="field">
@@ -146,14 +160,26 @@
 						</button>
 					</div>
 				{/if}
-			</div>
+				</div>
+				{/if}
+			</details>
 		{/if}
 	{/each}
 </section>
 
 <style>
-	.schedule {
-		padding-top: 0.2rem;
+	.league > summary {
+		cursor: pointer;
+		list-style: none;
+	}
+	.league > summary::-webkit-details-marker {
+		display: none;
+	}
+	.league > summary :global(svg) {
+		color: var(--ink-faint);
+	}
+	.body {
+		margin-top: 0.85rem;
 	}
 	.close {
 		padding-top: 1rem;

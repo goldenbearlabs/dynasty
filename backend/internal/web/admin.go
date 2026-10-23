@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"crossover/internal/ingest"
 	"crossover/internal/players"
 	"crossover/internal/scoring"
 )
@@ -22,6 +23,13 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 		go s.Syncer.SyncInjuries(s.Background, c.Key, c.Injuries)
 	case job == "rosters":
 		go s.Syncer.SyncRosters(s.Background, c.Key, c.Source)
+	case job == "prospect-rankings":
+		source, ok := c.Prospects.(ingest.ProspectRankingSource)
+		if !ok {
+			writeError(w, http.StatusNotFound, "no prospect rankings for this competition")
+			return
+		}
+		go s.Syncer.SyncProspectRankings(s.Background, c.Key, source)
 	case job == "prospects" && c.Prospects != nil:
 		go s.Syncer.SyncProspects(s.Background, c.Key, c.Prospects)
 	case job == "seasons":
@@ -29,6 +37,15 @@ func (s *Server) startSync(w http.ResponseWriter, r *http.Request) {
 	case job == "games":
 		from, to := scoring.Window()
 		go s.Syncer.SyncGames(s.Background, c.Key, c.Games, from, to)
+	case job == "schedule":
+		// Asked for by hand, it goes back over every day already stored too,
+		// so games the feed has since moved or ruled out of the regular season
+		// are put right; the nightly run looks only ahead.
+		from, _ := scoring.Window()
+		if first, err := s.Queries.FirstScheduledDay(r.Context(), c.Key); err == nil && first.Valid && first.Time.Before(from) {
+			from = first.Time
+		}
+		go s.Syncer.SyncFullSchedule(s.Background, c.Key, c.Games, from, s.ScheduleDays)
 	default:
 		writeError(w, http.StatusNotFound, "no such sync for this competition")
 		return

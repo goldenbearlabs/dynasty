@@ -31,12 +31,32 @@ func (q *Queries) AddPlayerExternalID(ctx context.Context, arg AddPlayerExternal
 	return err
 }
 
-const clearInjuryDesignations = `-- name: ClearInjuryDesignations :exec
-update players set injury_designation = '', injury_checked_at = now() where competition = $1
+const averageImplied = `-- name: AverageImplied :one
+select coalesce(avg((home_implied + away_implied) / 2), 0)::float8
+from games
+where competition = $1 and status = 'scheduled' and home_implied is not null
 `
 
-func (q *Queries) ClearInjuryDesignations(ctx context.Context, competition string) error {
-	_, err := q.db.Exec(ctx, clearInjuryDesignations, competition)
+// The average side's implied score over the games still to be played with a
+// line: what a team's own implied score is measured against.
+func (q *Queries) AverageImplied(ctx context.Context, competition string) (float64, error) {
+	row := q.db.QueryRow(ctx, averageImplied, competition)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const clearProbableStarters = `-- name: ClearProbableStarters :exec
+delete from probable_starters where competition = $1 and day = $2
+`
+
+type ClearProbableStartersParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+func (q *Queries) ClearProbableStarters(ctx context.Context, arg ClearProbableStartersParams) error {
+	_, err := q.db.Exec(ctx, clearProbableStarters, arg.Competition, arg.Day)
 	return err
 }
 
@@ -44,25 +64,34 @@ const countPlayers = `-- name: CountPlayers :one
 select count(*)
 from players p
 left join roster_entries r on r.player_id = p.id
-where ($1::text = '' or p.competition = $1)
+where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
-  and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::text = '' or $4 = any(p.positions))
-  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
-  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
-  and ($7::uuid is null or (
+  and (not $3::boolean or exists (select 1 from prospect_rankings pr where pr.player_id = p.id and pr.source = 'mlb_pipeline'))
+  and (coalesce(cardinality($4::text[]), 0) = 0
+       or ('available' = any($4::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($4::text[]) and coalesce(r.list, '') <> '')
+       or ($4::text[] && array['main','reserve','rights']::text[] and r.list = any($4::text[])))
+  and (coalesce(cardinality($5::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($5::text[])))
+  and ($6::text = '' or p.full_name ilike '%' || $6 || '%')
+  and ($7::text = '' or p.positions && string_to_array($7, ','))
+  and ($8::int is null or p.birth_date <= current_date - make_interval(years => $8))
+  and ($9::int is null or p.birth_date > current_date - make_interval(years => $9 + 1))
+  and ($10::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $7)))
-  and ($8::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $10)))
+  and ($11::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $8 and l.competition = p.competition)))
+                    where dl.draft_id = $11 and l.competition = p.competition)))
 `
 
 type CountPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
+	RankedOnly  bool        `json:"ranked_only"`
+	Ownership   []string    `json:"ownership"`
+	Owners      []string    `json:"owners"`
 	Search      string      `json:"search"`
 	Position    string      `json:"position"`
 	MinAge      pgtype.Int4 `json:"min_age"`
@@ -75,6 +104,9 @@ func (q *Queries) CountPlayers(ctx context.Context, arg CountPlayersParams) (int
 	row := q.db.QueryRow(ctx, countPlayers,
 		arg.Competition,
 		arg.Status,
+		arg.RankedOnly,
+		arg.Ownership,
+		arg.Owners,
 		arg.Search,
 		arg.Position,
 		arg.MinAge,
@@ -274,7 +306,7 @@ func (q *Queries) GetLeagueByCompetition(ctx context.Context, arg GetLeagueByCom
 }
 
 const getPlayer = `-- name: GetPlayer :one
-select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at, injury_designation, injury_checked_at from players where id = $1
+select id, competition, status, eligible_since, full_name, positions, birth_date, pro_team_id, class, note, headshot_url, updated_at, career_checked_at, injury_designation, injury_checked_at, pool_eligible, draft_year, draft_round, draft_pick, draft_overall from players where id = $1
 `
 
 func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error) {
@@ -296,6 +328,11 @@ func (q *Queries) GetPlayer(ctx context.Context, id pgtype.UUID) (Player, error)
 		&i.CareerCheckedAt,
 		&i.InjuryDesignation,
 		&i.InjuryCheckedAt,
+		&i.PoolEligible,
+		&i.DraftYear,
+		&i.DraftRound,
+		&i.DraftPick,
+		&i.DraftOverall,
 	)
 	return i, err
 }
@@ -334,11 +371,16 @@ func (q *Queries) GetPlayerExternalID(ctx context.Context, arg GetPlayerExternal
 const getPlayerProfile = `-- name: GetPlayerProfile :one
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
+       p.draft_year, p.draft_round, p.draft_pick, p.draft_overall,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text as team_name,
        coalesce(f.name, '')::text as owner_name,
        coalesce(f.slug, '')::text as owner_slug
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries re on re.player_id = p.id
 left join franchises f on f.id = re.franchise_id
@@ -346,20 +388,29 @@ where p.id = $1
 `
 
 type GetPlayerProfileRow struct {
-	ID                pgtype.UUID `json:"id"`
-	Competition       string      `json:"competition"`
-	Status            string      `json:"status"`
-	InjuryDesignation string      `json:"injury_designation"`
-	FullName          string      `json:"full_name"`
-	Positions         []string    `json:"positions"`
-	BirthDate         pgtype.Date `json:"birth_date"`
-	Class             string      `json:"class"`
-	Note              string      `json:"note"`
-	HeadshotUrl       string      `json:"headshot_url"`
-	TeamAbbrev        string      `json:"team_abbrev"`
-	TeamName          string      `json:"team_name"`
-	OwnerName         string      `json:"owner_name"`
-	OwnerSlug         string      `json:"owner_slug"`
+	ID                 pgtype.UUID `json:"id"`
+	Competition        string      `json:"competition"`
+	Status             string      `json:"status"`
+	InjuryDesignation  string      `json:"injury_designation"`
+	FullName           string      `json:"full_name"`
+	Positions          []string    `json:"positions"`
+	BirthDate          pgtype.Date `json:"birth_date"`
+	Class              string      `json:"class"`
+	Note               string      `json:"note"`
+	HeadshotUrl        string      `json:"headshot_url"`
+	ProspectRank       pgtype.Int4 `json:"prospect_rank"`
+	ProspectRankYear   pgtype.Int4 `json:"prospect_rank_year"`
+	ProspectRankSource string      `json:"prospect_rank_source"`
+	ProspectRankUrl    string      `json:"prospect_rank_url"`
+	ProspectEta        string      `json:"prospect_eta"`
+	DraftYear          pgtype.Int4 `json:"draft_year"`
+	DraftRound         pgtype.Int4 `json:"draft_round"`
+	DraftPick          pgtype.Int4 `json:"draft_pick"`
+	DraftOverall       pgtype.Int4 `json:"draft_overall"`
+	TeamAbbrev         string      `json:"team_abbrev"`
+	TeamName           string      `json:"team_name"`
+	OwnerName          string      `json:"owner_name"`
+	OwnerSlug          string      `json:"owner_slug"`
 }
 
 // A player's identity and current ownership for inline draft research.
@@ -377,12 +428,61 @@ func (q *Queries) GetPlayerProfile(ctx context.Context, id pgtype.UUID) (GetPlay
 		&i.Class,
 		&i.Note,
 		&i.HeadshotUrl,
+		&i.ProspectRank,
+		&i.ProspectRankYear,
+		&i.ProspectRankSource,
+		&i.ProspectRankUrl,
+		&i.ProspectEta,
+		&i.DraftYear,
+		&i.DraftRound,
+		&i.DraftPick,
+		&i.DraftOverall,
 		&i.TeamAbbrev,
 		&i.TeamName,
 		&i.OwnerName,
 		&i.OwnerSlug,
 	)
 	return i, err
+}
+
+const insertHistoricalPlayer = `-- name: InsertHistoricalPlayer :one
+with new_player as (
+  insert into players (competition, status, full_name, positions, birth_date, note, headshot_url)
+  values ($3, 'inactive', $4, $5, $6, $7, $8)
+  returning id
+)
+insert into player_external_ids (provider, provider_id, player_id)
+select $1, $2, id from new_player
+returning player_id
+`
+
+type InsertHistoricalPlayerParams struct {
+	Provider    string      `json:"provider"`
+	ProviderID  string      `json:"provider_id"`
+	Competition string      `json:"competition"`
+	FullName    string      `json:"full_name"`
+	Positions   []string    `json:"positions"`
+	BirthDate   pgtype.Date `json:"birth_date"`
+	Note        string      `json:"note"`
+	HeadshotUrl string      `json:"headshot_url"`
+}
+
+// An established player absent from current rosters remains draftable.
+// Do not infer current team membership or prospect status from past games.
+func (q *Queries) InsertHistoricalPlayer(ctx context.Context, arg InsertHistoricalPlayerParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, insertHistoricalPlayer,
+		arg.Provider,
+		arg.ProviderID,
+		arg.Competition,
+		arg.FullName,
+		arg.Positions,
+		arg.BirthDate,
+		arg.Note,
+		arg.HeadshotUrl,
+	)
+	var player_id pgtype.UUID
+	err := row.Scan(&player_id)
+	return player_id, err
 }
 
 const insertManualPlayer = `-- name: InsertManualPlayer :one
@@ -509,12 +609,13 @@ func (q *Queries) KeepEarliestEligibility(ctx context.Context, arg KeepEarliestE
 }
 
 const listInjuryPlayers = `-- name: ListInjuryPlayers :many
-select id, full_name from players where competition = $1
+select id, full_name, injury_designation from players where competition = $1
 `
 
 type ListInjuryPlayersRow struct {
-	ID       pgtype.UUID `json:"id"`
-	FullName string      `json:"full_name"`
+	ID                pgtype.UUID `json:"id"`
+	FullName          string      `json:"full_name"`
+	InjuryDesignation string      `json:"injury_designation"`
 }
 
 func (q *Queries) ListInjuryPlayers(ctx context.Context, competition string) ([]ListInjuryPlayersRow, error) {
@@ -526,7 +627,7 @@ func (q *Queries) ListInjuryPlayers(ctx context.Context, competition string) ([]
 	items := []ListInjuryPlayersRow{}
 	for rows.Next() {
 		var i ListInjuryPlayersRow
-		if err := rows.Scan(&i.ID, &i.FullName); err != nil {
+		if err := rows.Scan(&i.ID, &i.FullName, &i.InjuryDesignation); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -694,19 +795,31 @@ func (q *Queries) ListPlayerRosterEntries(ctx context.Context, playerID pgtype.U
 
 const listPlayers = `-- name: ListPlayers :many
 with seasons as (
-  select distinct competition, year from stat_seasons
+  -- A provider fallback may have been stored under two request years.
+  -- Count each named season once, using its earliest stored year.
+  select distinct competition, year from (
+    select competition, label, min(year) as year from stat_seasons group by competition, label
+  ) canonical
 ), reference as materialized (
-  -- the season with exactly season_back newer ones in its sport
-  select s.competition, s.year from seasons s
-  where (select count(*) from seasons newer where newer.competition = s.competition and newer.year > s.year) = $12::int
+  select competition, year from (
+    select competition, year, row_number() over (partition by competition order by year desc) as rank
+    from seasons where ($2::text = '' or competition = $2)
+  ) ranked where rank = $3::int + 1
 ), scored as materialized (
   -- points are stored with each season line, under the rules of the league
   -- here that plays its sport
   select ps.player_id, ps.competition, max(ps.label)::text as label,
-         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points
+         sum(ps.points) as points, sum(ps.eligible_points) as eligible_points, sum(ps.games)::int as games
   from player_seasons ps
   join reference on reference.competition = ps.competition and reference.year = ps.year
-  where ps.league = '' and ps.points is not null and ($1::text = '' or ps.competition = $1)
+  where ps.league = '' and ($2::text = '' or ps.competition = $2)
+  group by ps.player_id, ps.competition
+), stat_sort as (
+  -- Only expand the requested raw key when sorting by a raw stat.
+  select ps.player_id, ps.competition, sum((ps.stats ->> $4::text)::float8) as value
+  from player_seasons ps
+  join reference on reference.competition = ps.competition and reference.year = ps.year
+  where ps.league = '' and $5::text = 'stat' and ps.stats ? $4::text
   group by ps.player_id, ps.competition
 ), rostered as materialized (
   -- The players a league would hold, by points: what "average" is measured on.
@@ -720,81 +833,160 @@ with seasons as (
         from leagues l) sizes on sizes.competition = placed.competition
   where placed.place <= sizes.spots
   group by placed.competition
-)
+), player_pool as (
 select p.id, p.competition, p.status, p.injury_designation, p.full_name, p.positions, p.birth_date,
        p.class, p.note, p.headshot_url, p.eligible_since,
+       pr.rank as prospect_rank, pr.year as prospect_rank_year,
+       coalesce(pr.source,'')::text as prospect_rank_source, coalesce(pr.source_url,'')::text as prospect_rank_url,
+       coalesce(pr.eta,'')::text as prospect_eta,
+       p.draft_year, p.draft_round, p.draft_pick, p.draft_overall,
        coalesce(t.abbrev, '')::text as team_abbrev,
        coalesce(t.name, '')::text   as team_name,
        coalesce(f.name, '')::text   as owner_name,
        coalesce(f.slug, '')::text   as owner_slug,
+       coalesce(r.list, '')::text as roster_list,
+       coalesce(sc.games, 0)::int as season_games,
+       (sc.points is not null)::boolean as season_scored,
        w.clears_at                  as waiver_until,
        coalesce(sc.label, '')::text     as season,
        coalesce(sc.points, 0)::float8   as season_points,
-       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index
+       coalesce(case when rostered.spread > 0 then 100 + 15 * (sc.eligible_points - rostered.mean) / rostered.spread end, 0)::float8 as season_index,
+       (case $5::text when 'name' then p.full_name when 'position' then array_to_string(p.positions, '/')
+          when 'team' then t.name when 'age' then null else null end)::text as sort_text,
+       (case $5::text
+          when 'points' then sc.points / case when $6::boolean then nullif(sc.games, 0) else 1 end
+          when 'games' then sc.games::float8
+          when 'age' then extract(epoch from (current_date::timestamp - p.birth_date::timestamp))
+          when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
+          when 'prospect_rank' then -pr.rank::float8
+          when 'draft' then -p.draft_overall::float8
+          when 'stat' then stat_sort.value / case when $6::boolean then nullif(sc.games, 0) else 1 end
+        end)::float8 as sort_number
 from players p
+left join prospect_rankings pr on pr.player_id=p.id and pr.source='mlb_pipeline'
 left join pro_teams t      on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 left join franchises f     on f.id = r.franchise_id
 left join waivers w        on w.player_id = p.id
 left join scored sc        on sc.player_id = p.id and sc.competition = p.competition
+left join stat_sort on stat_sort.player_id = p.id and stat_sort.competition = p.competition
 left join rostered         on rostered.competition = p.competition
-where ($1::text = '' or p.competition = $1)
-  and ($2::text = '' or p.status = $2)
-  and ($3::text = '' or p.full_name ilike '%' || $3 || '%')
-  and ($4::text = '' or $4 = any(p.positions))
-  and ($5::int is null or p.birth_date <= current_date - make_interval(years => $5))
-  and ($6::int is null or p.birth_date > current_date - make_interval(years => $6 + 1))
-  and ($7::uuid is null or (
+where p.pool_eligible and ($2::text = '' or p.competition = $2)
+  and ($7::text = '' or p.status = $7)
+  -- ranked_only: just the prospects on the MLB Pipeline Top 100.
+  and (not $8::boolean or pr.rank is not null)
+  and (coalesce(cardinality($9::text[]), 0) = 0
+       or ('available' = any($9::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($9::text[]) and coalesce(r.list, '') <> '')
+       or ($9::text[] && array['main','reserve','rights']::text[] and r.list = any($9::text[])))
+  and (coalesce(cardinality($10::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($10::text[])))
+  and ($11::text = '' or p.full_name ilike '%' || $11 || '%')
+  -- position: one or several, comma separated; a player matches by any of his.
+  and ($12::text = '' or p.positions && string_to_array($12, ','))
+  and ($13::int is null or p.birth_date <= current_date - make_interval(years => $13))
+  and ($14::int is null or p.birth_date > current_date - make_interval(years => $14 + 1))
+  and ($15::uuid is null or (
         r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $7)))
-  and ($8::uuid is null or (
+        and p.competition = (select l.competition from leagues l where l.id = $15)))
+  and ($16::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $8 and l.competition = p.competition)))
-order by case $9::text
-           when 'points' then sc.points
-           when 'index' then case when rostered.spread > 0 then (sc.eligible_points - rostered.mean) / rostered.spread end
-         end desc nulls last,
-         p.full_name, p.id
-limit $11 offset $10
+                    where dl.draft_id = $16 and l.competition = p.competition)))
+), candidates as materialized (
+select id, competition, status, injury_designation, full_name, positions, birth_date, class, note, headshot_url, eligible_since, prospect_rank, prospect_rank_year, prospect_rank_source, prospect_rank_url, prospect_eta, draft_year, draft_round, draft_pick, draft_overall, team_abbrev, team_name, owner_name, owner_slug, roster_list, season_games, season_scored, waiver_until, season, season_points, season_index, sort_text, sort_number from player_pool
+order by
+  case when not $1::boolean then sort_number end desc nulls last,
+  case when $1::boolean then sort_number end asc nulls last,
+  case when not $1::boolean then sort_text end desc nulls last,
+  case when $1::boolean then sort_text end asc nulls last,
+  full_name, id
+limit $18 offset $17
+)
+select candidates.id, candidates.competition, candidates.status, candidates.injury_designation,
+ candidates.full_name, candidates.positions, candidates.birth_date, candidates.class, candidates.note,
+ candidates.headshot_url, candidates.eligible_since, candidates.prospect_rank, candidates.prospect_rank_year,
+ candidates.prospect_rank_source, candidates.prospect_rank_url, candidates.prospect_eta,
+ candidates.draft_year, candidates.draft_round, candidates.draft_pick, candidates.draft_overall,
+ candidates.team_abbrev, candidates.team_name, candidates.owner_name, candidates.owner_slug,
+ candidates.roster_list, candidates.season_games, candidates.season_scored, candidates.waiver_until,
+ candidates.season, candidates.season_points, candidates.season_index,
+ coalesce(raw.stats, '{}'::jsonb) as season_stats
+from candidates
+left join lateral (
+  -- Aggregate full stat lines only for the players on the selected page.
+  select jsonb_object_agg(sv.key, sv.total) as stats
+  from (
+    select stat.key, sum(stat.value::numeric)::float8 as total
+    from player_seasons ps
+    join reference on reference.competition = ps.competition and reference.year = ps.year
+    cross join lateral jsonb_each_text(ps.stats) as stat(key, value)
+    where ps.player_id = candidates.id and ps.competition = candidates.competition and ps.league = ''
+    group by stat.key
+  ) sv
+) raw on true
+order by
+  case when not $1::boolean then candidates.sort_number end desc nulls last,
+  case when $1::boolean then candidates.sort_number end asc nulls last,
+  case when not $1::boolean then candidates.sort_text end desc nulls last,
+  case when $1::boolean then candidates.sort_text end asc nulls last,
+  candidates.full_name, candidates.id
 `
 
 type ListPlayersParams struct {
+	Ascending   bool        `json:"ascending"`
 	Competition string      `json:"competition"`
+	SeasonBack  int32       `json:"season_back"`
+	StatKey     string      `json:"stat_key"`
+	SortBy      string      `json:"sort_by"`
+	PerGame     bool        `json:"per_game"`
 	Status      string      `json:"status"`
+	RankedOnly  bool        `json:"ranked_only"`
+	Ownership   []string    `json:"ownership"`
+	Owners      []string    `json:"owners"`
 	Search      string      `json:"search"`
 	Position    string      `json:"position"`
 	MinAge      pgtype.Int4 `json:"min_age"`
 	MaxAge      pgtype.Int4 `json:"max_age"`
 	AvailableIn pgtype.UUID `json:"available_in"`
 	DraftID     pgtype.UUID `json:"draft_id"`
-	SortBy      string      `json:"sort_by"`
 	PageOffset  int32       `json:"page_offset"`
 	PageSize    int32       `json:"page_size"`
-	SeasonBack  int32       `json:"season_back"`
 }
 
 type ListPlayersRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	Competition       string             `json:"competition"`
-	Status            string             `json:"status"`
-	InjuryDesignation string             `json:"injury_designation"`
-	FullName          string             `json:"full_name"`
-	Positions         []string           `json:"positions"`
-	BirthDate         pgtype.Date        `json:"birth_date"`
-	Class             string             `json:"class"`
-	Note              string             `json:"note"`
-	HeadshotUrl       string             `json:"headshot_url"`
-	EligibleSince     pgtype.Timestamptz `json:"eligible_since"`
-	TeamAbbrev        string             `json:"team_abbrev"`
-	TeamName          string             `json:"team_name"`
-	OwnerName         string             `json:"owner_name"`
-	OwnerSlug         string             `json:"owner_slug"`
-	WaiverUntil       pgtype.Timestamptz `json:"waiver_until"`
-	Season            string             `json:"season"`
-	SeasonPoints      float64            `json:"season_points"`
-	SeasonIndex       float64            `json:"season_index"`
+	ID                 pgtype.UUID        `json:"id"`
+	Competition        string             `json:"competition"`
+	Status             string             `json:"status"`
+	InjuryDesignation  string             `json:"injury_designation"`
+	FullName           string             `json:"full_name"`
+	Positions          []string           `json:"positions"`
+	BirthDate          pgtype.Date        `json:"birth_date"`
+	Class              string             `json:"class"`
+	Note               string             `json:"note"`
+	HeadshotUrl        string             `json:"headshot_url"`
+	EligibleSince      pgtype.Timestamptz `json:"eligible_since"`
+	ProspectRank       pgtype.Int4        `json:"prospect_rank"`
+	ProspectRankYear   pgtype.Int4        `json:"prospect_rank_year"`
+	ProspectRankSource string             `json:"prospect_rank_source"`
+	ProspectRankUrl    string             `json:"prospect_rank_url"`
+	ProspectEta        string             `json:"prospect_eta"`
+	DraftYear          pgtype.Int4        `json:"draft_year"`
+	DraftRound         pgtype.Int4        `json:"draft_round"`
+	DraftPick          pgtype.Int4        `json:"draft_pick"`
+	DraftOverall       pgtype.Int4        `json:"draft_overall"`
+	TeamAbbrev         string             `json:"team_abbrev"`
+	TeamName           string             `json:"team_name"`
+	OwnerName          string             `json:"owner_name"`
+	OwnerSlug          string             `json:"owner_slug"`
+	RosterList         string             `json:"roster_list"`
+	SeasonGames        int32              `json:"season_games"`
+	SeasonScored       bool               `json:"season_scored"`
+	WaiverUntil        pgtype.Timestamptz `json:"waiver_until"`
+	Season             string             `json:"season"`
+	SeasonPoints       float64            `json:"season_points"`
+	SeasonIndex        float64            `json:"season_index"`
+	SeasonStats        json.RawMessage    `json:"season_stats"`
 }
 
 // available_in narrows to players a league could acquire: they play in its
@@ -810,18 +1002,24 @@ type ListPlayersRow struct {
 // deviation among them. sort_by "points" or "index" puts the highest first.
 func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
 	rows, err := q.db.Query(ctx, listPlayers,
+		arg.Ascending,
 		arg.Competition,
+		arg.SeasonBack,
+		arg.StatKey,
+		arg.SortBy,
+		arg.PerGame,
 		arg.Status,
+		arg.RankedOnly,
+		arg.Ownership,
+		arg.Owners,
 		arg.Search,
 		arg.Position,
 		arg.MinAge,
 		arg.MaxAge,
 		arg.AvailableIn,
 		arg.DraftID,
-		arg.SortBy,
 		arg.PageOffset,
 		arg.PageSize,
-		arg.SeasonBack,
 	)
 	if err != nil {
 		return nil, err
@@ -842,15 +1040,197 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.Note,
 			&i.HeadshotUrl,
 			&i.EligibleSince,
+			&i.ProspectRank,
+			&i.ProspectRankYear,
+			&i.ProspectRankSource,
+			&i.ProspectRankUrl,
+			&i.ProspectEta,
+			&i.DraftYear,
+			&i.DraftRound,
+			&i.DraftPick,
+			&i.DraftOverall,
 			&i.TeamAbbrev,
 			&i.TeamName,
 			&i.OwnerName,
 			&i.OwnerSlug,
+			&i.RosterList,
+			&i.SeasonGames,
+			&i.SeasonScored,
 			&i.WaiverUntil,
 			&i.Season,
 			&i.SeasonPoints,
 			&i.SeasonIndex,
+			&i.SeasonStats,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPreviewGames = `-- name: ListPreviewGames :many
+select g.id, g.provider_id, coalesce(home.name, '')::text as home_name
+from games g left join pro_teams home on home.id = g.home_team_id
+where g.competition = $1::text and g.day = $2::date
+`
+
+type ListPreviewGamesParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+}
+
+type ListPreviewGamesRow struct {
+	ID         pgtype.UUID `json:"id"`
+	ProviderID string      `json:"provider_id"`
+	HomeName   string      `json:"home_name"`
+}
+
+// A day's games, with what matches them to another feed's: the game's id
+// and the home side's name.
+func (q *Queries) ListPreviewGames(ctx context.Context, arg ListPreviewGamesParams) ([]ListPreviewGamesRow, error) {
+	rows, err := q.db.Query(ctx, listPreviewGames, arg.Competition, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPreviewGamesRow{}
+	for rows.Next() {
+		var i ListPreviewGamesRow
+		if err := rows.Scan(&i.ID, &i.ProviderID, &i.HomeName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProTeams = `-- name: ListProTeams :many
+select competition, abbrev, name, logo_url from pro_teams order by competition, abbrev
+`
+
+type ListProTeamsRow struct {
+	Competition string `json:"competition"`
+	Abbrev      string `json:"abbrev"`
+	Name        string `json:"name"`
+	LogoUrl     string `json:"logo_url"`
+}
+
+// Every real team, for showing its logo wherever its abbreviation appears.
+func (q *Queries) ListProTeams(ctx context.Context) ([]ListProTeamsRow, error) {
+	rows, err := q.db.Query(ctx, listProTeams)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProTeamsRow{}
+	for rows.Next() {
+		var i ListProTeamsRow
+		if err := rows.Scan(
+			&i.Competition,
+			&i.Abbrev,
+			&i.Name,
+			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectionSeasons = `-- name: ListProjectionSeasons :many
+select ps.player_id, ps.year, ps.games, ps.stats
+from player_seasons ps
+where ps.player_id = any($1::uuid[]) and ps.competition = $2::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = $2::text)
+`
+
+type ListProjectionSeasonsParams struct {
+	PlayerIds   []pgtype.UUID `json:"player_ids"`
+	Competition string        `json:"competition"`
+}
+
+type ListProjectionSeasonsRow struct {
+	PlayerID pgtype.UUID     `json:"player_id"`
+	Year     int32           `json:"year"`
+	Games    int32           `json:"games"`
+	Stats    json.RawMessage `json:"stats"`
+}
+
+// The rostered players' totals for the competition's two latest seasons in
+// its own league, a row per team he played for.
+func (q *Queries) ListProjectionSeasons(ctx context.Context, arg ListProjectionSeasonsParams) ([]ListProjectionSeasonsRow, error) {
+	rows, err := q.db.Query(ctx, listProjectionSeasons, arg.PlayerIds, arg.Competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectionSeasonsRow{}
+	for rows.Next() {
+		var i ListProjectionSeasonsRow
+		if err := rows.Scan(
+			&i.PlayerID,
+			&i.Year,
+			&i.Games,
+			&i.Stats,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRankedPlayers = `-- name: ListRankedPlayers :many
+select p.id, p.positions, coalesce(t.conference, '')::text as conference
+from players p
+join (select ps.player_id, sum(ps.points) as points
+      from player_seasons ps
+      where ps.competition = $1 and ps.league = '' and ps.points is not null
+        and ps.year = (select max(s.year) from stat_seasons s where s.competition = $1)
+      group by ps.player_id) scored on scored.player_id = p.id
+left join pro_teams t on t.id = p.pro_team_id
+where p.pool_eligible and p.competition = $1
+order by scored.points desc, p.id
+limit $2
+`
+
+type ListRankedPlayersParams struct {
+	Competition string `json:"competition"`
+	PageSize    int32  `json:"page_size"`
+}
+
+type ListRankedPlayersRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Positions  []string    `json:"positions"`
+	Conference string      `json:"conference"`
+}
+
+// One sport's players by fantasy points in its latest season, best first,
+// with what decides where each can start: the dev seed hands them out.
+func (q *Queries) ListRankedPlayers(ctx context.Context, arg ListRankedPlayersParams) ([]ListRankedPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listRankedPlayers, arg.Competition, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRankedPlayersRow{}
+	for rows.Next() {
+		var i ListRankedPlayersRow
+		if err := rows.Scan(&i.ID, &i.Positions, &i.Conference); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -917,9 +1297,44 @@ func (q *Queries) ListRosteredInactive(ctx context.Context, dynastyID pgtype.UUI
 	return items, nil
 }
 
+const listSeasonLengths = `-- name: ListSeasonLengths :many
+select ps.year, max(ps.games)::int as games
+from player_seasons ps
+where ps.competition = $1::text and ps.league = ''
+  and ps.year >= (select max(x.year) - 1 from player_seasons x where x.competition = $1::text)
+group by ps.year
+`
+
+type ListSeasonLengthsRow struct {
+	Year  int32 `json:"year"`
+	Games int32 `json:"games"`
+}
+
+// How far each of the competition's two latest seasons has run, as the
+// most games any one player has played in it.
+func (q *Queries) ListSeasonLengths(ctx context.Context, competition string) ([]ListSeasonLengthsRow, error) {
+	rows, err := q.db.Query(ctx, listSeasonLengths, competition)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSeasonLengthsRow{}
+	for rows.Next() {
+		var i ListSeasonLengthsRow
+		if err := rows.Scan(&i.Year, &i.Games); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStatSeasons = `-- name: ListStatSeasons :many
 select competition, year, max(label)::text as label
-from stat_seasons
+from (select competition, label, min(year)::int as year from stat_seasons group by competition, label) canonical
 group by competition, year
 order by competition, year desc
 `
@@ -1027,8 +1442,30 @@ func (q *Queries) MoveTransactions(ctx context.Context, arg MoveTransactionsPara
 	return err
 }
 
+const setGameOdds = `-- name: SetGameOdds :exec
+update games set home_implied = $1, away_implied = $2, home_win = $3 where id = $4
+`
+
+type SetGameOddsParams struct {
+	HomeImplied pgtype.Float8 `json:"home_implied"`
+	AwayImplied pgtype.Float8 `json:"away_implied"`
+	HomeWin     pgtype.Float8 `json:"home_win"`
+	ID          pgtype.UUID   `json:"id"`
+}
+
+// Only the odds change, so the response cache is left alone.
+func (q *Queries) SetGameOdds(ctx context.Context, arg SetGameOddsParams) error {
+	_, err := q.db.Exec(ctx, setGameOdds,
+		arg.HomeImplied,
+		arg.AwayImplied,
+		arg.HomeWin,
+		arg.ID,
+	)
+	return err
+}
+
 const setInjuryDesignation = `-- name: SetInjuryDesignation :exec
-update players set injury_designation = $1 where id = $2
+update players set injury_designation = $1, injury_checked_at = now() where id = $2
 `
 
 type SetInjuryDesignationParams struct {
@@ -1036,14 +1473,64 @@ type SetInjuryDesignationParams struct {
 	ID                pgtype.UUID `json:"id"`
 }
 
+// Only a change is written: any write to players starts a new cache generation.
 func (q *Queries) SetInjuryDesignation(ctx context.Context, arg SetInjuryDesignationParams) error {
 	_, err := q.db.Exec(ctx, setInjuryDesignation, arg.InjuryDesignation, arg.ID)
 	return err
 }
 
+const setPlayerDraft = `-- name: SetPlayerDraft :exec
+update players set draft_year = $1, draft_round = $2, draft_pick = $3, draft_overall = $4
+where id = $5
+`
+
+type SetPlayerDraftParams struct {
+	Year    pgtype.Int4 `json:"year"`
+	Round   pgtype.Int4 `json:"round"`
+	Pick    pgtype.Int4 `json:"pick"`
+	Overall pgtype.Int4 `json:"overall"`
+	ID      pgtype.UUID `json:"id"`
+}
+
+// A draft is a fact about the player, kept whatever has happened since.
+func (q *Queries) SetPlayerDraft(ctx context.Context, arg SetPlayerDraftParams) error {
+	_, err := q.db.Exec(ctx, setPlayerDraft,
+		arg.Year,
+		arg.Round,
+		arg.Pick,
+		arg.Overall,
+		arg.ID,
+	)
+	return err
+}
+
+const setProbableStarter = `-- name: SetProbableStarter :exec
+insert into probable_starters (competition, day, player_id, confirmed)
+values ($1, $2, $3, $4)
+on conflict (player_id, day) do update set confirmed = excluded.confirmed
+`
+
+type SetProbableStarterParams struct {
+	Competition string      `json:"competition"`
+	Day         pgtype.Date `json:"day"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Confirmed   bool        `json:"confirmed"`
+}
+
+func (q *Queries) SetProbableStarter(ctx context.Context, arg SetProbableStarterParams) error {
+	_, err := q.db.Exec(ctx, setProbableStarter,
+		arg.Competition,
+		arg.Day,
+		arg.PlayerID,
+		arg.Confirmed,
+	)
+	return err
+}
+
 const updatePlayer = `-- name: UpdatePlayer :one
 update players set
-  eligible_since = case when competition <> $1 then now() else eligible_since end,
+  eligible_since = case when competition <> $1 or not pool_eligible then now() else eligible_since end,
+  pool_eligible  = true,
   competition    = $1,
   status         = 'active',
   full_name      = $2,
@@ -1088,6 +1575,8 @@ func (q *Queries) UpdatePlayer(ctx context.Context, arg UpdatePlayerParams) (str
 
 const updateProspect = `-- name: UpdateProspect :exec
 update players set
+  eligible_since = case when not pool_eligible then now() else eligible_since end,
+  pool_eligible = true,
   full_name    = $1,
   positions    = $2,
   birth_date   = coalesce($3, birth_date),

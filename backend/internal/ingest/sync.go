@@ -62,6 +62,10 @@ func (s *Syncer) SyncProspects(ctx context.Context, competition string, src Pros
 		if err != nil {
 			return 0, err
 		}
+		if ranked, ok := src.(ProspectRankingSource); ok {
+			count, err := s.syncProspectRankings(ctx, competition, ranked)
+			return len(prospects) + count, err
+		}
 		return len(prospects), nil
 	})
 }
@@ -72,14 +76,8 @@ func (s *Syncer) SyncProspects(ctx context.Context, competition string, src Pros
 // corrections. It reports the number of stat lines stored.
 func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSource, from, to time.Time) error {
 	return s.run(ctx, competition, "games", func(pgtype.Timestamptz) (int, error) {
-		for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
-			games, err := src.Games(ctx, day)
-			if err != nil {
-				return 0, fmt.Errorf("games on %s: %w", day.Format(time.DateOnly), err)
-			}
-			if err := s.upsertGames(ctx, competition, games); err != nil {
-				return 0, err
-			}
+		if _, err := s.loadSchedule(ctx, competition, src, from, to); err != nil {
+			return 0, err
 		}
 
 		pending, err := s.q.ListGamesNeedingStats(ctx, competition)
@@ -102,6 +100,58 @@ func (s *Syncer) SyncGames(ctx context.Context, competition string, src GameSour
 	})
 }
 
+// SyncSchedule loads one competition's games for a span of sports days,
+// without box scores: the schedule further ahead than SyncGames looks, so
+// managers can see who plays when and set lineups for days to come. It
+// reports the number of games stored.
+func (s *Syncer) SyncSchedule(ctx context.Context, competition string, src GameSource, from, to time.Time) error {
+	return s.run(ctx, competition, "schedule", func(pgtype.Timestamptz) (int, error) {
+		return s.loadSchedule(ctx, competition, src, from, to)
+	})
+}
+
+// loadSchedule stores the games on each day from one to the other.
+func (s *Syncer) loadSchedule(ctx context.Context, competition string, src GameSource, from, to time.Time) (int, error) {
+	stored := 0
+	for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
+		games, err := src.Games(ctx, day)
+		if err != nil {
+			return stored, fmt.Errorf("games on %s: %w", day.Format(time.DateOnly), err)
+		}
+		if err := s.upsertGames(ctx, competition, games); err != nil {
+			return stored, err
+		}
+		if err := s.dropUnplayed(ctx, competition, day, games); err != nil {
+			return stored, err
+		}
+		for _, game := range games {
+			if !game.NonRegular {
+				stored++
+			}
+		}
+	}
+	return stored, nil
+}
+
+// dropUnplayed removes games stored for a day that were due to start over
+// a day ago, never did, and that the feed no longer lists: playoff games
+// that were not needed, and others called off. A game that was played is
+// never removed this way, so no stat line is lost to a feed's bad day.
+func (s *Syncer) dropUnplayed(ctx context.Context, competition string, day time.Time, listed []Game) error {
+	unplayed, err := s.q.ListUnplayedGamesOnDay(ctx, db.ListUnplayedGamesOnDayParams{Competition: competition, Day: sportsday.Date(day)})
+	if err != nil {
+		return err
+	}
+	for _, id := range unplayed {
+		if !slices.ContainsFunc(listed, func(g Game) bool { return g.ProviderID == id }) {
+			if err := s.q.DeleteGame(ctx, db.DeleteGameParams{Competition: competition, ProviderID: id}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // upsertGames stores one day's games in a single transaction, so however
 // many of them changed, readers see one new state.
 func (s *Syncer) upsertGames(ctx context.Context, competition string, games []Game) error {
@@ -115,6 +165,12 @@ func (s *Syncer) upsertGames(ctx context.Context, competition string, games []Ga
 			ids[t.ProviderID] = t.ID
 		}
 		for _, game := range games {
+			if game.NonRegular {
+				if err := q.DeleteGame(ctx, db.DeleteGameParams{Competition: competition, ProviderID: game.ProviderID}); err != nil {
+					return err
+				}
+				continue
+			}
 			// A team we do not know, such as an all-star side, is left empty.
 			home, away := ids[game.HomeTeam], ids[game.AwayTeam]
 			if !home.Valid && !away.Valid {
@@ -269,6 +325,11 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 			return 0, err
 		}
 		latest := src.LatestSeason(time.Now())
+		refreshSeasons := 2
+		if discovery, ok := src.(SeasonDiscoverySource); ok {
+			refreshSeasons = max(refreshSeasons, discovery.DiscoverySeasons())
+			backfill = max(backfill, refreshSeasons)
+		}
 		years := []int{}
 		for year := latest; year > latest-backfill; year-- {
 			years = append(years, year)
@@ -279,12 +340,16 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 			}
 		}
 		lines := 0
+		refreshHistory := false
 		for _, year := range years {
-			if year < latest-1 && slices.Contains(stored, int32(year)) && !slices.Contains(missing, int32(year)) {
+			if year < latest-refreshSeasons+1 && !refreshHistory && slices.Contains(stored, int32(year)) && !slices.Contains(missing, int32(year)) {
 				continue // history that is already here does not change
 			}
-			n, err := s.syncSeason(ctx, competition, src, year, startedAt)
+			n, discovered, err := s.syncSeason(ctx, competition, src, year, startedAt)
 			lines += n
+			// A recovered player's older seasons may have been skipped before
+			// he was known. Revisit stored history once, on this run only.
+			refreshHistory = refreshHistory || discovered > 0
 			if err != nil {
 				return lines, fmt.Errorf("season %d: %w", year, err)
 			}
@@ -293,19 +358,20 @@ func (s *Syncer) SyncSeasons(ctx context.Context, competition string, src Season
 	})
 }
 
-func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonSource, year int, startedAt pgtype.Timestamptz) (int, error) {
+func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonSource, year int, startedAt pgtype.Timestamptz) (int, int, error) {
 	lines, err := src.SeasonStats(ctx, year)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if len(lines) == 0 {
-		return 0, nil // a season not played yet: leave whatever is stored alone
+		return 0, 0, nil // a season not played yet: leave whatever is stored alone
 	}
 	refs := make([]ExternalID, len(lines))
 	for i, line := range lines {
 		refs[i] = ExternalID{Provider: line.Provider, ProviderID: line.ProviderID}
 	}
 	stored := 0
+	discovered := 0
 	err = s.q.Tx(ctx, func(q *db.Queries) error {
 		players, err := playerIDs(ctx, q, refs)
 		if err != nil {
@@ -313,6 +379,22 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 		}
 		for i, line := range lines {
 			playerID, known := players[refs[i]]
+			if !known && line.Player != nil {
+				p := line.Player
+				if p.Provider != line.Provider || p.ProviderID != line.ProviderID || p.FullName == "" {
+					return fmt.Errorf("season %d: invalid identity for %s/%s", year, line.Provider, line.ProviderID)
+				}
+				birth, positions := columns(*p)
+				playerID, err = q.InsertHistoricalPlayer(ctx, db.InsertHistoricalPlayerParams{
+					Provider: p.Provider, ProviderID: p.ProviderID, Competition: competition,
+					FullName: p.FullName, Positions: positions, BirthDate: birth, Note: p.Note, HeadshotUrl: p.HeadshotURL,
+				})
+				if err != nil {
+					return err
+				}
+				players[refs[i]], known = playerID, true
+				discovered++
+			}
 			if !known {
 				continue // someone who is not in our player pool
 			}
@@ -326,9 +408,9 @@ func (s *Syncer) syncSeason(ctx context.Context, competition string, src SeasonS
 		})
 	})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return stored, nil
+	return stored, discovered, nil
 }
 
 // StoreSeason writes one season line for a player.
@@ -517,8 +599,9 @@ func upsertProspect(ctx context.Context, q *db.Queries, competition string, p Pl
 	birth, positions := columns(p)
 
 	id, err := find(ctx, q, p)
-	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = q.InsertProspect(ctx, db.InsertProspectParams{
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		id, err = q.InsertProspect(ctx, db.InsertProspectParams{
 			Provider:    p.Provider,
 			ProviderID:  p.ProviderID,
 			Competition: competition,
@@ -528,18 +611,24 @@ func upsertProspect(ctx context.Context, q *db.Queries, competition string, p Pl
 			Note:        p.Note,
 			HeadshotUrl: p.HeadshotURL,
 		})
+	case err == nil:
+		err = q.UpdateProspect(ctx, db.UpdateProspectParams{
+			ID:          id,
+			FullName:    p.FullName,
+			Positions:   positions,
+			BirthDate:   birth,
+			Note:        p.Note,
+			HeadshotUrl: p.HeadshotURL,
+		})
+	}
+	if err != nil || p.Draft == nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	return q.UpdateProspect(ctx, db.UpdateProspectParams{
-		ID:          id,
-		FullName:    p.FullName,
-		Positions:   positions,
-		BirthDate:   birth,
-		Note:        p.Note,
-		HeadshotUrl: p.HeadshotURL,
+	// Recorded even for a player who has since arrived: it does not change.
+	d := p.Draft
+	return q.SetPlayerDraft(ctx, db.SetPlayerDraftParams{
+		ID: id, Year: pgtype.Int4{Int32: int32(d.Year), Valid: true}, Round: pgtype.Int4{Int32: int32(d.Round), Valid: true},
+		Pick: pgtype.Int4{Int32: int32(d.Pick), Valid: true}, Overall: pgtype.Int4{Int32: int32(d.Overall), Valid: true},
 	})
 }
 

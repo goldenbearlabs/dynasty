@@ -50,6 +50,8 @@ type State struct {
 	OnClock   pgtype.UUID            `json:"on_clock_pick_id"` // null when nobody is on the clock
 	// AutoPick lists the franchises that have auto pick turned on.
 	AutoPick []pgtype.UUID `json:"auto_pick_franchise_ids"`
+	// Reactions are managers' emoji on made picks, oldest first.
+	Reactions []db.ListDraftReactionsRow `json:"reactions"`
 }
 
 func (s *Service) State(ctx context.Context, draftID pgtype.UUID) (State, error) {
@@ -74,8 +76,12 @@ func loadState(ctx context.Context, q *db.Queries, draftID pgtype.UUID) (State, 
 	if err != nil {
 		return State{}, err
 	}
+	reactions, err := q.ListDraftReactions(ctx, draftID)
+	if err != nil {
+		return State{}, err
+	}
 
-	state := State{Draft: draft, Picks: picks, LeagueIDs: []pgtype.UUID{}, AutoPick: auto}
+	state := State{Draft: draft, Picks: picks, LeagueIDs: []pgtype.UUID{}, AutoPick: auto, Reactions: reactions}
 	for _, l := range leagues {
 		state.LeagueIDs = append(state.LeagueIDs, l.ID)
 	}
@@ -228,24 +234,65 @@ func (s *Service) Undo(ctx context.Context, draftID pgtype.UUID) error {
 		if err != nil {
 			return err
 		}
-		if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{
-			LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID, PlayerID: pick.PlayerID,
-		}); err != nil {
-			return err
-		}
-		if err := lineup.Bench(ctx, q, pick.LeagueID, pick.CurrentFranchiseID, pick.PlayerID); err != nil {
+		if err := unpick(ctx, q, draft, pick); err != nil {
 			return err
 		}
 		if err := q.ClearDraftPick(ctx, pick.ID); err != nil {
 			return err
 		}
-		if err := q.InsertTransaction(ctx, db.InsertTransactionParams{
-			DynastyID: draft.DynastyID, LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID,
-			Kind: "undo_pick", PlayerID: pick.PlayerID, DraftPickID: pick.ID, Detail: json.RawMessage(`{}`),
-		}); err != nil {
+		return advance(ctx, q, draft, true)
+	})
+}
+
+// Override replaces the player taken with a pick already made. The pick
+// keeps its place in the order and its time, and whoever is up keeps
+// their clock.
+func (s *Service) Override(ctx context.Context, draftID, pickID, playerID pgtype.UUID) error {
+	return s.change(ctx, draftID, false, func(q *db.Queries, draft db.Draft) error {
+		if draft.Status != "live" && draft.Status != "paused" {
+			return problem.New("Only a pick in a draft in progress can be changed.")
+		}
+		pick, err := q.GetDraftPick(ctx, pickID)
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && pick.DraftID != draftID {
+			return problem.New("That pick is not in this draft.")
+		}
+		if err != nil {
 			return err
 		}
-		return advance(ctx, q, draft, true)
+		switch {
+		case !pick.PlayerID.Valid:
+			return problem.New("That pick has not been made yet.")
+		case pick.PlayerID == playerID:
+			return problem.New("That player is already the pick.")
+		}
+		if err := unpick(ctx, q, draft, pick); err != nil {
+			return err
+		}
+		if err := makePick(ctx, q, draft, pick.ID, pick.CurrentFranchiseID, playerID, false); err != nil {
+			return err
+		}
+		return advance(ctx, q, draft, false)
+	})
+}
+
+// unpick takes a made pick's player back off the franchise's roster and
+// records it, in the caller's transaction. The pick itself is left as it
+// is, but the reactions to it go with the player.
+func unpick(ctx context.Context, q *db.Queries, draft db.Draft, pick db.DraftPick) error {
+	if err := q.ClearDraftReactions(ctx, pick.ID); err != nil {
+		return err
+	}
+	if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{
+		LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID, PlayerID: pick.PlayerID,
+	}); err != nil {
+		return err
+	}
+	if err := lineup.Bench(ctx, q, pick.LeagueID, pick.CurrentFranchiseID, pick.PlayerID); err != nil {
+		return err
+	}
+	return q.InsertTransaction(ctx, db.InsertTransactionParams{
+		DynastyID: draft.DynastyID, LeagueID: pick.LeagueID, FranchiseID: pick.CurrentFranchiseID,
+		Kind: "undo_pick", PlayerID: pick.PlayerID, DraftPickID: pick.ID, Detail: json.RawMessage(`{}`),
 	})
 }
 
@@ -597,6 +644,51 @@ func (s *Service) SetAutoPick(ctx context.Context, draftID, franchiseID pgtype.U
 		pick := onClock(picks)
 		return advance(ctx, q, draft, pick != nil && pick.CurrentFranchiseID == franchiseID)
 	})
+}
+
+// ---- reactions ----
+
+// maxEmojiBytes bounds a reaction: room for one emoji with skin tone and
+// joiners, not a message.
+const maxEmojiBytes = 32
+
+// React adds a franchise's emoji to a made pick, or takes it away if it is
+// already there. Reactions change nothing else, so the room is told
+// without locking the draft.
+func (s *Service) React(ctx context.Context, draftID, pickID, franchiseID pgtype.UUID, emoji string) error {
+	if emoji == "" || len(emoji) > maxEmojiBytes {
+		return problem.New("Pick one emoji to react with.")
+	}
+	q := db.New(s.pool)
+	pick, err := q.GetDraftPick(ctx, pickID)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && pick.DraftID != draftID {
+		return problem.New("That pick is not in this draft.")
+	}
+	if err != nil {
+		return err
+	}
+	if !pick.PlayerID.Valid {
+		return problem.New("That pick has not been made yet.")
+	}
+	reaction := db.RemoveDraftReactionParams{PickID: pickID, FranchiseID: franchiseID, Emoji: emoji}
+	removed, err := q.RemoveDraftReaction(ctx, reaction)
+	if err != nil {
+		return err
+	}
+	if removed == 0 {
+		if err := q.AddDraftReaction(ctx, db.AddDraftReactionParams(reaction)); err != nil {
+			return err
+		}
+	}
+	// Every pick is as it was: an update with none of them.
+	after, err := s.State(context.WithoutCancel(ctx), draftID)
+	if err != nil {
+		return err
+	}
+	after.Picks = []db.ListDraftPicksRow{}
+	raw, _ := json.Marshal(Message{Type: "update", State: after})
+	s.hub.Publish(topic(draftID), raw)
+	return nil
 }
 
 // ---- queues ----

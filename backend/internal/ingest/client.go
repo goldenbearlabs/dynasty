@@ -21,6 +21,7 @@ const userAgent = "crossover-dynasty/0.1"
 type Client struct {
 	HTTP    *http.Client
 	Gap     time.Duration                                      // minimum time between requests to one host
+	Gaps    map[string]time.Duration                           // a host's own minimum, in place of Gap
 	CoolOff time.Duration                                      // how long a host that refused is left alone
 	Save    func(ctx context.Context, url string, body []byte) // optional
 	// Via sends one host's requests to a relay instead: host -> the relay's
@@ -50,6 +51,12 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, v any) error {
 	return c.fetch(ctx, rawURL, v, true)
 }
 
+// GetJSONWithHeaders retains feed throttling, retries and payload capture
+// for JSON services such as GraphQL that require an explicit media type.
+func (c *Client) GetJSONWithHeaders(ctx context.Context, rawURL string, v any, headers http.Header) error {
+	return c.fetch(ctx, rawURL, v, true, headers)
+}
+
 // GetTransient is GetJSON without saving the body. Use it for feeds with a
 // new URL per day or per game, which would otherwise pile up forever.
 func (c *Client) GetTransient(ctx context.Context, rawURL string, v any) error {
@@ -58,10 +65,10 @@ func (c *Client) GetTransient(ctx context.Context, rawURL string, v any) error {
 
 // fetch tries a failed request once more, which covers a dropped
 // connection or a brief outage, but not a host that has refused.
-func (c *Client) fetch(ctx context.Context, rawURL string, v any, save bool) error {
-	body, err := c.get(ctx, rawURL)
+func (c *Client) fetch(ctx context.Context, rawURL string, v any, save bool, headers ...http.Header) error {
+	body, err := c.get(ctx, rawURL, headers...)
 	if err != nil && ctx.Err() == nil && !Refused(err) {
-		body, err = c.get(ctx, rawURL)
+		body, err = c.get(ctx, rawURL, headers...)
 	}
 	if err != nil {
 		return err
@@ -76,7 +83,7 @@ func (c *Client) fetch(ctx context.Context, rawURL string, v any, save bool) err
 }
 
 // get makes one rate-limited request and returns the body of a 200 response.
-func (c *Client) get(ctx context.Context, rawURL string) ([]byte, error) {
+func (c *Client) get(ctx context.Context, rawURL string, headers ...http.Header) ([]byte, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
@@ -97,6 +104,13 @@ func (c *Client) get(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
+	for _, fields := range headers {
+		for key, values := range fields {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
+	}
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -134,7 +148,11 @@ func (c *Client) wait(ctx context.Context, host string) error {
 	if slot.Before(now) {
 		slot = now
 	}
-	c.next[host] = slot.Add(c.Gap)
+	gap, ok := c.Gaps[host]
+	if !ok {
+		gap = c.Gap
+	}
+	c.next[host] = slot.Add(gap)
 	c.mu.Unlock()
 
 	select {

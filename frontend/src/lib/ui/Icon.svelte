@@ -1,6 +1,8 @@
 <script lang="ts" module>
 	// Line icons drawn on a 24px grid. Add one by adding its path data here.
 	const paths = {
+		mail: 'M3 5h18v14H3zM3 5l9 7 9-7',
+		bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
 		star: 'm12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9Z',
 		home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
 		players: 'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M21 19v-1a4 4 0 0 0-3-3.85M15.5 3.15a3.5 3.5 0 0 1 0 6.7',
@@ -13,6 +15,7 @@
 		check: 'M5 12.5l4.5 4.5L19 7',
 		up: 'M6 14l6-6 6 6',
 		down: 'M6 10l6 6 6-6',
+		grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
 		right: 'M9 6l6 6-6 6',
 		clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
 		trophy: 'M8 4h8v5a4 4 0 0 1-8 0V4zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4',
@@ -27,7 +30,9 @@
 		lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
 		left: 'M15 6l-6 6 6 6',
 		scores: 'M4 5h16v14H4zM12 5v14M7 10v4M17 10v4',
-		info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v6M12 7.5h.01'
+		info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v6M12 7.5h.01',
+		more: 'M5 12h.01M12 12h.01M19 12h.01',
+		target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8M12 12h.01',
 	};
 	export type IconName = keyof typeof paths;
 </script>

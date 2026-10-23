@@ -34,6 +34,23 @@ type ProspectSource interface {
 	Prospects(ctx context.Context) ([]Player, error)
 }
 
+// ProspectRankingSource supplies a complete published prospect ranking.
+// Rankings use the provider's player IDs and do not change roster status.
+type ProspectRankingSource interface {
+	ProspectRankings(context.Context) (ProspectRankingList, error)
+}
+type ProspectRankingList struct {
+	Source   string
+	Year     int
+	URL      string
+	Rankings []ProspectRanking
+}
+type ProspectRanking struct {
+	Player Player
+	Rank   int
+	ETA    string
+}
+
 // GameSource is a feed of games and what each player did in them.
 type GameSource interface {
 	// Games lists every game on one sports day.
@@ -51,6 +68,9 @@ type Game struct {
 	HomeScore  int
 	AwayScore  int
 	Detail     string // the feed's short description of where the game stands: "7:32 - 3rd", "Final/OT"
+	// NonRegular marks a preseason, postseason or exhibition game. Only its
+	// ProviderID is set: it is never stored, and a copy stored before is removed.
+	NonRegular bool
 }
 
 const (
@@ -75,6 +95,13 @@ type SeasonSource interface {
 	LatestSeason(now time.Time) int
 	// SeasonStats returns every player's totals for one regular season.
 	SeasonStats(ctx context.Context, year int) ([]SeasonLine, error)
+}
+
+// SeasonDiscoverySource supplies identities alongside recent statistics,
+// allowing established players missing from current rosters into the pool.
+// These seasons are refreshed even when their totals are already stored.
+type SeasonDiscoverySource interface {
+	DiscoverySeasons() int
 }
 
 // CareerSource is a feed of a player's seasons outside the league itself:
@@ -102,6 +129,9 @@ type Season struct {
 type SeasonLine struct {
 	Provider   string
 	ProviderID string
+	// Player, when present, can identify someone the roster feed omitted.
+	// It is used only to create missing players, never to overwrite a roster.
+	Player *Player
 	Season
 }
 
@@ -125,10 +155,17 @@ type Player struct {
 	Class       string    // CBB only: FR, SO, JR, SR
 	HeadshotURL string
 	Note        string // prospects only: where he is now, e.g. his school or draft slot
+	Draft       *Draft // where he was drafted into this league, when the feed says
 	// Aliases are other ids this same person may already be stored under: a
 	// feed that knows him by a different id, or by no id at all. If one
 	// matches, he is the same row and gains this feed's id.
 	Aliases []ExternalID
+}
+
+// Draft is where a player was picked: the year, the round, his place in
+// that round, and overall.
+type Draft struct {
+	Year, Round, Pick, Overall int
 }
 
 // ExternalID is a player's id in one feed's id space.

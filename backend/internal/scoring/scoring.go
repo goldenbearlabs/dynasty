@@ -8,6 +8,7 @@ package scoring
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"time"
@@ -32,9 +33,10 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // Standings is a league's table for one season, best first.
 type Standings struct {
-	Season *db.Season `json:"season"` // nil until the commissioner starts one
-	Format string     `json:"format"` // settings.FormatTotalPoints | settings.FormatHeadToHead
-	Rows   []Row      `json:"rows"`
+	ConsolationChampionID pgtype.UUID `json:"consolation_champion_id"`
+	Season                *db.Season  `json:"season"` // nil until the commissioner starts one
+	Format                string      `json:"format"` // settings.FormatTotalPoints | settings.FormatHeadToHead
+	Rows                  []Row       `json:"rows"`
 }
 
 type Row struct {
@@ -42,18 +44,36 @@ type Row struct {
 	Points      float64        `json:"points"`
 	Players     []PlayerPoints `json:"players"` // who scored them, best first
 	// A head-to-head league's record over its finished regular-season matchups.
-	Wins   int `json:"wins"`
-	Losses int `json:"losses"`
-	Ties   int `json:"ties"`
+	Wins          int     `json:"wins"`
+	Losses        int     `json:"losses"`
+	Ties          int     `json:"ties"`
+	PointsFor     float64 `json:"points_for"`
+	PointsAgainst float64 `json:"points_against"`
+}
+
+// ScoredGame is a starter's counted contribution, using the exact scoring
+// windows, selected-game rules and pitcher caps used by the matchup total.
+type ScoredGame struct {
+	GameID    pgtype.UUID        `json:"game_id"`
+	Day       string             `json:"day"`
+	Slot      string             `json:"slot"`
+	Points    float64            `json:"points"`
+	Stats     map[string]float64 `json:"stats"`
+	StartsAt  time.Time          `json:"starts_at"`
+	Status    string             `json:"status"`
+	Home      string             `json:"home"`
+	Away      string             `json:"away"`
+	Positions []string           `json:"positions"`
 }
 
 type PlayerPoints struct {
-	Nickname    string      `json:"nickname"`
-	PlayerID    pgtype.UUID `json:"player_id"`
-	FullName    string      `json:"full_name"`
-	HeadshotURL string      `json:"headshot_url"`
-	Games       int64       `json:"games"`
-	Points      float64     `json:"points"`
+	GameLines   []ScoredGame `json:"game_lines,omitempty"`
+	Nickname    string       `json:"nickname"`
+	PlayerID    pgtype.UUID  `json:"player_id"`
+	FullName    string       `json:"full_name"`
+	HeadshotURL string       `json:"headshot_url"`
+	Games       int64        `json:"games"`
+	Points      float64      `json:"points"`
 }
 
 // Standings returns the table for a league's latest season.
@@ -72,13 +92,16 @@ func (s *Service) Standings(ctx context.Context, league db.League) (Standings, e
 	case err == nil:
 		standings.Season = &season
 		standings.Rows, err = table(ctx, q, league, &season)
+		if err == nil && rules.Format.Type == settings.FormatHeadToHead && rules.Format.ConsolationEnabled() {
+			standings.ConsolationChampionID, err = bracketChampion(ctx, q, league, season, consolationBracket)
+		}
 	}
 	return standings, err
 }
 
 // scores returns what each franchise's starters scored over a span of days,
 // by franchise. Days that have not happened yet score nothing.
-func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.Time) (map[pgtype.UUID]Row, error) {
+func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.Time, includeGames ...bool) (map[pgtype.UUID]Row, error) {
 	if today := sportsday.Today(); today.Before(to) {
 		to = today
 	}
@@ -87,7 +110,8 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 		return nil, err
 	}
 	points, err := q.ListLineupPoints(ctx, db.ListLineupPointsParams{
-		LeagueID: league.ID, FromDay: sportsday.Date(from), ToDay: sportsday.Date(to),
+		IncludeGames: len(includeGames) > 0 && includeGames[0],
+		LeagueID:     league.ID, FromDay: sportsday.Date(from), ToDay: sportsday.Date(to),
 		WeekStart: sportsday.Date(sportsday.WeekStart(from, rules.Lineup.WeekStart)),
 	})
 	if err != nil {
@@ -98,8 +122,15 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 		row := byFranchise[p.FranchiseID]
 		row.FranchiseID = p.FranchiseID
 		row.Points += p.Points
+		var games []ScoredGame
+		if len(includeGames) > 0 && includeGames[0] {
+			if err := json.Unmarshal(p.GameLines, &games); err != nil {
+				return nil, err
+			}
+		}
 		row.Players = append(row.Players, PlayerPoints{
-			PlayerID: p.PlayerID, FullName: p.FullName, Nickname: p.Nickname, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
+			GameLines: games,
+			PlayerID:  p.PlayerID, FullName: p.FullName, Nickname: p.Nickname, HeadshotURL: p.HeadshotUrl, Games: p.Games, Points: p.Points,
 		})
 		byFranchise[p.FranchiseID] = row
 	}
@@ -107,9 +138,15 @@ func scores(ctx context.Context, q *db.Queries, league db.League, from, to time.
 }
 
 // table ranks every franchise for a season: by points, or in a
-// head-to-head league by record and then points. Without a season everyone
+// head-to-head league by its configured record and tiebreakers. Without a season everyone
 // has zero.
 func table(ctx context.Context, q *db.Queries, league db.League, season *db.Season) ([]Row, error) {
+	rules, err := settings.Parse[settings.League](league.Settings)
+	if err != nil {
+		return nil, err
+	}
+	var results []result
+
 	franchises, err := q.ListFranchises(ctx, league.DynastyID)
 	if err != nil {
 		return nil, err
@@ -137,11 +174,16 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 			r := row(id)
 			r.Points, r.Players = s.Points, s.Players
 		}
-		results, err := regularSeasonResults(ctx, q, league, *season)
+		results, err = regularSeasonResults(ctx, q, league, *season)
 		if err != nil {
 			return nil, err
 		}
 		for _, result := range results {
+			home, away := row(result.Home), row(result.Away)
+			home.PointsFor += result.HomePoints
+			home.PointsAgainst += result.AwayPoints
+			away.PointsFor += result.AwayPoints
+			away.PointsAgainst += result.HomePoints
 			switch home, away := row(result.Home), row(result.Away); {
 			case result.HomePoints > result.AwayPoints:
 				home.Wins++
@@ -154,15 +196,22 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 				away.Ties++
 			}
 		}
+		// Points for and against count the matchup in progress day by day;
+		// it joins the record once it is over.
+		live, _, err := liveResults(ctx, q, league, *season)
+		if err != nil {
+			return nil, err
+		}
+		for _, result := range live {
+			home, away := row(result.Home), row(result.Away)
+			home.PointsFor += result.HomePoints
+			home.PointsAgainst += result.AwayPoints
+			away.PointsFor += result.AwayPoints
+			away.PointsAgainst += result.HomePoints
+		}
 	}
 
-	slices.SortStableFunc(rows, func(a, b Row) int {
-		return cmp.Or(
-			cmp.Compare(share(b), share(a)),
-			cmp.Compare(b.Points, a.Points),
-			cmp.Compare(names[a.FranchiseID], names[b.FranchiseID]),
-		)
-	})
+	rankStandings(rows, results, rules.Format, names)
 	return rows, nil
 }
 
@@ -319,6 +368,12 @@ type OverallRow struct {
 	FranchiseID pgtype.UUID    `json:"franchise_id"`
 	Points      float64        `json:"points"`
 	Finishes    map[string]int `json:"finishes"` // competition -> place, 1 being first
+	// The record across every league, and the points scored above each
+	// league's median, summed: a fair way to compare points across sports.
+	Wins           int     `json:"wins"`
+	Losses         int     `json:"losses"`
+	Ties           int     `json:"ties"`
+	AdjustedPoints float64 `json:"adjusted_points"`
 }
 
 // Overall returns the cross-sport table for each year that has a season,
@@ -353,6 +408,17 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 			return nil, err
 		}
 		year.Final = year.Final && season.Status == "complete"
+		leagueRules, err := settings.Parse[settings.League](league.Settings)
+		if err != nil {
+			return nil, err
+		}
+		scored := func(r Row) float64 {
+			if leagueRules.Format.Type == settings.FormatHeadToHead {
+				return r.PointsFor
+			}
+			return r.Points
+		}
+		middle := median(table, scored)
 		for place, row := range table {
 			i := slices.IndexFunc(year.Rows, func(r OverallRow) bool { return r.FranchiseID == row.FranchiseID })
 			if i < 0 {
@@ -360,6 +426,10 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 				i = len(year.Rows) - 1
 			}
 			year.Rows[i].Finishes[league.Competition] = place + 1
+			year.Rows[i].Wins += row.Wins
+			year.Rows[i].Losses += row.Losses
+			year.Rows[i].Ties += row.Ties
+			year.Rows[i].AdjustedPoints += scored(row) - middle
 			if place < len(rules.OverallTitle.PointsByFinish) {
 				year.Rows[i].Points += rules.OverallTitle.PointsByFinish[place]
 			}
@@ -368,9 +438,28 @@ func (s *Service) Overall(ctx context.Context, dynasty db.Dynasty) ([]OverallYea
 	for i := range years {
 		// A year is only final when every league played it.
 		years[i].Final = years[i].Final && len(years[i].Rows) > 0 && len(years[i].Rows[0].Finishes) == len(leagues)
-		slices.SortStableFunc(years[i].Rows, func(a, b OverallRow) int { return cmp.Compare(b.Points, a.Points) })
+		slices.SortStableFunc(years[i].Rows, func(a, b OverallRow) int {
+			return cmp.Or(cmp.Compare(b.Points, a.Points), cmp.Compare(b.AdjustedPoints, a.AdjustedPoints))
+		})
 	}
 	return years, nil
+}
+
+// median is the middle of a league's rows by some value.
+func median(rows []Row, value func(Row) float64) float64 {
+	if len(rows) == 0 {
+		return 0
+	}
+	values := make([]float64, len(rows))
+	for i, r := range rows {
+		values[i] = value(r)
+	}
+	slices.Sort(values)
+	mid := len(values) / 2
+	if len(values)%2 == 0 {
+		return (values[mid-1] + values[mid]) / 2
+	}
+	return values[mid]
 }
 
 // Window is the span of sports days a games sync covers by default: far

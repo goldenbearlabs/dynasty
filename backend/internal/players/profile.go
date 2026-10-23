@@ -278,7 +278,7 @@ func (s *Service) Profile(ctx context.Context, id pgtype.UUID) (Profile, error) 
 		if owned.List != settings.ListReserve {
 			continue
 		}
-		seasonEnds, err := roster.SeasonEnds(ctx, q, owned.LeagueID)
+		seasonEnds, err := roster.SeasonEnds(ctx, q, owned.LeagueID, owned.FranchiseID)
 		if err != nil {
 			return result, err
 		}

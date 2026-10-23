@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -67,7 +68,7 @@ func (q *Queries) AddTradeParty(ctx context.Context, arg AddTradePartyParams) er
 }
 
 const createTrade = `-- name: CreateTrade :one
-insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at
+insert into trades (dynasty_id, proposed_by, note) values ($1, $2, $3) returning id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by
 `
 
 type CreateTradeParams struct {
@@ -87,6 +88,8 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade
 		&i.Note,
 		&i.CreatedAt,
 		&i.ResolvedAt,
+		&i.Drops,
+		&i.DeclinedBy,
 	)
 	return i, err
 }
@@ -134,7 +137,8 @@ select k.id, k.round, k.position, k.original_franchise_id,
         where dl.draft_id = d.id) as competitions
 from draft_picks k
 join drafts d on d.id = k.draft_id
-where k.current_franchise_id = $1 and k.player_id is null and d.status <> 'complete'
+where k.current_franchise_id = $1 and k.player_id is null
+  and d.status <> 'complete' and d.kind <> 'startup'
 order by d.year, d.name, k.position
 `
 
@@ -150,7 +154,8 @@ type ListFranchisePicksRow struct {
 	Competitions        []string    `json:"competitions"`
 }
 
-// Unused picks a franchise holds, soonest draft first.
+// Unused picks a franchise holds in rookie drafts, soonest draft first.
+// Startup picks are left out: they are made once and cannot be traded.
 func (q *Queries) ListFranchisePicks(ctx context.Context, franchiseID pgtype.UUID) ([]ListFranchisePicksRow, error) {
 	rows, err := q.db.Query(ctx, listFranchisePicks, franchiseID)
 	if err != nil {
@@ -336,7 +341,7 @@ func (q *Queries) ListTradePartiesOf(ctx context.Context, tradeID pgtype.UUID) (
 }
 
 const listTrades = `-- name: ListTrades :many
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at from trades where dynasty_id = $1 order by created_at desc limit 200
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by from trades where dynasty_id = $1 order by created_at desc limit 200
 `
 
 func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trade, error) {
@@ -356,6 +361,8 @@ func (q *Queries) ListTrades(ctx context.Context, dynastyID pgtype.UUID) ([]Trad
 			&i.Note,
 			&i.CreatedAt,
 			&i.ResolvedAt,
+			&i.Drops,
+			&i.DeclinedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -414,7 +421,7 @@ func (q *Queries) LockDraftPick(ctx context.Context, id pgtype.UUID) (LockDraftP
 }
 
 const lockTrade = `-- name: LockTrade :one
-select id, dynasty_id, status, proposed_by, note, created_at, resolved_at from trades where id = $1 for update
+select id, dynasty_id, status, proposed_by, note, created_at, resolved_at, drops, declined_by from trades where id = $1 for update
 `
 
 func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) {
@@ -428,6 +435,8 @@ func (q *Queries) LockTrade(ctx context.Context, id pgtype.UUID) (Trade, error) 
 		&i.Note,
 		&i.CreatedAt,
 		&i.ResolvedAt,
+		&i.Drops,
+		&i.DeclinedBy,
 	)
 	return i, err
 }
@@ -493,6 +502,35 @@ type SetRosterOwnerParams struct {
 
 func (q *Queries) SetRosterOwner(ctx context.Context, arg SetRosterOwnerParams) error {
 	_, err := q.db.Exec(ctx, setRosterOwner, arg.ToFranchise, arg.LeagueID, arg.PlayerID)
+	return err
+}
+
+const setTradeDecliner = `-- name: SetTradeDecliner :exec
+update trades set declined_by = $1 where id = $2
+`
+
+type SetTradeDeclinerParams struct {
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+// The franchise turning a trade down, recorded just before it closes.
+func (q *Queries) SetTradeDecliner(ctx context.Context, arg SetTradeDeclinerParams) error {
+	_, err := q.db.Exec(ctx, setTradeDecliner, arg.FranchiseID, arg.ID)
+	return err
+}
+
+const setTradeDrops = `-- name: SetTradeDrops :exec
+update trades set drops = $1 where id = $2
+`
+
+type SetTradeDropsParams struct {
+	Drops json.RawMessage `json:"drops"`
+	ID    pgtype.UUID     `json:"id"`
+}
+
+func (q *Queries) SetTradeDrops(ctx context.Context, arg SetTradeDropsParams) error {
+	_, err := q.db.Exec(ctx, setTradeDrops, arg.Drops, arg.ID)
 	return err
 }
 

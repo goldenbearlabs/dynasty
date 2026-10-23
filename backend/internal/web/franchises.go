@@ -22,6 +22,22 @@ type leagueRoster struct {
 	Limits      settings.Roster `json:"limits"`
 	Overage     int             `json:"overage"` // above zero: over the limits
 	Players     []rosterPlayer  `json:"players"`
+	// Season is the season the commissioner has opened, and where this
+	// franchise stands with its roster for it; null when none is open.
+	Season *seasonRoster `json:"season"`
+}
+
+type seasonRoster struct {
+	ID       pgtype.UUID        `json:"id"`
+	Year     int32              `json:"year"`
+	StartsOn pgtype.Date        `json:"starts_on"`
+	EndsOn   pgtype.Date        `json:"ends_on"`
+	SetAt    pgtype.Timestamptz `json:"set_at"`  // when the franchise set its roster; null until then
+	Started  bool               `json:"started"` // the season's first day has come
+	Locked   bool               `json:"locked"`  // players stay on their lists until it ends
+	// Deadline is when rosters not yet set lock as they stand; null for none.
+	Deadline pgtype.Timestamptz `json:"deadline"`
+	Expired  bool               `json:"expired"` // the deadline has passed
 }
 
 type rosterPlayer struct {
@@ -70,10 +86,22 @@ func (s *Server) getFranchise(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		seasonEnds, err := roster.SeasonEnds(r.Context(), s.Queries, league.ID)
+		season, err := roster.SeasonOf(r.Context(), s.Queries, league.ID, franchise.ID)
 		if err != nil {
 			s.fail(w, r, err)
 			return
+		}
+		locked := season.Locked() && rules.Roster.ReserveLockSeason
+		var seasonEnds time.Time // when the reserve lock lifts, once the roster is set
+		if season.Locked() {
+			seasonEnds = season.Season.EndsOn.Time
+		}
+		if season.Season != nil {
+			lr.Season = &seasonRoster{
+				ID: season.Season.ID, Year: season.Season.Year, StartsOn: season.Season.StartsOn, EndsOn: season.Season.EndsOn,
+				SetAt: season.SetAt, Started: season.Started, Locked: locked,
+				Deadline: season.Season.RosterDeadline, Expired: season.Expired,
+			}
 		}
 		var entries []roster.Entry
 		for _, p := range players {
