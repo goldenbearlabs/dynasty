@@ -30,7 +30,6 @@
 	$effect(() => { const id = data.me?.id || ''; untrack(() => inbox.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });
 	const path = $derived(page.url.pathname);
-	const viewingNewLeague = $derived(path.startsWith('/leagues/') && page.params.id !== data.dynasty?.id);
 
 	let sidebarCollapsed = $state(false);
 	let wideScreen = $state(false);
@@ -63,40 +62,37 @@
 	// Every league has waivers of a kind: at the least, released draft picks spend a day on them.
 	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
 	const links = $derived.by((): Link[] => {
-		const accountLinks: Link[] = [{ href: '/leagues', label: 'My Leagues', icon: 'home' }];
-		if (!data.me?.id || viewingNewLeague) {
-			const sectionRoot = viewingNewLeague ? path : '/leagues';
-			return [...accountLinks,
-			{ href: `${sectionRoot}?section=team`, label: 'My team', icon: 'shield' },
-			{ href: `${sectionRoot}?section=league`, label: 'League', icon: 'home' },
-			{ href: `${sectionRoot}?section=matchups`, label: 'Matchups', icon: 'scores' },
-			{ href: `${sectionRoot}?section=players`, label: 'Players', icon: 'players' },
-			{ href: `${sectionRoot}?section=watchlist`, label: 'Watchlist', icon: 'star' },
-			{ href: `${sectionRoot}?section=research`, label: 'Research', icon: 'search' },
-			{ href: `${sectionRoot}?section=waivers`, label: 'Waivers', icon: 'clock' },
-			{ href: `${sectionRoot}?section=drafts`, label: 'Drafts', icon: 'draft' },
-			{ href: `${sectionRoot}?section=trades`, label: 'Trades', icon: 'trade' },
-			{ href: `${sectionRoot}?section=rules`, label: 'Rules', icon: 'info' }
-		];
+		if (!data.me?.id) {
+			return [
+				{ href: '/account?section=team', label: 'My team', icon: 'shield' },
+				{ href: '/account?section=league', label: 'League', icon: 'home' },
+				{ href: '/account?section=matchups', label: 'Matchups', icon: 'scores' },
+				{ href: '/account?section=players', label: 'Players', icon: 'players' },
+				{ href: '/account?section=watchlist', label: 'Watchlist', icon: 'star' },
+				{ href: '/account?section=research', label: 'Research', icon: 'search' },
+				{ href: '/account?section=waivers', label: 'Waivers', icon: 'clock' },
+				{ href: '/account?section=drafts', label: 'Drafts', icon: 'draft' },
+				{ href: '/account?section=trades', label: 'Trades', icon: 'trade' },
+				{ href: '/account?section=rules', label: 'Rules', icon: 'info' }
+			];
 		}
-		return [...accountLinks,
-		{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' },
-		{ href: '/league', label: 'League', icon: 'home' },
-		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
-		{ href: '/players', label: 'Players', icon: 'players' },
-		{ href: '/watchlist', label: 'Watchlist', icon: 'star' },
-		{ href: '/research', label: 'Research', icon: 'search' },
-		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
-		{ href: '/drafts', label: 'Drafts', icon: 'draft' },
-		{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
-		{ href: '/info', label: 'Rules', icon: 'info' },
-		...(data.me.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
+		return [
+			{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' },
+			{ href: '/league', label: 'League', icon: 'home' },
+			{ href: '/matchups', label: 'Matchups', icon: 'scores' },
+			{ href: '/players', label: 'Players', icon: 'players' },
+			{ href: '/watchlist', label: 'Watchlist', icon: 'star' },
+			{ href: '/research', label: 'Research', icon: 'search' },
+			...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
+			{ href: '/drafts', label: 'Drafts', icon: 'draft' },
+			{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
+			{ href: '/info', label: 'Rules', icon: 'info' },
+			...(data.me.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
 		];
 	});
 
 	const current = (href: string) => {
-		if (href === '/leagues' && path.startsWith('/leagues/')) return !page.url.search;
-		if (href.startsWith('/leagues')) return path + page.url.search === href;
+		if (href.startsWith('/account?')) return path + page.url.search === href;
 		return path === href || path.startsWith(href + '/');
 	};
 
@@ -134,7 +130,7 @@
 			<Icon name={collapsed ? 'right' : 'left'} size={15} />
 		</button>
 		<aside class="rail" id="sidebar-navigation" inert={collapsed}>
-			<a class="brand" href="/leagues">
+			<a class="brand" href={data.me?.id ? '/league' : '/account'}>
 				<span class="mark" aria-hidden="true">MF</span>
 				<span class="name">{data.dynasty?.name ?? 'Mosaic Fantasy'}</span>
 			</a>
@@ -213,12 +209,12 @@
 		{/if}
 
 		<div class="page">
-			{#if data.dynasty && !viewingNewLeague && !path.startsWith('/draft/')}
+			{#if data.dynasty && !path.startsWith('/draft/')}
 				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me}>
 					{#snippet actions()}{#if data.me?.id}<NotificationCenter accountId={data.me.id} />{/if}{/snippet}
 				</LiveScores>
 			{/if}
-			{#if liveDraft && !viewingNewLeague && !path.startsWith('/draft/')}
+			{#if liveDraft && !path.startsWith('/draft/')}
 				<a class="live" href="/draft/{liveDraft.id}">
 					<span class="dot" aria-hidden="true"></span>
 					<strong>{liveDraft.name}</strong>

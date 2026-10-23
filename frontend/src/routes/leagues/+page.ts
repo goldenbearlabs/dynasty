@@ -1,6 +1,8 @@
-// Loads only the signed-in account's league memberships for the My Leagues page.
-
-import { getMyLeagues } from '#lib/api.ts';
+// Sends old My Leagues bookmarks to the active league or account guidance.
+import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async () => ({ myLeagues: await getMyLeagues() });
+export const load: PageLoad = async ({ parent }) => {
+	const { me } = await parent();
+	redirect(307, me?.id ? '/league' : '/account');
+};

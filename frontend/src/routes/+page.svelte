@@ -18,7 +18,7 @@
 		busy = true;
 		try {
 			await logIn({ email, password });
-			await invalidateAll(); // signed-in accounts enter their team or My Leagues
+			await invalidateAll(); // signed-in managers enter their team; others see account guidance
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

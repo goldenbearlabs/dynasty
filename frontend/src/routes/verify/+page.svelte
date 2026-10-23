@@ -19,7 +19,7 @@
 				await verifyAccount(token);
 				await invalidateAll();
 				verified = true;
-				message = 'Your email is verified. You can now create or join a league.';
+				message = 'Your email is verified. You can now use a commissioner invite link to join a league.';
 			} catch (error) {
 				message = (error as Error).message;
 			}

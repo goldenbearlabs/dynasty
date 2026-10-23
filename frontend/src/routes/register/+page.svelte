@@ -37,7 +37,7 @@
 
 <div class="card stack" style="max-width: 28rem; margin: 3rem auto; padding: 1.5rem;">
 	<h1>Create an account</h1>
-	<p>Start with an email and password. You can join or create a league after verifying your email.</p>
+	<p>Start with an email and password. After verifying your email, use a commissioner invite link to join a league.</p>
 	{#if !created}
 		<form class="stack" onsubmit={submit}>
 			<label class="field">Email <input type="email" autocomplete="email" bind:value={email} required /></label>

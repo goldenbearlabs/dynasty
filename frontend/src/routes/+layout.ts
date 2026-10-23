@@ -14,7 +14,7 @@ export const load: LayoutLoad = async ({ url }) => {
 	const path = url.pathname;
 	const entry = path === '/' || path === '/register' || path === '/verify' || path === '/reset-password' || path.startsWith('/join/') || (!bootstrap.configured && path === '/setup');
 	if (!entry && !me?.account_id) redirect(307, `/?next=${encodeURIComponent(path + url.search)}`);
-	if (me?.account_id && !me.id && !entry && path !== '/leagues' && !path.startsWith('/leagues/')) redirect(307, '/leagues');
+	if (me?.account_id && !me.id && !entry && path !== '/account') redirect(307, '/account');
 	const [dynasty, drafts, trades, teams] = me?.id
 		? await Promise.all([getDynasty(), getDrafts(), getTrades(), getTeams().catch(() => [])])
 		: [null, [], [], []];
