@@ -66,7 +66,7 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
   });
 
-  testWidgets('shows only the signed-in manager’s sport teams and live rules', (
+  testWidgets('opens the selected playable league and shows standings', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -84,14 +84,28 @@ void main() {
             );
           case '/api/dynasty':
             return http.Response(
-              '{"name":"Mosaic Fantasy","leagues":[{"id":"nhl-id","name":"Hockey","competition":"nhl","settings":{"roster":{"main":12,"reserve":6}}}],"franchises":[{"id":"mine","name":"My Franchise","slug":"my-franchise"},{"id":"other","name":"Other Franchise","slug":"other"}]}',
+              '{"id":"dynasty-id","name":"Mosaic Fantasy","leagues":[{"id":"nhl-id","name":"Hockey","competition":"nhl","settings":{"roster":{"main":12,"reserve":6}}}],"franchises":[{"id":"mine","name":"My Franchise","slug":"my-franchise"},{"id":"other","name":"Other Franchise","slug":"other"}],"team_identities":[{"franchise_id":"mine","league_id":"nhl-id","name":"Ice Kings"}]}',
               200,
             );
-          case '/api/franchises/my-franchise':
+          case '/api/my-leagues':
             return http.Response(
-              '{"franchise":{"id":"mine","name":"My Franchise","slug":"my-franchise","manager_name":"Ada"},"rosters":[{"league_id":"nhl-id","competition":"nhl","team_name":"Ice Kings","players":[{"full_name":"Hockey Player","list":"main","positions":["C"]}]}]}',
+              '[{"id":"dynasty-id","name":"Ice League","franchise_id":"mine","franchise_name":"My Franchise","sports":["nhl"],"ready":true}]',
               200,
             );
+          case '/api/standings':
+            return http.Response(
+              '[{"league_id":"nhl-id","competition":"nhl","format":"head_to_head","season":{"status":"active"},"rows":[{"franchise_id":"mine","points_for":42,"points_against":35,"wins":2,"losses":1,"ties":0}]}]',
+              200,
+            );
+          case '/api/overall':
+            return http.Response('[]', 200);
+          case '/api/activity':
+            return http.Response(
+              '[{"id":1,"kind":"add","competition":"nhl","franchise_name":"My Franchise","player_name":"Hockey Player","created_at":"2026-10-22T12:00:00Z"}]',
+              200,
+            );
+          case '/api/odds':
+            return http.Response('{"leagues":[],"overall":[]}', 200);
           default:
             fail('Unexpected ${request.url.path}');
         }
@@ -105,12 +119,14 @@ void main() {
     await session.signIn('ada@example.com', 'password');
     await tester.pumpWidget(MosaicApp(api: privateApi, session: session));
     await tester.pumpAndSettle();
-    expect(find.text('Mosaic Fantasy'), findsOneWidget);
-    expect(find.text('League overview'), findsOneWidget);
-    expect(find.text('Ice Kings'), findsOneWidget);
-    expect(find.text('Other Franchise'), findsNothing);
-    await tester.tap(find.text('Ice Kings'));
+    expect(find.text('Choose a league'), findsOneWidget);
+    expect(find.text('Ice League'), findsOneWidget);
+    await tester.tap(find.text('Ice League'));
     await tester.pumpAndSettle();
-    expect(find.text('Hockey Player'), findsOneWidget);
+    expect(find.text('Standings'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'NHL').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Ice Kings'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
   });
 }

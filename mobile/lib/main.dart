@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
 import 'data/api_client.dart';
+import 'data/models.dart';
 import 'data/session_controller.dart';
-import 'screens/home_screen.dart';
-import 'screens/account_lobby_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/league_dashboard_screen.dart';
+import 'screens/leagues_screen.dart';
 import 'screens/players_screen.dart';
 import 'screens/scores_screen.dart';
 import 'screens/teams_screen.dart';
@@ -66,7 +67,9 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-  int selected = 0;
+  MyLeague? selectedLeague;
+  Dynasty? selectedDynasty;
+  String section = 'leagues';
 
   @override
   void initState() {
@@ -77,7 +80,170 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   void onSessionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (widget.session.session == null ||
+          (selectedLeague != null &&
+              widget.session.session?.franchise?.id !=
+                  selectedLeague!.franchiseId)) {
+        selectedLeague = null;
+        selectedDynasty = null;
+        section = 'leagues';
+      }
+    });
+  }
+
+  void openLeague(MyLeague league, Dynasty dynasty) => setState(() {
+    selectedLeague = league;
+    selectedDynasty = dynasty;
+    section = 'league';
+  });
+
+  void navigate(String destination) {
+    Navigator.of(context).pop();
+    setState(() => section = destination);
+  }
+
+  Future<void> signOut() async {
+    try {
+      await widget.session.logout();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not sign out: $error')));
+      }
+    }
+  }
+
+  Widget drawerEntry(String label, IconData icon, String? destination) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        trailing: destination == null ? const Text('Coming soon') : null,
+        enabled: destination != null,
+        selected: destination == section,
+        onTap: destination == null ? null : () => navigate(destination),
+      );
+
+  Widget appDrawer() => Drawer(
+    child: SafeArea(
+      child: ListView(
+        children: [
+          ListTile(
+            title: const Text(
+              'Mosaic Fantasy',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(widget.session.session?.email ?? ''),
+          ),
+          const Divider(),
+          drawerEntry('Leagues', Icons.home_outlined, 'leagues'),
+          drawerEntry(
+            'League',
+            Icons.emoji_events_outlined,
+            selectedLeague == null ? null : 'league',
+          ),
+          drawerEntry('My team', Icons.shield_outlined, null),
+          drawerEntry('Matchups', Icons.sports_score_outlined, null),
+          drawerEntry(
+            'Franchises',
+            Icons.groups_outlined,
+            selectedLeague == null ? null : 'teams',
+          ),
+          drawerEntry(
+            'Players',
+            Icons.person_search_outlined,
+            selectedLeague == null ? null : 'players',
+          ),
+          drawerEntry('Watchlist', Icons.star_outline, null),
+          drawerEntry('Research', Icons.search, null),
+          drawerEntry('Waivers', Icons.schedule_outlined, null),
+          drawerEntry('Drafts', Icons.view_list_outlined, null),
+          drawerEntry('Trades', Icons.swap_horiz_outlined, null),
+          drawerEntry(
+            'Scores',
+            Icons.scoreboard_outlined,
+            selectedLeague == null ? null : 'scores',
+          ),
+          drawerEntry('Rules', Icons.menu_book_outlined, null),
+          if (selectedLeague != null &&
+              widget.session.session?.franchise?.isCommissioner == true)
+            drawerEntry('Commissioner', Icons.settings_outlined, null),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.account_circle_outlined),
+            title: const Text('Account'),
+            onTap: () {
+              Navigator.of(context).pop();
+              showModalBottomSheet<void>(
+                context: context,
+                builder: (sheetContext) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Account',
+                          style: Theme.of(sheetContext).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(widget.session.session?.email ?? ''),
+                        Text(
+                          widget.session.session?.verified == false
+                              ? 'Email not verified'
+                              : 'Email verified',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Sign out'),
+            onTap: () {
+              Navigator.of(context).pop();
+              signOut();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget currentScreen() {
+    if (section == 'leagues' ||
+        selectedLeague == null ||
+        selectedDynasty == null) {
+      return LeaguesScreen(
+        key: ValueKey(widget.session.session?.franchise?.id ?? 'no-league'),
+        api: widget.api,
+        session: widget.session,
+        onOpen: openLeague,
+      );
+    }
+    switch (section) {
+      case 'league':
+        return LeagueDashboardScreen(
+          key: ValueKey(selectedLeague!.id),
+          api: widget.api,
+          dynasty: selectedDynasty!,
+          league: selectedLeague!,
+        );
+      case 'teams':
+        return TeamsScreen(api: widget.api);
+      case 'players':
+        return PlayersScreen(api: widget.api);
+      case 'scores':
+        return ScoresScreen(api: widget.api);
+      default:
+        return const Center(child: Text('This section is coming soon.'));
+    }
   }
 
   @override
@@ -102,71 +268,61 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (widget.session.session == null) {
       return AuthScreen(session: widget.session);
     }
-    if (widget.session.session!.franchise == null) {
-      return AccountLobbyScreen(session: widget.session);
-    }
-    final destinations = [
-      const NavigationDestination(
-        icon: Icon(Icons.home_outlined),
-        selectedIcon: Icon(Icons.home),
-        label: 'Home',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.groups_outlined),
-        label: 'Teams',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.person_search_outlined),
-        label: 'Players',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.sports_score_outlined),
-        label: 'Scores',
-      ),
-    ];
-    final screens = [
-      HomeScreen(api: widget.api, session: widget.session),
-      TeamsScreen(api: widget.api),
-      PlayersScreen(api: widget.api),
-      ScoresScreen(api: widget.api),
-    ];
-    final wide = MediaQuery.sizeOf(context).width >= 700;
-
     return Scaffold(
-      body: SafeArea(
-        top: true,
-        bottom: false,
-        child: wide
-            ? Row(
-                children: [
-                  NavigationRail(
-                    selectedIndex: selected,
-                    onDestinationSelected: (value) =>
-                        setState(() => selected = value),
-                    labelType: NavigationRailLabelType.all,
-                    destinations: destinations
-                        .map(
-                          (item) => NavigationRailDestination(
-                            icon: item.icon,
-                            selectedIcon: item.selectedIcon,
-                            label: Text(item.label),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: screens[selected]),
-                ],
-              )
-            : screens[selected],
+      appBar: AppBar(
+        title: Text(
+          section == 'leagues'
+              ? 'Mosaic Fantasy'
+              : section == 'league'
+              ? selectedLeague?.name ?? 'League'
+              : section[0].toUpperCase() + section.substring(1),
+        ),
+        actions: [
+          if (selectedLeague != null && section != 'leagues')
+            IconButton(
+              tooltip: 'Choose league',
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: () => setState(() => section = 'leagues'),
+            ),
+        ],
       ),
-      bottomNavigationBar: wide
+      drawer: appDrawer(),
+      body: SafeArea(child: currentScreen()),
+      bottomNavigationBar: selectedLeague == null || section == 'leagues'
           ? null
-          : NavigationBar(
-              selectedIndex: selected,
-              onDestinationSelected: (value) =>
-                  setState(() => selected = value),
-              destinations: destinations,
+          : SafeArea(
+              top: false,
+              child: Center(
+                heightFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Material(
+                    color: const Color(0xff141822),
+                    borderRadius: BorderRadius.circular(32),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => setState(() => section = 'league'),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 28,
+                          vertical: 11,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              section == 'league'
+                                  ? Icons.emoji_events
+                                  : Icons.emoji_events_outlined,
+                            ),
+                            const Text('League'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
     );
   }

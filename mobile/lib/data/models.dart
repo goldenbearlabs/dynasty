@@ -10,21 +10,229 @@ List<T> readList<T>(Object? value, T Function(Json) convert) =>
 
 class Dynasty {
   const Dynasty({
+    this.id = '',
     required this.name,
     required this.leagues,
     required this.franchises,
+    this.teamIdentities = const [],
     this.settings = const {},
   });
+  final String id;
   final String name;
   final List<League> leagues;
   final List<Franchise> franchises;
+  final List<TeamIdentity> teamIdentities;
   final Json settings;
 
   factory Dynasty.fromJson(Json json) => Dynasty(
+    id: json['id'] as String? ?? '',
     name: json['name'] as String? ?? '',
     leagues: readList(json['leagues'], League.fromJson),
     franchises: readList(json['franchises'], Franchise.fromJson),
+    teamIdentities: readList(json['team_identities'], TeamIdentity.fromJson),
     settings: json['settings'] is Json ? asJson(json['settings']) : {},
+  );
+}
+
+class TeamIdentity {
+  const TeamIdentity({
+    required this.franchiseId,
+    required this.leagueId,
+    required this.name,
+  });
+  final String franchiseId;
+  final String leagueId;
+  final String name;
+
+  factory TeamIdentity.fromJson(Json json) => TeamIdentity(
+    franchiseId: json['franchise_id'] as String? ?? '',
+    leagueId: json['league_id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+  );
+}
+
+class MyLeague {
+  const MyLeague({
+    required this.id,
+    required this.name,
+    required this.franchiseId,
+    required this.franchiseName,
+    required this.sports,
+    required this.ready,
+  });
+  final String id;
+  final String name;
+  final String franchiseId;
+  final String franchiseName;
+  final List<String> sports;
+  final bool ready;
+
+  factory MyLeague.fromJson(Json json) => MyLeague(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    franchiseId: json['franchise_id'] as String? ?? '',
+    franchiseName: json['franchise_name'] as String? ?? '',
+    sports: (json['sports'] as List<dynamic>? ?? []).cast<String>(),
+    ready: json['ready'] as bool? ?? false,
+  );
+}
+
+class StandingsTable {
+  const StandingsTable({
+    required this.leagueId,
+    required this.competition,
+    required this.format,
+    required this.season,
+    required this.rows,
+  });
+  final String leagueId;
+  final String competition;
+  final String format;
+  final Json? season;
+  final List<StandingsRow> rows;
+
+  factory StandingsTable.fromJson(Json json) => StandingsTable(
+    leagueId: json['league_id'] as String? ?? '',
+    competition: json['competition'] as String? ?? '',
+    format: json['format'] as String? ?? '',
+    season: json['season'] is Json ? asJson(json['season']) : null,
+    rows: readList(json['rows'], StandingsRow.fromJson),
+  );
+}
+
+class StandingsRow {
+  const StandingsRow({
+    required this.franchiseId,
+    required this.points,
+    required this.pointsFor,
+    required this.pointsAgainst,
+    required this.wins,
+    required this.losses,
+    required this.ties,
+  });
+  final String franchiseId;
+  final double points;
+  final double pointsFor;
+  final double pointsAgainst;
+  final int wins;
+  final int losses;
+  final int ties;
+
+  factory StandingsRow.fromJson(Json json) => StandingsRow(
+    franchiseId: json['franchise_id'] as String? ?? '',
+    points: (json['points'] as num? ?? 0).toDouble(),
+    pointsFor: (json['points_for'] as num? ?? 0).toDouble(),
+    pointsAgainst: (json['points_against'] as num? ?? 0).toDouble(),
+    wins: (json['wins'] as num? ?? 0).toInt(),
+    losses: (json['losses'] as num? ?? 0).toInt(),
+    ties: (json['ties'] as num? ?? 0).toInt(),
+  );
+}
+
+class OverallYear {
+  const OverallYear({
+    required this.year,
+    required this.finalYear,
+    required this.rows,
+  });
+  final int year;
+  final bool finalYear;
+  final List<OverallRow> rows;
+
+  factory OverallYear.fromJson(Json json) => OverallYear(
+    year: (json['year'] as num? ?? 0).toInt(),
+    finalYear: json['final'] as bool? ?? false,
+    rows: readList(json['rows'], OverallRow.fromJson),
+  );
+}
+
+class OverallRow {
+  const OverallRow({
+    required this.franchiseId,
+    required this.points,
+    required this.adjustedPoints,
+  });
+  final String franchiseId;
+  final double points;
+  final double adjustedPoints;
+
+  factory OverallRow.fromJson(Json json) => OverallRow(
+    franchiseId: json['franchise_id'] as String? ?? '',
+    points: (json['points'] as num? ?? 0).toDouble(),
+    adjustedPoints: (json['adjusted_points'] as num? ?? 0).toDouble(),
+  );
+}
+
+class LeagueOdds {
+  const LeagueOdds({required this.leagues, required this.overall});
+  final List<SportOdds> leagues;
+  final List<TitleOdds> overall;
+
+  factory LeagueOdds.fromJson(Json json) => LeagueOdds(
+    leagues: readList(json['leagues'], SportOdds.fromJson),
+    overall: readList(json['overall'], TitleOdds.fromJson),
+  );
+}
+
+class SportOdds {
+  const SportOdds({required this.competition, required this.rows});
+  final String competition;
+  final List<PlayoffOdds> rows;
+
+  factory SportOdds.fromJson(Json json) => SportOdds(
+    competition: json['competition'] as String? ?? '',
+    rows: readList(json['rows'], PlayoffOdds.fromJson),
+  );
+}
+
+class PlayoffOdds {
+  const PlayoffOdds({required this.franchiseId, required this.playoffs});
+  final String franchiseId;
+  final double playoffs;
+
+  factory PlayoffOdds.fromJson(Json json) => PlayoffOdds(
+    franchiseId: json['franchise_id'] as String? ?? '',
+    playoffs: (json['playoffs'] as num? ?? 0).toDouble(),
+  );
+}
+
+class TitleOdds {
+  const TitleOdds({required this.franchiseId, required this.title});
+  final String franchiseId;
+  final double title;
+
+  factory TitleOdds.fromJson(Json json) => TitleOdds(
+    franchiseId: json['franchise_id'] as String? ?? '',
+    title: (json['title'] as num? ?? 0).toDouble(),
+  );
+}
+
+class ActivityItem {
+  const ActivityItem({
+    required this.id,
+    required this.kind,
+    required this.competition,
+    required this.franchiseName,
+    required this.playerName,
+    required this.createdAt,
+    required this.detail,
+  });
+  final int id;
+  final String kind;
+  final String competition;
+  final String franchiseName;
+  final String playerName;
+  final DateTime? createdAt;
+  final Json detail;
+
+  factory ActivityItem.fromJson(Json json) => ActivityItem(
+    id: (json['id'] as num? ?? 0).toInt(),
+    kind: json['kind'] as String? ?? '',
+    competition: json['competition'] as String? ?? '',
+    franchiseName: json['franchise_name'] as String? ?? '',
+    playerName: json['player_name'] as String? ?? '',
+    createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
+    detail: json['detail'] is Json ? asJson(json['detail']) : {},
   );
 }
 
@@ -54,17 +262,20 @@ class Franchise {
     required this.managerName,
     required this.slug,
     this.id = '',
+    this.isCommissioner = false,
   });
   final String id;
   final String name;
   final String managerName;
   final String slug;
+  final bool isCommissioner;
 
   factory Franchise.fromJson(Json json) => Franchise(
     id: json['id'] as String? ?? '',
     name: json['name'] as String? ?? '',
     managerName: json['manager_name'] as String? ?? '',
     slug: json['slug'] as String? ?? '',
+    isCommissioner: json['is_commissioner'] as bool? ?? false,
   );
 }
 

@@ -45,7 +45,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Account created, but email delivery failed. Resend it from My Leagues.',
+                'Account created, but email delivery failed. Resend it from Leagues.',
               ),
             ),
           );

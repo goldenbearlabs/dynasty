@@ -70,6 +70,15 @@ class ApiClient {
       asJson(await request('GET', path, query: query));
 
   Future<Dynasty> dynasty() async => Dynasty.fromJson(await get('api/dynasty'));
+  Future<List<MyLeague>> myLeagues() async =>
+      readList(await request('GET', 'api/my-leagues'), MyLeague.fromJson);
+  Future<List<StandingsTable>> standings() async =>
+      readList(await request('GET', 'api/standings'), StandingsTable.fromJson);
+  Future<List<OverallYear>> overall() async =>
+      readList(await request('GET', 'api/overall'), OverallYear.fromJson);
+  Future<LeagueOdds> odds() async => LeagueOdds.fromJson(await get('api/odds'));
+  Future<List<ActivityItem>> activity() async =>
+      readList(await request('GET', 'api/activity'), ActivityItem.fromJson);
   Future<FranchiseDetail> franchise(String slug) async =>
       FranchiseDetail.fromJson(
         await get('api/franchises/${Uri.encodeComponent(slug)}'),
