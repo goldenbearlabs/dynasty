@@ -96,7 +96,7 @@ var movedPlayer func(ctx context.Context, playerID pgtype.UUID, from, to string)
 
 // startServer runs the real HTTP handler against the test database, with a
 // fast draft clock.
-func startServer(t *testing.T, pool *pgxpool.Pool) (*httptest.Server, competition.Registry) {
+func startServer(t *testing.T, pool *pgxpool.Pool, mailer ...func(context.Context, string, string, string) error) (*httptest.Server, competition.Registry) {
 	ctx, stop := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	registry := competition.NewRegistry(ingest.NewClient(0))
@@ -129,22 +129,28 @@ func startServer(t *testing.T, pool *pgxpool.Pool) (*httptest.Server, competitio
 	}
 	playerService := players.NewService(pool, registry)
 	playerService.Cache = responseCache
+	var sendAccountEmail func(context.Context, string, string, string) error
+	if len(mailer) > 0 {
+		sendAccountEmail = mailer[0]
+	}
 	server := httptest.NewServer((&web.Server{
-		Cache:      responseCache,
-		Queries:    db.New(pool),
-		Auth:       accounts,
-		Registry:   registry,
-		Dynasty:    dynasty.NewService(pool, registry),
-		Roster:     rosters,
-		Players:    playerService,
-		Drafts:     drafts,
-		Trades:     trade.NewService(pool),
-		Waivers:    waiver.NewService(pool, log),
-		Lineups:    lineup.NewService(pool, registry),
-		Scoring:    scoring.NewService(pool),
-		Live:       live.NewService(pool, syncer, registry, events, log),
-		Log:        log,
-		Background: ctx,
+		Cache:            responseCache,
+		Queries:          db.New(pool),
+		Auth:             accounts,
+		Registry:         registry,
+		Dynasty:          dynasty.NewService(pool, registry),
+		Roster:           rosters,
+		Players:          playerService,
+		Drafts:           drafts,
+		Trades:           trade.NewService(pool),
+		Waivers:          waiver.NewService(pool, log),
+		Lineups:          lineup.NewService(pool, registry),
+		Scoring:          scoring.NewService(pool),
+		Live:             live.NewService(pool, syncer, registry, events, log),
+		Log:              log,
+		Background:       ctx,
+		PublicURL:        "http://localhost:8090",
+		SendAccountEmail: sendAccountEmail,
 	}).Handler())
 	t.Cleanup(func() { stop(); server.Close() })
 	return server, registry
@@ -166,7 +172,7 @@ func TestLeagueFlow(t *testing.T) {
 	luke, sam := newBrowser(t, server.URL), newBrowser(t, server.URL)
 
 	// --- setup ---------------------------------------------------------
-	luke.want(http.StatusNotFound, "GET", "/api/dynasty", nil, nil)
+	luke.want(http.StatusUnauthorized, "GET", "/api/dynasty", nil, nil)
 
 	nba, _ := registry.Get("nba")
 	cbb, _ := registry.Get("cbb")
@@ -236,7 +242,7 @@ func TestLeagueFlow(t *testing.T) {
 		Email       string
 		InviteToken string `json:"invite_token"`
 	}
-	sam.want(http.StatusForbidden, "GET", "/api/admin/franchises", nil, nil)
+	sam.want(http.StatusUnauthorized, "GET", "/api/admin/franchises", nil, nil)
 	luke.want(http.StatusOK, "GET", "/api/admin/franchises", nil, &invites)
 	samInvite := invites[0] // franchises are listed by name
 	if samInvite.Slug != "sam-s-spoilers" || samInvite.InviteToken == "" || invites[1].InviteToken != "" {

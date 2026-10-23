@@ -1,15 +1,19 @@
 .PHONY: db api web gen build test sync runs seed
 
+-include .env.local
+
 API := http://localhost:8090
 ADMIN_TOKEN ?= dev
-TEST_DB := postgres://crossover:crossover@localhost:5433/crossover_test
+DB_PORT ?= 5433
+DATABASE_URL ?= postgres://crossover:crossover@localhost:$(DB_PORT)/crossover
+TEST_DB := postgres://crossover:crossover@localhost:$(DB_PORT)/crossover_test
 j ?= rosters
 
-db: ## start Postgres on localhost:5433
-	docker compose up -d db
+db: ## start Postgres on localhost:$(DB_PORT)
+	DB_PORT=$(DB_PORT) docker compose up -d db
 
 api: ## run the Go server on :8090
-	cd backend && ADMIN_TOKEN=$(ADMIN_TOKEN) go run .
+	cd backend && ADMIN_TOKEN=$(ADMIN_TOKEN) DATABASE_URL=$(DATABASE_URL) go run .
 
 web: ## run the frontend dev server, proxying /api to :8090
 	cd frontend && npm run dev

@@ -1,8 +1,12 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
-// The front door. A signed-in manager goes straight to their team.
-export const load: PageLoad = async ({ parent }) => {
+// The front door sends managers into their league and other accounts to invite guidance.
+export const load: PageLoad = async ({ parent, url }) => {
 	const { me } = await parent();
-	if (me) redirect(307, `/franchise/${me.slug}`);
+	if (me?.id) {
+		const next = url.searchParams.get('next');
+		redirect(307, next?.startsWith('/') && !next.startsWith('//') ? next : `/franchise/${me.slug}`);
+	}
+	if (me?.account_id) redirect(307, '/account');
 };

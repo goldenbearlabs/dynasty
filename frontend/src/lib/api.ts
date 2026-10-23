@@ -81,7 +81,17 @@ export type Franchise = {
 };
 
 /** The signed-in manager: their franchise and the account they sign in with. */
-export type Session = Franchise & { email: string };
+export type Session = Franchise & { account_id: string; email: string; verified: boolean };
+
+export type MyLeague = {
+	id: string;
+	name: string;
+	franchise_id: string;
+	franchise_name: string;
+	is_commissioner: boolean;
+	sports: string[];
+	ready: boolean;
+};
 
 /** A franchise as the commissioner manages it. */
 export type Invite = Franchise & {
@@ -868,6 +878,7 @@ const orNull = <T>(promise: Promise<T>) =>
 // ---- endpoints ----
 
 export const getCompetitions = () => request<Competition[]>('GET', '/competitions');
+export const getBootstrap = () => request<{configured: boolean}>('GET', '/bootstrap');
 export const getPlayers = (filter: PlayerFilter) => request<PlayerPage>('GET', `/players${query(filter)}`);
 export const getResearch = (filter: ResearchFilter) =>
 	request<ResearchPage>('GET', `/research${query(filter)}`);
@@ -923,11 +934,21 @@ export const setTradeTarget = (change: { league_id: string; player_id: string; o
 	request<void>('PUT', '/trade-market/targets', change);
 
 export const getSession = () => request<Session | null>('GET', '/session');
+export const getMyLeagues = () => request<MyLeague[]>('GET', '/my-leagues');
+export const getMyLeague = (id: string) => request<MyLeague>('GET', `/my-leagues/${id}`);
+export const createMyLeague = (input: {name: string; franchise_name: string; manager_name: string}) =>
+	request<{id: string}>('POST', '/my-leagues', input);
 export const logIn = (credentials: Credentials) => request<void>('POST', '/auth/login', credentials);
+export const createAccount = (credentials: Credentials) => request<{email_sent: boolean}>('POST', '/accounts', credentials);
+export const verifyAccount = (token: string) => request<void>('POST', '/accounts/verify', {token});
+export const resendVerification = (email: string) => request<void>('POST', '/accounts/verification', {email});
+export const requestPasswordReset = (email: string) => request<void>('POST', '/accounts/password-reset', {email});
+export const completePasswordReset = (token: string, password: string) => request<void>('POST', '/accounts/password-reset/confirm', {token, password});
 export const logOut = () => request<void>('POST', '/auth/logout');
 export const getInvite = (token: string) => request<{ franchise: Franchise; reset: boolean }>('GET', `/invites/${token}`);
 export const claimInvite = (token: string, credentials: Credentials) =>
 	request<void>('POST', `/invites/${token}/claim`, credentials);
+export const acceptInvite = (token: string) => request<void>('POST', `/invites/${token}/accept`);
 
 export const setOrganizationIdentity = (id: string, name: string, image_url: string) => request<void>('PUT', `/franchises/${id}/identity`, {name,image_url});
 export const setTeamIdentity = (id: string, league: string, name: string, image_url: string) => request<void>('PUT', `/franchises/${id}/leagues/${league}/identity`, {name,image_url});

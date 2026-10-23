@@ -47,9 +47,11 @@ type Server struct {
 	Live     *live.Service
 	Log      *slog.Logger
 
-	Ping       func(context.Context) error // database health
-	Background context.Context             // lifetime of work that outlives a request
-	AdminToken string                      // optional bearer token for scripts; see commissioner
+	Ping             func(context.Context) error // database health
+	Background       context.Context             // lifetime of work that outlives a request
+	AdminToken       string                      // optional bearer token for scripts; see commissioner
+	PublicURL        string                      // public origin for account email links
+	SendAccountEmail func(context.Context, string, string, string) error
 	// SeasonBackfill is how many seasons of stat history a sync keeps.
 	SeasonBackfill int
 	// ScheduleDays extends the full-year schedule horizon when larger than 365.
@@ -65,6 +67,10 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
+	mux.HandleFunc("GET /api/bootstrap", s.bootstrap)
+	mux.HandleFunc("GET /api/my-leagues", s.listMyLeagues)
+	mux.HandleFunc("POST /api/my-leagues", s.createMyLeague)
+	mux.HandleFunc("GET /api/my-leagues/{id}", s.getMyLeague)
 
 	mux.HandleFunc("GET /api/competitions", s.cached(cache.Research, 10*time.Minute, s.listCompetitions))
 	mux.HandleFunc("GET /api/teams", s.cached(cache.Research, 10*time.Minute, s.listTeams))
@@ -112,8 +118,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/session", s.getSession)
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/logout", s.logout)
+	mux.HandleFunc("POST /api/accounts", s.registerAccount)
+	mux.HandleFunc("POST /api/accounts/verify", s.verifyAccount)
+	mux.HandleFunc("POST /api/accounts/verification", s.resendVerification)
+	mux.HandleFunc("POST /api/accounts/password-reset", s.requestPasswordReset)
+	mux.HandleFunc("POST /api/accounts/password-reset/confirm", s.completePasswordReset)
+	mux.HandleFunc("POST /api/mobile/auth/login", s.mobileLogin)
+	mux.HandleFunc("POST /api/mobile/auth/logout", s.mobileLogout)
+	mux.HandleFunc("POST /api/mobile/auth/refresh", s.mobileRefresh)
+	mux.HandleFunc("GET /api/mobile/session", s.mobileSession)
+	mux.HandleFunc("POST /api/mobile/invites/{token}/claim", s.mobileClaimInvite)
 	mux.HandleFunc("GET /api/invites/{token}", s.getInvite)
 	mux.HandleFunc("POST /api/invites/{token}/claim", s.claimInvite)
+	mux.HandleFunc("POST /api/invites/{token}/accept", s.acceptExistingInvite)
+	mux.HandleFunc("POST /api/mobile/invites/{token}/accept", s.mobileAcceptInvite)
 
 	mux.HandleFunc("POST /api/leagues/{id}/roster/{action}", s.member(s.changeRoster))
 	mux.HandleFunc("PUT /api/leagues/{id}/lineup", s.member(s.setLineup))
@@ -188,12 +206,13 @@ func (s *Server) Handler() http.Handler {
 		writeError(w, http.StatusNotFound, "not found")
 	})
 	mux.Handle("/", frontend())
+	protected := s.privateAPI(mux)
 	if s.Cache == nil {
-		return mux
+		return protected
 	}
 	// Whoever changes something sees it at once: see cache.Store.RevisionAge.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mux.ServeHTTP(w, r)
+		protected.ServeHTTP(w, r)
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			s.Cache.Forget()
 		}

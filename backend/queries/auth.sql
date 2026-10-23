@@ -20,7 +20,10 @@ update users set email = @email, password_hash = @password_hash, sessions_valid_
 where id = @id;
 
 -- name: GetFranchiseByUser :one
-select * from franchises where user_id = @user_id;
+-- Legacy gameplay endpoints still use the original dynasty until tenant routing is complete.
+select f.* from franchises f
+where f.user_id = @user_id
+  and f.dynasty_id = (select id from dynasties order by created_at, id limit 1);
 
 -- name: ClaimFranchise :exec
 -- Links the account and uses up the invite link.

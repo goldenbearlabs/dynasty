@@ -23,6 +23,12 @@ services:
       GOMEMLIMIT: ${GOMEMLIMIT:-256MiB}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       FETCH_VIA: ${FETCH_VIA:-}
       SCHEDULE_DAYS: ${SCHEDULE_DAYS:-365} # full schedules; active fantasy seasons can extend this
       TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
@@ -63,7 +69,7 @@ services:
       POSTGRES_DB: crossover
       POSTGRES_USER: crossover
       POSTGRES_PASSWORD: ${DB_PASSWORD:-crossover}
-    ports: ["127.0.0.1:5433:5432"] # 5433 on the host; reachable only from this machine
+    ports: ["127.0.0.1:${DB_PORT:-5433}:5432"] # host port is configurable; reachable only from this machine
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

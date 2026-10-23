@@ -17,6 +17,14 @@ const sessionCookie = "session"
 
 // session returns who is signed in, if anyone.
 func (s *Server) session(r *http.Request) (auth.Session, bool) {
+	if r.Header.Get("Authorization") != "" {
+		token, ok := mobileBearer(r)
+		if !ok {
+			return auth.Session{}, false
+		}
+		session, err := s.Auth.VerifyMobile(r.Context(), token)
+		return session, err == nil
+	}
 	cookie, err := r.Cookie(sessionCookie)
 	if err != nil {
 		return auth.Session{}, false
@@ -28,7 +36,7 @@ func (s *Server) session(r *http.Request) (auth.Session, bool) {
 // me returns the signed-in franchise, if any.
 func (s *Server) me(r *http.Request) (db.Franchise, bool) {
 	session, ok := s.session(r)
-	return session.Franchise, ok
+	return session.Franchise, ok && session.Franchise.ID.Valid
 }
 
 // member requires a signed-in manager.
@@ -60,7 +68,19 @@ func (s *Server) commissioner(next http.HandlerFunc) http.HandlerFunc {
 // sessionView is the signed-in manager as the frontend sees them.
 type sessionView struct {
 	db.Franchise
-	Email string `json:"email"`
+	AccountID string `json:"account_id"`
+	Email     string `json:"email"`
+	Verified  bool   `json:"verified"`
+}
+
+func (s *Server) viewSession(r *http.Request, session auth.Session) (sessionView, error) {
+	verified, err := s.Auth.IsVerified(r.Context(), session.User.ID)
+	return sessionView{
+		Franchise: session.Franchise,
+		AccountID: session.User.ID.String(),
+		Email:     session.User.Email,
+		Verified:  verified,
+	}, err
 }
 
 // getSession reports who is signed in, and renews a token past half its life.
@@ -70,10 +90,15 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, nil)
 		return
 	}
-	if time.Until(session.Expires) < auth.TokenLifetime/2 {
+	if r.Header.Get("Authorization") == "" && time.Until(session.Expires) < auth.TokenLifetime/2 {
 		s.signIn(w, r, session.User)
 	}
-	writeJSON(w, http.StatusOK, sessionView{Franchise: session.Franchise, Email: session.User.Email})
+	view, err := s.viewSession(r, session)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

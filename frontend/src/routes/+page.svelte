@@ -18,7 +18,7 @@
 		busy = true;
 		try {
 			await logIn({ email, password });
-			await invalidateAll(); // now signed in, so this page sends them to their team
+			await invalidateAll(); // signed-in managers enter their team; others see account guidance
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -32,7 +32,7 @@
 <div class="landing">
 	<section class="pitch">
 		<p class="eyebrow">Crossover Dynasty</p>
-		<h1>{data.dynasty?.name ?? 'One franchise. Every sport.'}</h1>
+		<h1>{data.dynasty?.name ?? 'One account. Every sport.'}</h1>
 		<p class="lede">
 			A dynasty league across sports. Draft a high schooler and keep him through college into the pros, and trade an NBA
 			first-round pick for an NHL goalie.
@@ -44,7 +44,7 @@
 		</div>
 	</section>
 
-	{#if data.dynasty}
+	{#if data.configured}
 		<form class="card stack" onsubmit={submit}>
 			<h2>Sign in</h2>
 			<label class="field">Email <input type="email" autocomplete="username" bind:value={email} required /></label>
@@ -58,7 +58,8 @@
 				New here? Open the invite link from your commissioner to create your account. Forgot your password? Ask them for a new
 				link.
 			</p>
-			<p class="small-text"><a href="/league">Look around without signing in</a></p>
+			<p class="small-text">New here? <a href="/register">Create an account</a>.</p>
+			<p class="small-text"><a href="/reset-password">Forgot your password?</a></p>
 		</form>
 	{:else}
 		<div class="card stack">

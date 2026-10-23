@@ -29,6 +29,7 @@
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => inbox.setAccount(id)); });
 	$effect(() => { const id = data.me?.id || ''; untrack(() => tradeMarket.setAccount(id)); });
+	const path = $derived(page.url.pathname);
 
 	let sidebarCollapsed = $state(false);
 	let wideScreen = $state(false);
@@ -60,22 +61,40 @@
 	);
 	// Every league has waivers of a kind: at the least, released draft picks spend a day on them.
 	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
-	const links = $derived<Link[]>([
-		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
-		{ href: '/league', label: 'League', icon: 'home' },
-		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
-		{ href: '/players', label: 'Players', icon: 'players' },
-		...(data.me ? [{ href: '/watchlist', label: 'Watchlist', icon: 'star' } as Link] : []),
-		{ href: '/research', label: 'Research', icon: 'search' },
-		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
-		{ href: '/drafts', label: 'Drafts', icon: 'draft' },
-		{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
-		{ href: '/info', label: 'Rules', icon: 'info' },
-		...(data.me?.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
-	]);
+	const links = $derived.by((): Link[] => {
+		if (!data.me?.id) {
+			return [
+				{ href: '/account?section=team', label: 'My team', icon: 'shield' },
+				{ href: '/account?section=league', label: 'League', icon: 'home' },
+				{ href: '/account?section=matchups', label: 'Matchups', icon: 'scores' },
+				{ href: '/account?section=players', label: 'Players', icon: 'players' },
+				{ href: '/account?section=watchlist', label: 'Watchlist', icon: 'star' },
+				{ href: '/account?section=research', label: 'Research', icon: 'search' },
+				{ href: '/account?section=waivers', label: 'Waivers', icon: 'clock' },
+				{ href: '/account?section=drafts', label: 'Drafts', icon: 'draft' },
+				{ href: '/account?section=trades', label: 'Trades', icon: 'trade' },
+				{ href: '/account?section=rules', label: 'Rules', icon: 'info' }
+			];
+		}
+		return [
+			{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' },
+			{ href: '/league', label: 'League', icon: 'home' },
+			{ href: '/matchups', label: 'Matchups', icon: 'scores' },
+			{ href: '/players', label: 'Players', icon: 'players' },
+			{ href: '/watchlist', label: 'Watchlist', icon: 'star' },
+			{ href: '/research', label: 'Research', icon: 'search' },
+			...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
+			{ href: '/drafts', label: 'Drafts', icon: 'draft' },
+			{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
+			{ href: '/info', label: 'Rules', icon: 'info' },
+			...(data.me.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
+		];
+	});
 
-	const path = $derived(page.url.pathname);
-	const current = (href: string) => path === href || path.startsWith(href + '/');
+	const current = (href: string) => {
+		if (href.startsWith('/account?')) return path + page.url.search === href;
+		return path === href || path.startsWith(href + '/');
+	};
 
 	// On a phone the tab bar holds the first few sections; the rest, and who
 	// is signed in, open from "More".
@@ -85,7 +104,7 @@
 	afterNavigate(() => { moreOpen = false; void inbox.refresh(); });
 
 	// The landing page, the setup wizard and invite links stand alone.
-	const bare = $derived(!data.dynasty || path === '/' || path.startsWith('/join/'));
+	const bare = $derived(path === '/' || path === '/register' || path === '/verify' || path === '/reset-password' || path.startsWith('/join/') || path === '/setup');
 
 	// A draft in progress is the most time-sensitive thing in the league.
 	const liveDraft = $derived(data.drafts.find((d) => d.status === 'live' || d.status === 'paused'));
@@ -101,7 +120,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if bare || !data.dynasty}
+{#if bare}
 	<main class="bare">{@render children()}</main>
 {:else}
 	<div class="shell" class:collapsed>
@@ -111,9 +130,9 @@
 			<Icon name={collapsed ? 'right' : 'left'} size={15} />
 		</button>
 		<aside class="rail" id="sidebar-navigation" inert={collapsed}>
-			<a class="brand" href="/league">
-				<span class="mark" aria-hidden="true">CD</span>
-				<span class="name">{data.dynasty.name}</span>
+			<a class="brand" href={data.me?.id ? '/league' : '/account'}>
+				<span class="mark" aria-hidden="true">MF</span>
+				<span class="name">{data.dynasty?.name ?? 'Mosaic Fantasy'}</span>
 			</a>
 
 			<nav aria-label="Main">
@@ -139,7 +158,7 @@
 				{/if}
 			</nav>
 
-			{#if data.me}
+			{#if data.me?.id}
 				<div class="me">
 					<Crest src={data.me.image_url} name={data.me.name} size={34} />
 					<div class="who">
@@ -148,8 +167,11 @@
 					</div>
 					<button class="quiet small" aria-label="Sign out" title="Sign out" onclick={leave}><Icon name="out" size={16} /></button>
 				</div>
-			{:else}
-				<p class="me"><a class="button primary" href="/">Sign in</a></p>
+			{:else if data.me}
+				<div class="me">
+					<div class="who"><strong>{data.me.email}</strong><span class="muted small-text">My account</span></div>
+					<button class="quiet small" aria-label="Sign out" title="Sign out" onclick={leave}><Icon name="out" size={16} /></button>
+				</div>
 			{/if}
 		</aside>
 
@@ -166,13 +188,18 @@
 						</a>
 					{/each}
 				</nav>
-				{#if data.me}
+				{#if data.me?.id}
 					<div class="sheet-me">
 						<Crest src={data.me.image_url} name={data.me.name} size={34} />
 						<div class="who">
 							<strong>{data.me.name}</strong>
 							<span class="muted small-text">{data.me.manager_name}</span>
 						</div>
+						<button class="small" onclick={leave}><Icon name="out" size={16} /> Sign out</button>
+					</div>
+				{:else if data.me}
+					<div class="sheet-me">
+						<div class="who"><strong>{data.me.email}</strong><span class="muted small-text">My account</span></div>
 						<button class="small" onclick={leave}><Icon name="out" size={16} /> Sign out</button>
 					</div>
 				{:else}
@@ -182,9 +209,9 @@
 		{/if}
 
 		<div class="page">
-			{#if !path.startsWith('/draft/')}
+			{#if data.dynasty && !path.startsWith('/draft/')}
 				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me}>
-					{#snippet actions()}{#if data.me}<NotificationCenter accountId={data.me.id} />{/if}{/snippet}
+					{#snippet actions()}{#if data.me?.id}<NotificationCenter accountId={data.me.id} />{/if}{/snippet}
 				</LiveScores>
 			{/if}
 			{#if liveDraft && !path.startsWith('/draft/')}
