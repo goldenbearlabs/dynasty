@@ -2,17 +2,17 @@
 
 -- +goose Up
 alter table franchises drop constraint if exists franchises_user_id_key;
-create unique index franchises_dynasty_user_unique on franchises (dynasty_id, user_id) where user_id is not null;
+create unique index if not exists franchises_dynasty_user_unique on franchises (dynasty_id, user_id) where user_id is not null;
 
 -- Existing invited managers are already trusted. Only new registrations get a row here.
-create table account_verifications (
+create table if not exists account_verifications (
   user_id uuid primary key references users(id) on delete cascade,
   token_hash bytea unique,
   expires_at timestamptz,
   verified_at timestamptz
 );
 
-create table account_password_resets (
+create table if not exists account_password_resets (
   user_id uuid primary key references users(id) on delete cascade,
   token_hash bytea not null unique,
   expires_at timestamptz not null,
