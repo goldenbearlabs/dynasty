@@ -21,10 +21,22 @@ one up: name it, pick sports and rules, create your account, list the managers.
 Whoever does this becomes the commissioner. The commissioner page then has an
 invite link for every other manager; opening it lets them create their account.
 
-After that the landing page is a sign-in form, and a signed-in manager is taken
-straight to their team. Sign-in lasts 30 days and renews on every visit. A
-forgotten password is fixed by the commissioner issuing a new link ("Reset
-access").
+After that the landing page offers sign-in or account creation. League data is
+private: a new account can sign in and sees My Leagues, where it can save a
+league setup or claim a commissioner-prepared franchise invite. Existing managers keep their
+current franchises. Sign-in lasts 30 days and renews on every visit. The
+"Forgot password" form sends a one-use reset link.
+
+Account creation and recovery need email delivery. Production uses the
+`PUBLIC_URL` and SMTP settings shown in `.env.example`. For local development,
+run `make web`, then start the API with
+`PUBLIC_URL=http://localhost:5173 DEV_LOG_EMAILS=1 make api` to print
+verification and reset links in that terminal. The links open the web frontend;
+never enable this mode on a public server. Verified accounts can now save a
+private league setup from My Leagues. It snapshots the original league's sports
+and rules without adding anything to live gameplay tables. A saved setup is not
+yet playable: tenant-scoped drafts, rosters, commissioner controls, and shared
+join codes are still being built.
 
 Player data comes from the commissioner page ("Data feeds"), or from the shell:
 

@@ -97,7 +97,8 @@ func TestTeamIdentityAndNicknames(t *testing.T) {
 			} `json:"players"`
 		} `json:"rosters"`
 	}
-	guest.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
+	guest.want(http.StatusUnauthorized, "GET", "/api/franchises/"+ownerSlug, nil, nil)
+	other.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
 	for _, r := range franchise.Rosters {
 		if r.LeagueID == nbaID && (r.TeamName != "North Star Hoops" || r.ImageURL != "https://example.com/hoops.png") {
 			t.Fatal("per-sport identity missing")
@@ -128,7 +129,7 @@ func TestTeamIdentityAndNicknames(t *testing.T) {
 	other.want(http.StatusNoContent, "PUT", "/api/franchises/"+otherID+"/players/"+player.String()+"/nickname", map[string]string{"nickname": "My Own Nickname"}, nil)
 	owner.want(http.StatusUnprocessableEntity, "PUT", nickURL, map[string]string{"nickname": strings.Repeat("x", 41)}, nil)
 	var nick map[string]string
-	guest.want(http.StatusOK, "GET", nickURL, nil, &nick)
+	other.want(http.StatusOK, "GET", nickURL, nil, &nick)
 	if nick["nickname"] != "The North Star" {
 		t.Fatal("nickname not stored")
 	}
@@ -137,7 +138,7 @@ func TestTeamIdentityAndNicknames(t *testing.T) {
 	if err != nil || row.FullName != "Zz Identity Player" {
 		t.Fatal("nickname replaced canonical name")
 	}
-	guest.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
+	other.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
 	found := false
 	for _, r := range franchise.Rosters {
 		for _, p := range r.Players {
@@ -147,10 +148,10 @@ func TestTeamIdentityAndNicknames(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("public roster did not retain real name and nickname")
+		t.Fatal("member-visible roster did not retain real name and nickname")
 	}
 	var starting lineup.View
-	guest.want(http.StatusOK, "GET", "/api/leagues/"+nbaID.String()+"/lineup?franchise="+ownerID, nil, &starting)
+	other.want(http.StatusOK, "GET", "/api/leagues/"+nbaID.String()+"/lineup?franchise="+ownerID, nil, &starting)
 	if len(starting.Players) != 1 || starting.Players[0].Nickname != "The North Star" {
 		t.Fatal("lineup nickname missing")
 	}
@@ -179,12 +180,12 @@ func TestTeamIdentityAndNicknames(t *testing.T) {
 		t.Fatal("merge overwrote survivor nickname")
 	}
 	owner.want(http.StatusNoContent, "PUT", nickURL, map[string]string{"nickname": ""}, nil)
-	guest.want(http.StatusOK, "GET", nickURL, nil, &nick)
+	other.want(http.StatusOK, "GET", nickURL, nil, &nick)
 	if nick["nickname"] != "" {
 		t.Fatal("nickname could not be removed")
 	}
 	owner.want(http.StatusNoContent, "PUT", teamURL, map[string]string{"name": "", "image_url": ""}, nil)
-	guest.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
+	other.want(http.StatusOK, "GET", "/api/franchises/"+ownerSlug, nil, &franchise)
 	for _, r := range franchise.Rosters {
 		if r.TeamName != me.Name || r.ImageURL != logo {
 			t.Fatal("clearing team overrides did not restore organization defaults")

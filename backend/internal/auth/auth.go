@@ -166,7 +166,7 @@ func (s *Service) Verify(ctx context.Context, signed string) (Session, error) {
 	}
 	franchise, err := q.GetFranchiseByUser(ctx, user.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Session{}, ErrNoSession
+		return Session{User: user, Expires: claims.ExpiresAt.Time}, nil
 	}
 	return Session{User: user, Franchise: franchise, Expires: claims.ExpiresAt.Time}, err
 }

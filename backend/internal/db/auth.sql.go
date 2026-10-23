@@ -49,7 +49,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const getFranchiseByUser = `-- name: GetFranchiseByUser :one
-select id, dynasty_id, name, manager_name, slug, invite_token, is_commissioner, user_id, image_url from franchises where user_id = $1
+select f.id, f.dynasty_id, f.name, f.manager_name, f.slug, f.invite_token, f.is_commissioner, f.user_id, f.image_url from franchises f
+where f.user_id = $1
+  and f.dynasty_id = (select id from dynasties order by created_at, id limit 1)
 `
 
 func (q *Queries) GetFranchiseByUser(ctx context.Context, userID pgtype.UUID) (Franchise, error) {

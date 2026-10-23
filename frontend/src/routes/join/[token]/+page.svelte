@@ -3,7 +3,7 @@
 	// they will sign in with from then on.
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { claimInvite } from '#lib/api.ts';
+	import { acceptInvite, claimInvite } from '#lib/api.ts';
 	import Crest from '#lib/ui/Crest.svelte';
 	import type { PageProps } from './$types';
 
@@ -22,6 +22,20 @@
 			await claimInvite(page.params.token!, { email, password });
 			await invalidateAll();
 			await goto('/', { replaceState: true }); // the front door sends them to their team
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function accept() {
+		error = '';
+		busy = true;
+		try {
+			await acceptInvite(page.params.token!);
+			await invalidateAll();
+			await goto('/', { replaceState: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -49,6 +63,15 @@
 				Welcome, {franchise.manager_name}. Choose the email and password you will sign in with.
 			{/if}
 		</p>
+		{#if data.me && !data.me.id && !data.invite.reset}
+			{#if data.me.verified}
+				<p>Claim this franchise with your signed-in account ({data.me.email}).</p>
+				<button class="primary" disabled={busy} onclick={accept}>Claim franchise</button>
+			{:else}
+				<p>Verify your email before claiming this franchise.</p>
+			{/if}
+			{#if error}<p role="alert">{error}</p>{/if}
+		{:else}
 		<form class="stack" onsubmit={submit}>
 			<label class="field">Email <input type="email" autocomplete="username" bind:value={email} required /></label>
 			<label class="field">
@@ -58,6 +81,7 @@
 			{#if error}<p role="alert">{error}</p>{/if}
 			<button class="primary" disabled={busy}>{data.invite.reset ? 'Save and sign in' : 'Create my account'}</button>
 		</form>
+		{/if}
 	{:else}
 		<h1>That link did not work</h1>
 		<p role="alert">{data.problem}</p>

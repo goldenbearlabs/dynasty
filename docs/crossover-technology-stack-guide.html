@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crossover Dynasty — Technology Stack Guide</title>
+  <style>
+    @page { size: Letter; margin: 0.65in; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #17221c;
+      font: 10.5pt/1.48 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: white;
+    }
+    h1, h2, h3 { color: #102f22; page-break-after: avoid; }
+    h1 { margin: 0 0 12px; font-size: 34pt; line-height: 1.05; letter-spacing: -1.2px; }
+    h2 { margin: 26px 0 10px; padding-bottom: 5px; border-bottom: 2px solid #c8ddcf; font-size: 18pt; }
+    h3 { margin: 17px 0 5px; font-size: 12.5pt; }
+    p { margin: 5px 0 10px; }
+    ul, ol { margin: 6px 0 12px 20px; padding: 0; }
+    li { margin: 3px 0; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { color: #174a35; font-size: 9.5pt; }
+    pre {
+      margin: 10px 0 14px;
+      padding: 12px 14px;
+      border: 1px solid #c8ddcf;
+      border-radius: 7px;
+      background: #f4f8f5;
+      color: #163628;
+      font-size: 8.7pt;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; page-break-inside: avoid; }
+    th, td { padding: 7px 9px; border: 1px solid #bfd2c5; vertical-align: top; text-align: left; }
+    th { background: #e8f1eb; color: #143d2c; }
+    .cover {
+      height: 8.65in;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      page-break-after: always;
+      border-top: 12px solid #287a55;
+    }
+    .eyebrow { color: #287a55; font-size: 10pt; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; }
+    .subtitle { max-width: 520px; color: #486057; font-size: 16pt; line-height: 1.35; }
+    .meta { margin-top: 42px; color: #6a7d74; font-size: 9.5pt; }
+    .summary {
+      margin: 14px 0;
+      padding: 14px 16px;
+      border-left: 5px solid #287a55;
+      background: #edf5f0;
+      page-break-inside: avoid;
+    }
+    .flow {
+      margin: 14px 0 18px;
+      padding: 16px;
+      border: 1px solid #a9c4b3;
+      border-radius: 8px;
+      background: #f8fbf9;
+      text-align: center;
+      font-weight: 650;
+      line-height: 1.8;
+      page-break-inside: avoid;
+    }
+    .muted { color: #66786f; }
+    .page-break { page-break-before: always; }
+    .keep { page-break-inside: avoid; }
+    footer { margin-top: 30px; padding-top: 8px; border-top: 1px solid #c8d7ce; color: #718078; font-size: 8.5pt; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="eyebrow">Beginner's architecture guide</div>
+    <h1>Crossover Dynasty<br>Technology Stack</h1>
+    <p class="subtitle">How the website, Go API, database, live sports data, and a future Flutter mobile app fit together.</p>
+    <p class="meta">Prepared October 14, 2026 &nbsp;•&nbsp; Repository: <code>mosaicfantasy/dynasty</code></p>
+  </section>
+
+  <h2>1. The big picture</h2>
+  <div class="summary"><strong>The central idea:</strong> Crossover Dynasty has one backend that owns the data and fantasy rules. The website is one client of that backend. A Flutter application can become a second client without replacing the backend.</div>
+  <div class="flow">
+    Svelte website &nbsp;────┐<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── HTTPS, JSON and WebSockets ── Go backend<br>
+    Flutter mobile app ──┘&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── PostgreSQL<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── Redis<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── Sports providers
+  </div>
+  <p>The website and mobile app should never connect directly to PostgreSQL. They ask the Go backend for information or request a change. The backend checks permissions and league rules before reading or changing data.</p>
+
+  <h2>2. The current website: SvelteKit</h2>
+  <p>The browser interface is built with:</p>
+  <ul>
+    <li><strong>Svelte 5</strong> for user-interface components.</li>
+    <li><strong>SvelteKit</strong> for pages and browser routing.</li>
+    <li><strong>TypeScript</strong> for data types and client logic.</li>
+    <li><strong>Vite</strong> for the local development server and production build.</li>
+  </ul>
+  <p>Pages live under <code>frontend/src/routes/</code>. A folder generally corresponds to a URL:</p>
+  <pre>frontend/src/routes/
+  players/       → /players
+  league/        → /league
+  draft/[id]/    → /draft/{id}
+  player/[id]/   → /player/{id}</pre>
+  <p>The frontend presents data and collects input. Important fantasy rules do not belong in the browser; they are enforced by the backend.</p>
+
+  <h2>3. What an API is</h2>
+  <p>An API is the agreed-upon language between a client and the server. Each request has an HTTP method, a path, and sometimes a JSON body.</p>
+  <pre>GET    /api/players
+GET    /api/standings
+POST   /api/auth/login
+PUT    /api/leagues/{id}/lineup
+POST   /api/drafts/{id}/pick</pre>
+  <p>The server normally answers with JSON. A player might look conceptually like this:</p>
+  <pre>{
+  "id": "player-id",
+  "full_name": "Connor McDavid",
+  "positions": ["C"]
+}</pre>
+
+  <h3>The frontend side of the API</h3>
+  <p><code>frontend/src/lib/api.ts</code> contains the website's TypeScript models and functions such as <code>getPlayers</code>, <code>getStandings</code>, <code>setLineup</code>, and <code>makePick</code>. This keeps individual pages from constructing network requests themselves.</p>
+
+  <h3>The backend side of the API</h3>
+  <p><code>backend/internal/web/server.go</code> maps methods and paths to Go handlers. Handlers in <code>backend/internal/web/</code> perform five small jobs:</p>
+  <ol>
+    <li>Read the URL and JSON request.</li>
+    <li>Check authentication and permissions.</li>
+    <li>Validate the request's basic shape.</li>
+    <li>Call the appropriate domain service.</li>
+    <li>Return JSON or a readable error.</li>
+  </ol>
+  <p>Handlers stay thin; most fantasy logic lives in domain packages.</p>
+
+  <div class="page-break"></div>
+  <h2>4. The Go backend</h2>
+  <p>The backend begins in <code>backend/main.go</code>. It connects the database, services, data providers, scheduled jobs, caching, websocket hub, and HTTP server.</p>
+  <table>
+    <thead><tr><th>Package</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td><code>auth/</code></td><td>Accounts, passwords and sessions</td></tr>
+      <tr><td><code>dynasty/</code></td><td>Dynasty, leagues and franchises</td></tr>
+      <tr><td><code>roster/</code></td><td>Adding, dropping and moving players</td></tr>
+      <tr><td><code>lineup/</code></td><td>Lineup rules and locking</td></tr>
+      <tr><td><code>draft/</code></td><td>Drafts, queues, picks and clocks</td></tr>
+      <tr><td><code>trade/</code></td><td>Trade validation and execution</td></tr>
+      <tr><td><code>waiver/</code></td><td>Waiver claims and processing</td></tr>
+      <tr><td><code>scoring/</code></td><td>Standings, matchups, playoffs and titles</td></tr>
+      <tr><td><code>players/</code></td><td>Player profiles, research and analytics</td></tr>
+      <tr><td><code>ingest/</code></td><td>External sports-data imports</td></tr>
+      <tr><td><code>competition/</code></td><td>Sport definitions and default rules</td></tr>
+      <tr><td><code>web/</code></td><td>HTTP API handlers and embedded website</td></tr>
+    </tbody>
+  </table>
+  <p>This division is important for mobile development. Flutter should not duplicate roster, scoring, waiver, or draft rules. It asks the server to perform an action, and the server decides whether that action is valid.</p>
+
+  <h2>5. PostgreSQL, migrations and SQL queries</h2>
+  <p><strong>PostgreSQL</strong> is the permanent source of truth. It stores users, franchises, players, teams, rosters, lineups, drafts, trades, waivers, games, statistics, seasons, matchups, settings and transaction history.</p>
+  <p>Database structure changes are recorded as ordered SQL files under <code>backend/migrations/</code>. The backend applies outstanding migrations automatically when it starts.</p>
+  <h3>sqlc</h3>
+  <p>Hand-written queries live under <code>backend/queries/</code>. The <code>sqlc</code> tool converts those queries into type-safe Go functions under <code>backend/internal/db/</code>.</p>
+  <div class="flow">API handler → domain service → generated database function → PostgreSQL</div>
+  <p>Generated <code>internal/db/*.sql.go</code> files should not normally be edited directly. Change the query and run <code>make gen</code>.</p>
+
+  <h2>6. League rules and supported sports</h2>
+  <p>Commissioner-configurable rules—including roster sizes, lineup slots, scoring, formats, waivers, drafts and trades—are defined and validated in <code>backend/internal/settings/settings.go</code>.</p>
+  <p>Sport-specific positions, statistics, default settings and data sources live in <code>backend/internal/competition/</code>. Most of the application works with general competition keys such as <code>nba</code>, <code>nhl</code> and <code>mlb</code>.</p>
+
+  <h2>7. External sports data</h2>
+  <p>Adapters under <code>backend/internal/ingest/</code> import real-world data from ESPN, MLB and NHL sources. They provide teams, players, prospects, injuries, schedules, results, game statistics and historical seasons.</p>
+  <p>Scheduled jobs run inside the Go server. Neither Svelte nor Flutter should call sports providers directly. This keeps provider-specific behavior and rate limiting in one place.</p>
+
+  <div class="page-break"></div>
+  <h2>8. Live updates and websockets</h2>
+  <p>A normal HTTP request returns once:</p>
+  <div class="flow">Flutter → “Give me today's scores” → Go → JSON response</div>
+  <p>A websocket remains open and allows the server to push changes:</p>
+  <div class="flow">Flutter opens connection → Go sends current draft → picks and clock changes arrive live</div>
+  <p>The project uses websockets for draft rooms, live scoreboards and individual games. Flutter can connect to these existing endpoints. While the app is in the background, mobile push notifications would eventually be needed for alerts such as “you are on the clock.”</p>
+
+  <h2>9. Authentication and security</h2>
+  <p>The website signs in with email and password. The server creates a signed JWT session and places it in a secure, HTTP-only cookie. Protected endpoints identify the manager through that session; commissioner endpoints add a permission check.</p>
+  <p>A Flutter app can initially use the same cookie. A stronger long-term mobile design would let the normal manager login return a bearer token, store it in the device's secure keychain, and attach it to API and websocket requests.</p>
+  <div class="summary"><strong>Never place these in the mobile app:</strong> database credentials, the JWT signing key, the commissioner <code>ADMIN_TOKEN</code>, or private provider credentials. Those belong on the server.</div>
+
+  <h2>10. Redis caching</h2>
+  <p>Redis is an optional, disposable cache. It speeds up expensive reads—especially research results—but PostgreSQL remains authoritative. If Redis is cleared, league data is not lost. Clients never communicate with Redis directly.</p>
+
+  <h2>11. Production deployment</h2>
+  <div class="flow">Internet → Caddy (HTTPS) → Go application → PostgreSQL + Redis</div>
+  <p>Caddy provides HTTPS and forwards requests to Go. The Svelte site is compiled into static files and embedded inside the Go binary, so one application serves both the website and its API.</p>
+  <p>A Flutter app would be distributed separately through the Apple App Store and Google Play, then connect to the same deployment:</p>
+  <pre>https://your-domain.com/api/players
+https://your-domain.com/api/standings
+wss://your-domain.com/api/drafts/{id}/ws</pre>
+
+  <h2>12. Where Flutter fits</h2>
+  <p>Flutter would replace neither Go nor the website. It would add one shared Dart client that builds native iOS and Android applications.</p>
+  <table>
+    <thead><tr><th>Flutter owns</th><th>Go backend owns</th></tr></thead>
+    <tbody>
+      <tr><td>Screens, navigation and mobile interaction</td><td>Authentication and authorization</td></tr>
+      <tr><td>Local presentation state</td><td>Fantasy rules and validation</td></tr>
+      <tr><td>Calling HTTP and websocket endpoints</td><td>Database reads and writes</td></tr>
+      <tr><td>Securely retaining a manager session</td><td>Sports imports and scheduled jobs</td></tr>
+      <tr><td>Push-notification registration</td><td>Deciding when notifications should be sent</td></tr>
+    </tbody>
+  </table>
+  <p>The Dart client will need models corresponding to the API's JSON. Because the current contract lives mostly in a large TypeScript file, introducing an OpenAPI specification before two clients grow independently would reduce model drift.</p>
+
+  <div class="page-break"></div>
+  <h2>13. Example: saving a lineup</h2>
+  <ol>
+    <li>A manager changes their lineup in Flutter.</li>
+    <li>Flutter sends <code>PUT /api/leagues/{id}/lineup</code> with JSON.</li>
+    <li>The Go handler confirms the manager is signed in.</li>
+    <li>The lineup service checks ownership, positions and locking rules.</li>
+    <li>A database transaction saves the valid lineup.</li>
+    <li>Go returns a success response.</li>
+    <li>Flutter updates the screen.</li>
+  </ol>
+  <div class="summary"><strong>The boundary to remember:</strong> Flutter is responsible for the mobile experience. Go remains responsible for truth, permissions, and fantasy rules. This keeps the website, iOS app and Android app consistent.</div>
+
+  <h2>14. A sensible mobile starting scope</h2>
+  <p>A first Flutter release does not need to reproduce every screen. A manageable first version could include:</p>
+  <ol>
+    <li>Sign-in and session restoration.</li>
+    <li>My team, roster and player profiles.</li>
+    <li>Lineup management.</li>
+    <li>Standings, matchups and scores.</li>
+    <li>Live draft room.</li>
+  </ol>
+  <p>Advanced research, custom charts and commissioner administration can remain on the website until the shared mobile foundation is stable.</p>
+
+  <h2>15. Useful repository landmarks</h2>
+  <table>
+    <thead><tr><th>Path</th><th>What to find there</th></tr></thead>
+    <tbody>
+      <tr><td><code>README.md</code></td><td>Setup, features and deployment overview</td></tr>
+      <tr><td><code>backend/main.go</code></td><td>Application wiring and background jobs</td></tr>
+      <tr><td><code>backend/internal/web/server.go</code></td><td>API route map</td></tr>
+      <tr><td><code>backend/internal/settings/settings.go</code></td><td>League settings and validation</td></tr>
+      <tr><td><code>backend/internal/competition/</code></td><td>Sport definitions and defaults</td></tr>
+      <tr><td><code>backend/queries/</code></td><td>Hand-written SQL queries</td></tr>
+      <tr><td><code>backend/migrations/</code></td><td>Database schema history</td></tr>
+      <tr><td><code>frontend/src/lib/api.ts</code></td><td>Current client types and API functions</td></tr>
+      <tr><td><code>frontend/src/routes/</code></td><td>Website pages</td></tr>
+    </tbody>
+  </table>
+  <footer>Crossover Dynasty technology-stack guide • Generated from the repository architecture and current implementation.</footer>
+</body>
+</html>

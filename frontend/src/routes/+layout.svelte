@@ -19,6 +19,8 @@
 
 	let { data, children }: LayoutProps = $props();
 	$effect(() => { const id = data.me?.id || ''; untrack(() => watchlist.setAccount(id)); });
+	const path = $derived(page.url.pathname);
+	const viewingNewLeague = $derived(path.startsWith('/leagues/') && page.params.id !== data.dynasty?.id);
 
 	type Link = { href: string; label: string; icon: IconName; count?: number };
 
@@ -30,25 +32,46 @@
 	);
 	// Every league has waivers of a kind: at the least, released draft picks spend a day on them.
 	const usesWaivers = $derived((data.dynasty?.leagues.length ?? 0) > 0);
-	const links = $derived<Link[]>([
-		...(data.me ? [{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' } as Link] : []),
+	const links = $derived.by((): Link[] => {
+		const accountLinks: Link[] = [{ href: '/leagues', label: 'My Leagues', icon: 'home' }];
+		if (!data.me?.id || viewingNewLeague) {
+			const sectionRoot = viewingNewLeague ? path : '/leagues';
+			return [...accountLinks,
+			{ href: `${sectionRoot}?section=team`, label: 'My team', icon: 'shield' },
+			{ href: `${sectionRoot}?section=league`, label: 'League', icon: 'home' },
+			{ href: `${sectionRoot}?section=matchups`, label: 'Matchups', icon: 'scores' },
+			{ href: `${sectionRoot}?section=players`, label: 'Players', icon: 'players' },
+			{ href: `${sectionRoot}?section=watchlist`, label: 'Watchlist', icon: 'star' },
+			{ href: `${sectionRoot}?section=research`, label: 'Research', icon: 'search' },
+			{ href: `${sectionRoot}?section=waivers`, label: 'Waivers', icon: 'clock' },
+			{ href: `${sectionRoot}?section=drafts`, label: 'Drafts', icon: 'draft' },
+			{ href: `${sectionRoot}?section=trades`, label: 'Trades', icon: 'trade' },
+			{ href: `${sectionRoot}?section=rules`, label: 'Rules', icon: 'info' }
+		];
+		}
+		return [...accountLinks,
+		{ href: `/franchise/${data.me.slug}`, label: 'My team', icon: 'shield' },
 		{ href: '/league', label: 'League', icon: 'home' },
 		{ href: '/matchups', label: 'Matchups', icon: 'scores' },
 		{ href: '/players', label: 'Players', icon: 'players' },
-		...(data.me ? [{ href: '/watchlist', label: 'Watchlist', icon: 'star' } as Link] : []),
+		{ href: '/watchlist', label: 'Watchlist', icon: 'star' },
 		{ href: '/research', label: 'Research', icon: 'search' },
 		...(usesWaivers ? [{ href: '/waivers', label: 'Waivers', icon: 'clock' } as Link] : []),
 		{ href: '/drafts', label: 'Drafts', icon: 'draft' },
 		{ href: '/trades', label: 'Trades', icon: 'trade', count: toAnswer },
 		{ href: '/info', label: 'Rules', icon: 'info' },
-		...(data.me?.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
-	]);
+		...(data.me.is_commissioner ? [{ href: '/commissioner', label: 'Commissioner', icon: 'settings' } as Link] : [])
+		];
+	});
 
-	const path = $derived(page.url.pathname);
-	const current = (href: string) => path === href || path.startsWith(href + '/');
+	const current = (href: string) => {
+		if (href === '/leagues' && path.startsWith('/leagues/')) return !page.url.search;
+		if (href.startsWith('/leagues')) return path + page.url.search === href;
+		return path === href || path.startsWith(href + '/');
+	};
 
 	// The landing page, the setup wizard and invite links stand alone.
-	const bare = $derived(!data.dynasty || path === '/' || path.startsWith('/join/'));
+	const bare = $derived(path === '/' || path === '/register' || path === '/verify' || path === '/reset-password' || path.startsWith('/join/') || path === '/setup');
 
 	// A draft in progress is the most time-sensitive thing in the league.
 	const liveDraft = $derived(data.drafts.find((d) => d.status === 'live' || d.status === 'paused'));
@@ -64,14 +87,14 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if bare || !data.dynasty}
+{#if bare}
 	<main class="bare">{@render children()}</main>
 {:else}
 	<div class="shell">
 		<aside class="rail">
-			<a class="brand" href="/league">
-				<span class="mark" aria-hidden="true">CD</span>
-				<span class="name">{data.dynasty.name}</span>
+			<a class="brand" href="/leagues">
+				<span class="mark" aria-hidden="true">MF</span>
+				<span class="name">{data.dynasty?.name ?? 'Mosaic Fantasy'}</span>
 			</a>
 
 			<nav aria-label="Main">
@@ -84,7 +107,7 @@
 				{/each}
 			</nav>
 
-			{#if data.me}
+			{#if data.me?.id}
 				<div class="me">
 					<Crest src={data.me.image_url} name={data.me.name} size={34} />
 					<div class="who">
@@ -93,16 +116,19 @@
 					</div>
 					<button class="quiet small" aria-label="Sign out" title="Sign out" onclick={leave}><Icon name="out" size={16} /></button>
 				</div>
-			{:else}
-				<p class="me"><a class="button primary" href="/">Sign in</a></p>
+			{:else if data.me}
+				<div class="me">
+					<div class="who"><strong>{data.me.email}</strong><span class="muted small-text">My account</span></div>
+					<button class="quiet small" aria-label="Sign out" title="Sign out" onclick={leave}><Icon name="out" size={16} /></button>
+				</div>
 			{/if}
 		</aside>
 
 		<div class="page">
-			{#if !path.startsWith('/draft/')}
+			{#if data.dynasty && !viewingNewLeague && !path.startsWith('/draft/')}
 				<LiveScores sports={data.dynasty.leagues.map((l) => l.competition)} rosters={data.myTeam?.rosters ?? []} signedIn={!!data.me} />
 			{/if}
-			{#if liveDraft && !path.startsWith('/draft/')}
+			{#if liveDraft && !viewingNewLeague && !path.startsWith('/draft/')}
 				<a class="live" href="/draft/{liveDraft.id}">
 					<span class="dot" aria-hidden="true"></span>
 					<strong>{liveDraft.name}</strong>

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"crossover/internal/ingest"
 	"crossover/internal/lineup"
 	"crossover/internal/live"
+	"crossover/internal/mail"
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
@@ -217,7 +219,26 @@ func run(log *slog.Logger) error {
 		Ping:           pool.Ping,
 		Background:     ctx,
 		AdminToken:     os.Getenv("ADMIN_TOKEN"),
+		PublicURL:      os.Getenv("PUBLIC_URL"),
 		SeasonBackfill: backfill,
+	}
+	if host, from := os.Getenv("SMTP_HOST"), os.Getenv("MAIL_FROM"); host != "" && from != "" && server.PublicURL != "" {
+		port, err := strconv.Atoi(env("SMTP_PORT", "587"))
+		if err != nil || port < 1 || port > 65535 {
+			return fmt.Errorf("SMTP_PORT must be a valid port")
+		}
+		sender := mail.SMTP{Host: host, Port: port, Username: os.Getenv("SMTP_USERNAME"), Password: os.Getenv("SMTP_PASSWORD"), From: from}
+		server.SendAccountEmail = sender.Send
+	}
+	if os.Getenv("DEV_LOG_EMAILS") == "1" {
+		origin, err := url.Parse(server.PublicURL)
+		if err != nil || (origin.Hostname() != "localhost" && origin.Hostname() != "127.0.0.1") {
+			return fmt.Errorf("DEV_LOG_EMAILS requires PUBLIC_URL on localhost")
+		}
+		server.SendAccountEmail = func(_ context.Context, to, subject, body string) error {
+			log.Info("development account email", "to", to, "subject", subject, "body", body)
+			return nil
+		}
 	}
 	httpServer := &http.Server{
 		Addr:              env("ADDR", ":8090"),
