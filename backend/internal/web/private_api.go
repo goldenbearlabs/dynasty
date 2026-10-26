@@ -30,6 +30,8 @@ func publicAPI(r *http.Request) bool {
 		return true
 	case "/api/accounts/password-reset", "/api/accounts/password-reset/confirm":
 		return true
+	case "/api/account/password", "/api/account/email-change", "/api/account/email-change/confirm", "/api/account/deletion-options", "/api/account":
+		return true // each account handler authenticates a cookie or mobile bearer itself
 	case "/api/dynasty":
 		return r.Method == http.MethodPost // the handler allows this only on a fresh installation
 	default:
