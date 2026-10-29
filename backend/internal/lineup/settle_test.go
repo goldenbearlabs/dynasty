@@ -47,3 +47,22 @@ func TestSettleMissedPick(t *testing.T) {
 		}
 	}
 }
+
+// On auto nothing counts while he has a game to finish; then his last with a stat.
+func TestSettleAutoWaits(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	rules := settings.Lineup{Lock: settings.LockGameStart, Slots: []settings.Slot{{Name: "G", Count: 1, GamesPerWeek: 1}}}
+	monday := Game{Day: "2026-10-26", StartsAt: now.Add(-50 * time.Hour), Status: "final", Stats: json.RawMessage(`{"pts":30}`), Points: 30}
+	today := Game{Day: "2026-10-28", StartsAt: now.Add(-time.Hour), Status: "live", Stats: json.RawMessage(`{"pts":4}`), Points: 4}
+	p := Player{Slot: "G", CountsLast: true, Games: []Game{monday, today}}
+	settle(&p, rules, now, 1)
+	if p.Points != 0 || p.Games[0].Counts || p.Games[1].Counts || !p.Locked {
+		t.Fatalf("with a game in progress: %+v; want nothing counted and him locked", p)
+	}
+	today.Status = "final"
+	p = Player{Slot: "G", CountsLast: true, Games: []Game{monday, today}}
+	settle(&p, rules, now, 1)
+	if p.Points != 4 || p.Games[0].Counts || !p.Games[1].Counts {
+		t.Fatalf("played out: %+v; want his last game, 4 points", p)
+	}
+}

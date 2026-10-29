@@ -225,10 +225,11 @@
 		const from = choice || player.games.find((g) => !begun(g))?.day || '';
 		return player.games.filter((g) => g.day >= from).slice(0, n).includes(game);
 	}
-	// On auto, the game that will count if he plays in it: his last still to come.
+	// On auto, the game that will count if he plays in it: his last still to
+	// finish. Once all are finished, the one that counted is marked instead.
 	function projected(player: LineupPlayer, game: LineupGame): boolean {
-		if (limit(player) === 0 || picked[player.player_id] !== AUTO || begun(game)) return false;
-		const ahead = player.games.filter((g) => !begun(g) && g.day >= (slotOf(player.player_id) === player.slot ? player.counts_from : ''));
+		if (limit(player) === 0 || picked[player.player_id] !== AUTO || game.status === 'final') return false;
+		const ahead = player.games.filter((g) => g.status !== 'final' && g.day >= (slotOf(player.player_id) === player.slot ? player.counts_from : ''));
 		return ahead.at(-1) === game;
 	}
 	// Points from the games that count, as the lineup is now arranged.

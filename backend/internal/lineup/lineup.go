@@ -361,11 +361,14 @@ func settle(p *Player, rules settings.Lineup, now time.Time, mult int) {
 	limit := gamesCounted(rules, p.Slot) * mult
 	counted := 0
 	if limit > 0 && p.CountsLast {
-		// On auto, his last games of the week in which he recorded a stat.
+		// On auto, his last games of the week in which he recorded a stat,
+		// once he has none left to finish: until then a later one may yet
+		// take their place.
 		for i := range p.Games {
 			p.Games[i].Counts = false
 		}
-		for i := len(p.Games) - 1; i >= 0 && counted < limit; i-- {
+		ahead := slices.ContainsFunc(p.Games, func(g Game) bool { return g.Day >= p.CountsFrom && g.Status != "final" })
+		for i := len(p.Games) - 1; i >= 0 && counted < limit && !ahead; i-- {
 			if g := &p.Games[i]; g.Day >= p.CountsFrom && recorded(g.Stats) {
 				g.Counts = true
 				counted++
@@ -749,7 +752,15 @@ func Held(ctx context.Context, q *db.Queries, league db.League, franchiseID, pla
 	if p.Slot == "" || gamesCounted(settings.Lineup{Slots: view.Slots}, p.Slot) == 0 {
 		return nil
 	}
-	if slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && !g.StartsAt.After(now) }) {
+	// On auto nothing counts until the week is played out, so any game of
+	// his that has begun and was not missed may be the one.
+	mayCount := func(g Game) bool {
+		if p.CountsLast {
+			return g.Day >= p.CountsFrom && !(g.Status == "final" && !recorded(g.Stats))
+		}
+		return g.Counts
+	}
+	if slices.ContainsFunc(p.Games, func(g Game) bool { return mayCount(g) && !g.StartsAt.After(now) }) {
 		return problem.New("%s has played in his game that counts this week, so he stays in your lineup until the week is over.", p.FullName)
 	}
 	return nil

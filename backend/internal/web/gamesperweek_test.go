@@ -342,20 +342,23 @@ func TestAutoLastGame(t *testing.T) {
 		t.Fatalf("total = %v, want 0: yesterday's 30 came before he was started", got)
 	}
 
-	// --- the last game with a stat counts; one he sat out gives way ----------
+	// --- the last game with a stat counts, once he has none left to play; ---
+	// --- one he sat out gives way -------------------------------------------
 	// Each game is played out today, in order, so the standings count it.
 	finish := func(gameID string, hoursAgo int) {
 		sql(`update games set status = 'final', day = $2, starts_at = now() - make_interval(hours => $3) where provider_id = $1`, gameID, today, hoursAgo)
 	}
 	finish("za-y1", 6)
 	line("za-y1", "Zqauto Forward", `{"pts": 12}`)
-	if p := lineup()["Zqauto Forward"]; !p.Locked || p.Points != 12 {
-		t.Fatalf("after his first game: %+v; want locked with 12 points", p)
+	if got, p := total(), lineup()["Zqauto Forward"]; !p.Locked || p.Points != 0 || got != 0 {
+		t.Fatalf("after his first game: %+v, total %v; want locked with nothing counted while games are to come", p, got)
 	}
+	// He has played, so he stays until the week is over.
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/leagues/"+league+"/roster/drop", map[string]any{"player_id": id["Zqauto Forward"]}, nil)
 	finish("za-y2", 4)
 	line("za-y2", "Zqauto Forward", `{"pts": 0, "reb": 0}`) // sat out
-	if got := total(); math.Abs(got-12) > 0.001 {
-		t.Fatalf("total = %v after a game he sat out, want still 12", got)
+	if got := total(); got != 0 {
+		t.Fatalf("total = %v after a game he sat out, want still 0 with a game to come", got)
 	}
 	finish("za-y3", 2)
 	line("za-y3", "Zqauto Forward", `{"pts": 5, "reb": 2}`)

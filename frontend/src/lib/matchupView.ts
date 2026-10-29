@@ -45,20 +45,21 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 		const raw = (player?.games ?? []).filter(g => inRange(g.day));
 		const matches = (g: LineupGame, line: ScoredGame) => g.game_id ? g.game_id === line.game_id :
 			g.day === line.day && new Date(g.starts_at).getTime() === new Date(line.starts_at).getTime();
-		// On auto, the game expected to count is his last still to come.
+		// On auto, the game expected to count is his last still to finish. Once
+		// all are finished the server marks the one that counted instead.
 		const benched = !!player && !player.slot;
-		const autoGame = !benched && player?.counts_last ? raw.filter(g => g.status === 'scheduled').at(-1) : undefined;
+		const autoGame = !benched && player?.counts_last
+			? raw.filter(g => g.status !== 'final' && g.day >= (player.counts_from || '')).at(-1) : undefined;
 		const games: MatchupGame[] = raw.map(g => {
 			const line = official.find(line => matches(g, line));
 			const capped = lineup?.starts?.made.some(s => s.player_id === id && s.day === g.day && !s.counts);
-			const hasStats = Object.keys(g.stats ?? {}).length > 0;
 			const selected = g.counts && !capped;
 			return {
 				...g, opponent: `${g.at_home ? 'vs' : '@'} ${g.opponent}`, counted: !!line,
 				points: line?.points ?? (benched ? g.points : 0), gameId: line?.game_id ?? g.game_id,
 				projected: g.status === 'scheduled' && !benched && !capped && (g.counts || g === autoGame) ? g.projected : 0,
 				expected: g.expected ?? 0,
-				label: line ? 'Counted' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : player?.counts_last && !hasStats && g.status !== 'final'
+				label: line ? 'Counted' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : g === autoGame
 					? 'Auto candidate' : selected ? (g.status === 'scheduled' ? 'Selected' : 'Selected · Awaiting scored stats') : 'Not selected'
 			};
 		});

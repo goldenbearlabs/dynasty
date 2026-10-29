@@ -925,7 +925,8 @@ with days as (
                                          not (e.counts_from is null or g.day >= e.counts_from)
                                          and exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
                             order by g.starts_at desc, g.id desc) as nth_back,
-         -- Whether his team has a game still to finish on or after the picked day.
+         -- Whether his team has a game still to finish on or after the picked
+         -- day, or on auto the day he came into the slot.
          exists (select 1 from games fg
                  where fg.competition = l.competition and pl.pro_team_id in (fg.home_team_id, fg.away_team_id)
                    and fg.status <> 'final' and fg.day between greatest(dp.win, coalesce(e.counts_from, dp.win)) and dp.win_end) as games_ahead,
@@ -993,7 +994,7 @@ where st.day >= $5::date
         and st.nth <= st.games_per_week * st.mult)
     or (st.games_per_week > 0 and not st.counts_last and not st.ahead and st.recorded and st.stays and not st.games_ahead
         and st.nth_back <= st.games_per_week * st.mult - st.played_ahead)
-    or (st.games_per_week > 0 and st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+    or (st.games_per_week > 0 and st.counts_last and st.recorded and not st.games_ahead and st.nth_last <= st.games_per_week * st.mult))
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
@@ -1045,7 +1046,8 @@ type ListLineupPointsRow struct {
 // did record a stat in, as long as he is still in the slot at the end of the
 // week. Left on auto (counts_last), they are his last so many that week in
 // which he recorded a stat, so a game he sat out gives way to the one before
-// it. A league may also cap a team's
+// it; none count until he has no game left to finish, since until then a
+// later one may yet take their place. A league may also cap a team's
 // pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 // in the order they were played, score nothing. Weeks are counted from
 // week_start, the first day of the week from_day falls in, so a span that
