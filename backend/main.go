@@ -166,6 +166,36 @@ func run(log *slog.Logger) error {
 		return errors.Join(failures...)
 	}
 
+	// `crossover rescore nba 2026-10-19 [--apply]` adds up again the settled
+	// matchup periods of a sport's leagues ending on or after that day, after
+	// a change to how points are counted, and lists every score that
+	// changes. Without --apply nothing is written.
+	if len(os.Args) > 1 && os.Args[1] == "rescore" {
+		if len(os.Args) < 4 {
+			return errors.New("usage: crossover rescore <competition> <since YYYY-MM-DD> [--apply]")
+		}
+		since, err := sportsday.Parse(os.Args[3])
+		if err != nil {
+			return fmt.Errorf("since: %w", err)
+		}
+		apply := len(os.Args) > 4 && os.Args[4] == "--apply"
+		changed, err := scoring.NewService(pool).Rescore(ctx, os.Args[2], since, apply)
+		for _, c := range changed {
+			fmt.Printf("league %s, period %d (%s to %s): %s %.2f -> %.2f\n", c.League, c.Period,
+				c.StartsOn.Format(time.DateOnly), c.EndsOn.Format(time.DateOnly), c.Franchise, c.Before, c.After)
+		}
+		switch {
+		case err != nil:
+		case len(changed) == 0:
+			fmt.Println("No settled score changes.")
+		case !apply:
+			fmt.Println("Dry run: nothing written. Run again with --apply to store these scores.")
+		default:
+			fmt.Println("Stored.")
+		}
+		return err
+	}
+
 	rosters := roster.NewService(pool)
 	// A player who turns up in a new competition takes his fantasy rights
 	// with him, where the league's rules say so.

@@ -242,8 +242,10 @@ func (s *Syncer) PollLive(ctx context.Context, competition string, src GameSourc
 		if now.Status != was.Status || now.HomeScore != was.HomeScore || now.AwayScore != was.AwayScore || now.Detail != was.Detail {
 			update.Scoreboard = true
 		}
-		// A live game, or one that ended since the last poll, gets its box score.
-		if now.Status == GameLive || (now.Status == GameFinal && was.Status != GameFinal) {
+		// A live game, or one that ended in the last few minutes, gets its
+		// box score: the feed fills in goalie decisions, shutouts and late
+		// goals a little after the score goes final.
+		if now.Status == GameLive || now.Status == GameFinal {
 			if _, err := s.syncBoxScore(ctx, src, now); err != nil {
 				if ctx.Err() != nil {
 					return update, ctx.Err()

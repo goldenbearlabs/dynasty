@@ -10,6 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountPasswordReset struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash []byte             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountVerification struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	TokenHash  []byte             `json:"token_hash"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	VerifiedAt pgtype.Timestamptz `json:"verified_at"`
+}
+
 type CacheRevision struct {
 	Singleton           bool        `json:"singleton"`
 	Namespace           pgtype.UUID `json:"namespace"`
@@ -118,6 +132,7 @@ type Game struct {
 	HomeImplied   pgtype.Float8      `json:"home_implied"`
 	AwayImplied   pgtype.Float8      `json:"away_implied"`
 	HomeWin       pgtype.Float8      `json:"home_win"`
+	FinalAt       pgtype.Timestamptz `json:"final_at"`
 }
 
 type IngestRun struct {
@@ -148,6 +163,18 @@ type League struct {
 	LastDraftAt pgtype.Timestamptz `json:"last_draft_at"`
 }
 
+type LeagueWorkspace struct {
+	ID              pgtype.UUID        `json:"id"`
+	OwnerUserID     pgtype.UUID        `json:"owner_user_id"`
+	Name            string             `json:"name"`
+	FranchiseID     pgtype.UUID        `json:"franchise_id"`
+	FranchiseName   string             `json:"franchise_name"`
+	ManagerName     string             `json:"manager_name"`
+	DynastySettings json.RawMessage    `json:"dynasty_settings"`
+	LeaguesSnapshot json.RawMessage    `json:"leagues_snapshot"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type Lineup struct {
 	LeagueID    pgtype.UUID `json:"league_id"`
 	FranchiseID pgtype.UUID `json:"franchise_id"`
@@ -163,6 +190,7 @@ type LineupEntry struct {
 	PlayerID    pgtype.UUID `json:"player_id"`
 	CountsFrom  pgtype.Date `json:"counts_from"`
 	CountsLast  bool        `json:"counts_last"`
+	JoinedOn    pgtype.Date `json:"joined_on"`
 }
 
 type Matchup struct {
@@ -172,6 +200,13 @@ type Matchup struct {
 	AwayFranchiseID pgtype.UUID `json:"away_franchise_id"`
 	Bracket         string      `json:"bracket"`
 	BracketSlot     int32       `json:"bracket_slot"`
+}
+
+type MobileSession struct {
+	TokenHash []byte             `json:"token_hash"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 type Notification struct {

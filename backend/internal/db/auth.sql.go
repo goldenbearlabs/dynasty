@@ -54,6 +54,7 @@ where f.user_id = $1
   and f.dynasty_id = (select id from dynasties order by created_at, id limit 1)
 `
 
+// Legacy gameplay endpoints still use the original dynasty until tenant routing is complete.
 func (q *Queries) GetFranchiseByUser(ctx context.Context, userID pgtype.UUID) (Franchise, error) {
 	row := q.db.QueryRow(ctx, getFranchiseByUser, userID)
 	var i Franchise

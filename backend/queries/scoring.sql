@@ -6,10 +6,12 @@ select provider_id, id from pro_teams where competition = @competition;
 -- name: UpsertGame :exec
 -- An unchanged game is not written again: every write here starts a new
 -- cache generation.
-insert into games (competition, provider_id, day, starts_at, status, home_team_id, away_team_id, home_score, away_score, detail)
-values (@competition, @provider_id, @day, @starts_at, @status, @home_team_id, @away_team_id, @home_score, @away_score, @detail)
+insert into games (competition, provider_id, day, starts_at, status, home_team_id, away_team_id, home_score, away_score, detail, final_at)
+values (@competition, @provider_id, @day, @starts_at, @status, @home_team_id, @away_team_id, @home_score, @away_score, @detail,
+        case when @status = 'final' then now() end)
 on conflict (competition, provider_id) do update
   set day = excluded.day, starts_at = excluded.starts_at, status = excluded.status,
+      final_at = case when excluded.status = 'final' then coalesce(games.final_at, now()) end,
       home_team_id = excluded.home_team_id, away_team_id = excluded.away_team_id,
       home_score = excluded.home_score, away_score = excluded.away_score, detail = excluded.detail
   where (games.day, games.starts_at, games.status, games.detail, games.home_score, games.away_score)
@@ -18,11 +20,14 @@ on conflict (competition, provider_id) do update
      or games.away_team_id is distinct from excluded.away_team_id;
 
 -- name: ListGamesInPlay :many
--- Games that are live, or should have started: the ones worth polling.
+-- Games that are live, should have started, or ended in the last few
+-- minutes, while the feed is still filling in their box score: the ones
+-- worth polling.
 select * from games
 where competition = @competition
   and (status = 'live'
-       or (status = 'scheduled' and starts_at between now() - interval '8 hours' and now() + interval '2 minutes'))
+       or (status = 'scheduled' and starts_at between now() - interval '8 hours' and now() + interval '2 minutes')
+       or (status = 'final' and final_at > now() - interval '10 minutes'))
 order by starts_at;
 
 -- name: GetGame :one
@@ -30,13 +35,16 @@ select * from games where id = @id;
 
 -- name: ListGamesNeedingStats :many
 -- Games to fetch a box score for: every live game, every finished game not
--- yet fetched, and each finished game once more the next day, when stat
+-- yet fetched, each finished game again until an hour after it ended (a
+-- feed fills in goalie decisions, shutouts and late goals some minutes
+-- after the score goes final), and once more the next day, when stat
 -- corrections have been made.
 select * from games
 where competition = @competition
   and starts_at > now() - interval '4 days'
   and (status = 'live'
        or (status = 'final' and (stats_synced_at is null
+           or stats_synced_at < final_at + interval '1 hour'
            or (stats_synced_at < starts_at + interval '20 hours' and now() > starts_at + interval '20 hours'))))
 order by starts_at;
 
@@ -84,7 +92,7 @@ select max(effective_on)::date as effective_on from lineups
 where league_id = @league_id and franchise_id = @franchise_id and effective_on <= @day;
 
 -- name: ListLineupEntries :many
-select slot, slot_index, player_id, counts_from, counts_last from lineup_entries
+select slot, slot_index, player_id, counts_from, counts_last, joined_on from lineup_entries
 where league_id = @league_id and franchise_id = @franchise_id and effective_on = @effective_on
 order by slot, slot_index;
 
@@ -98,12 +106,12 @@ insert into lineups (league_id, franchise_id, effective_on) values (@league_id, 
 on conflict do nothing;
 
 -- name: InsertLineupEntry :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
-values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id, @counts_from, @counts_last);
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last, joined_on)
+values (@league_id, @franchise_id, @effective_on, @slot, @slot_index, @player_id, @counts_from, @counts_last, @joined_on);
 
 -- name: CopyLineupEntries :exec
-insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last)
-select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id, e.counts_from, e.counts_last
+insert into lineup_entries (league_id, franchise_id, effective_on, slot, slot_index, player_id, counts_from, counts_last, joined_on)
+select e.league_id, e.franchise_id, @to_day, e.slot, e.slot_index, e.player_id, e.counts_from, e.counts_last, e.joined_on
 from lineup_entries e
 where e.league_id = @league_id and e.franchise_id = @franchise_id and e.effective_on = @from_day;
 
@@ -166,9 +174,13 @@ order by p.full_name, p.id, g.starts_at;
 -- each day's stat lines for whoever was in the lineup in force that day,
 -- weighted by the league's scoring rules. A slot may count only some of a
 -- player's games each week (games_per_week): those are his first so many on
--- or after the day his manager picked, or, left on auto (counts_last), his
--- last so many that week in which he recorded a stat, so a game he sat out
--- gives way to the one before it. A league may also cap a team's
+-- or after the day his manager picked, passing over any he finished without
+-- recording a stat; if that leaves too few once he has no game left to play,
+-- his latest earlier ones since he came into the slot (joined_on) that he
+-- did record a stat in, as long as he is still in the slot at the end of the
+-- week. Left on auto (counts_last), they are his last so many that week in
+-- which he recorded a stat, so a game he sat out gives way to the one before
+-- it. A league may also cap a team's
 -- pitcher starts for the week (pitcher_starts_per_week): starts beyond it,
 -- in the order they were played, score nothing. Weeks are counted from
 -- week_start, the first day of the week from_day falls in, so a span that
@@ -192,10 +204,32 @@ with days as (
                    from jsonb_array_elements(l.settings->'lineup'->'slots') as def(rule)
                    where def.rule->>'name' = e.slot), 0) as games_per_week,
          case when dp.doubled then 2 else 1 end as mult,
-         row_number() over (partition by i.franchise_id, e.player_id,
-                                         dp.win
-                            order by g.starts_at, g.id) as nth,
          e.counts_last,
+         (e.counts_from is null or g.day >= e.counts_from) as ahead,
+         g.status = 'final' as finished,
+         -- A picked game and those after it, in order, passing over any he
+         -- finished without a stat.
+         row_number() over (partition by i.franchise_id, e.player_id, dp.win,
+                                         (e.counts_from is null or g.day >= e.counts_from)
+                                         and (g.status <> 'final' or exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0))
+                            order by g.starts_at, g.id) as nth,
+         count(*) filter (where (e.counts_from is null or g.day >= e.counts_from)
+                            and exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0))
+           over (partition by i.franchise_id, e.player_id, dp.win) as played_ahead,
+         -- Counting back from the picked game, among the earlier ones he recorded a stat in.
+         row_number() over (partition by i.franchise_id, e.player_id, dp.win,
+                                         not (e.counts_from is null or g.day >= e.counts_from)
+                                         and exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0)
+                            order by g.starts_at desc, g.id desc) as nth_back,
+         -- Whether his team has a game still to finish on or after the picked day.
+         exists (select 1 from games fg
+                 where fg.competition = l.competition and pl.pro_team_id in (fg.home_team_id, fg.away_team_id)
+                   and fg.status <> 'final' and fg.day between greatest(dp.win, coalesce(e.counts_from, dp.win)) and dp.win_end) as games_ahead,
+         -- Whether he is still in this slot at the end of the window.
+         exists (select 1 from lineup_entries x
+                 where x.league_id = @league_id and x.franchise_id = i.franchise_id and x.player_id = e.player_id and x.slot = e.slot
+                   and x.effective_on = (select max(n.effective_on) from lineups n
+                                         where n.league_id = @league_id and n.franchise_id = i.franchise_id and n.effective_on <= dp.win_end)) as stays,
          exists (select 1 from jsonb_each_text(sl.stats) v where v.value ~ '^-?[0-9.]+$' and v.value::numeric <> 0) as recorded,
          -- Counting back from his last game of the week, among those he recorded a stat in.
          row_number() over (partition by i.franchise_id, e.player_id,
@@ -207,7 +241,8 @@ with days as (
          -- he went more than an inning, so an opener does not use one up.
          (coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
           and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)) as is_start,
-         sum(case when coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
+         sum(case when (e.counts_from is null or g.day >= e.counts_from)
+                   and coalesce((sl.stats->>'pit_gs')::numeric, 0) >= 1
                    and (not ('RP' = any(pl.positions)) or coalesce((sl.stats->>'pit_ip')::numeric, 0) > 1)
                   then 1 else 0 end)
            over (partition by i.franchise_id, dp.win
@@ -223,10 +258,16 @@ with days as (
     select coalesce((select p.starts_on from periods p join seasons se on se.id = p.season_id
                      where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
                      limit 1), g.day - (g.day - i.week_start) % 7) as win,
+           coalesce((select p.ends_on from periods p join seasons se on se.id = p.season_id
+                     where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on
+                     limit 1), g.day - (g.day - i.week_start) % 7 + 6) as win_end,
            exists (select 1 from periods p join seasons se on se.id = p.season_id
                    where se.league_id = l.id and p.double_games and g.day between p.starts_on and p.ends_on) as doubled
   ) dp
-  where (e.counts_from is null or g.day >= e.counts_from)
+  -- Auto counts nothing from before counts_from; a picked game may fall back
+  -- to an earlier one, but none from before he came into the slot.
+  where (e.counts_from is null or g.day >= e.counts_from
+         or (not e.counts_last and (e.joined_on is null or g.day >= e.joined_on)))
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
       or coalesce(
@@ -243,9 +284,12 @@ with days as (
                join jsonb_each_text(st.settings->'scoring') r on r.key = s.key) as points
   from started st
 where st.day >= @from_day::date
-  and (st.games_per_week = 0
-    or (not st.counts_last and st.nth <= st.games_per_week * st.mult)
-    or (st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
+  and (st.games_per_week = 0 and st.ahead
+    or (st.games_per_week > 0 and not st.counts_last and st.ahead and (st.recorded or not st.finished)
+        and st.nth <= st.games_per_week * st.mult)
+    or (st.games_per_week > 0 and not st.counts_last and not st.ahead and st.recorded and st.stays and not st.games_ahead
+        and st.nth_back <= st.games_per_week * st.mult - st.played_ahead)
+    or (st.games_per_week > 0 and st.counts_last and st.recorded and st.nth_last <= st.games_per_week * st.mult))
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
@@ -429,3 +473,13 @@ limit 1;
 
 -- name: SetPeriodDoubleGames :exec
 update periods set double_games = @double_games where id = @id;
+
+-- name: ListLeaguesByCompetition :many
+select * from leagues where competition = @competition order by id;
+
+-- name: DeletePeriodScores :exec
+delete from period_scores where period_id = @period_id;
+
+-- name: BumpPublicCache :exec
+-- A new generation for the public response cache, after a write no trigger sees.
+update cache_revision set public = public + 1 where singleton;

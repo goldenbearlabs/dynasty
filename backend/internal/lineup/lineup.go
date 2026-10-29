@@ -99,6 +99,9 @@ type Player struct {
 	CountsFrom      string      `json:"counts_from"` // the day his counted games begin, when his slot counts only some
 	CountsLast      bool        `json:"counts_last"` // in such a slot, on auto: his last games with a stat count
 	Locked          bool        `json:"locked"`
+	// joined is the day he came into such a slot, before which none of his
+	// games can count; empty from the start of the week.
+	joined string
 	// Points over the day or week, whether he started or not. For a starter
 	// in a slot that counts only some games, only the games that count.
 	Points float64 `json:"points"`
@@ -254,6 +257,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 	starting := map[pgtype.UUID]string{}
 	countsFrom := map[pgtype.UUID]string{}
 	countsLast := map[pgtype.UUID]bool{}
+	joined := map[pgtype.UUID]string{}
 	inForce, err := q.LineupInForce(ctx, db.LineupInForceParams{LeagueID: league.ID, FranchiseID: franchiseID, Day: sportsday.Date(first)})
 	if err != nil {
 		return View{}, err
@@ -269,6 +273,9 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			if e.CountsFrom.Valid {
 				countsFrom[e.PlayerID] = e.CountsFrom.Time.Format(time.DateOnly)
 			}
+			if e.JoinedOn.Valid {
+				joined[e.PlayerID] = e.JoinedOn.Time.Format(time.DateOnly)
+			}
 		}
 	}
 
@@ -283,7 +290,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			view.Players = append(view.Players, Player{
 				PlayerID: r.PlayerID, FullName: r.FullName, Nickname: r.Nickname, Positions: r.Positions, HeadshotURL: r.HeadshotUrl,
 				StarterEligible: rules.CanStart(league.Competition, r.Conference),
-				TeamAbbrev:      r.TeamAbbrev, Injury: r.InjuryDesignation, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], CountsLast: countsLast[r.PlayerID], Games: []Game{},
+				TeamAbbrev:      r.TeamAbbrev, Injury: r.InjuryDesignation, Slot: starting[r.PlayerID], CountsFrom: countsFrom[r.PlayerID], CountsLast: countsLast[r.PlayerID], joined: joined[r.PlayerID], Games: []Game{},
 			})
 		}
 		if !r.GameID.Valid {
@@ -344,7 +351,8 @@ func gamesCounted(rules settings.Lineup, slot string) int {
 // whether he can still be moved. Under the game-start rule:
 //   - a starter whose every game counts locks when his first game begins;
 //   - a starter in a slot that counts only some games locks when the first
-//     game that counts begins, so an earlier game he sat out does not hold him;
+//     game that counts begins, so an earlier game he sat out does not hold him,
+//     and neither does a picked game he finished without a stat;
 //   - a bench player who could fill such a slot stays free while he has a
 //     game left to count.
 //
@@ -364,14 +372,31 @@ func settle(p *Player, rules settings.Lineup, now time.Time, mult int) {
 			}
 		}
 	}
-	for i := range p.Games {
-		g := &p.Games[i]
-		if limit > 0 && !p.CountsLast {
-			g.Counts = g.Day >= p.CountsFrom && counted < limit
-			if g.Counts {
+	if limit > 0 && !p.CountsLast {
+		// The game picked for him and those after it, passing over any he
+		// finished without a stat. With none of those left to play, his
+		// latest earlier games since he came into the slot stand in.
+		ahead := false
+		for i := range p.Games {
+			g := &p.Games[i]
+			g.Counts = false
+			if g.Day < p.CountsFrom || (g.Status == "final" && !recorded(g.Stats)) {
+				continue
+			}
+			ahead = ahead || g.Status != "final"
+			if counted < limit {
+				g.Counts = true
 				counted++
 			}
 		}
+		for i := len(p.Games) - 1; i >= 0 && counted < limit && !ahead; i-- {
+			if g := &p.Games[i]; g.Day < p.CountsFrom && g.Day >= p.joined && recorded(g.Stats) {
+				g.Counts = true
+				counted++
+			}
+		}
+	}
+	for _, g := range p.Games {
 		if g.Counts {
 			p.Points += g.Points
 		}
@@ -444,6 +469,22 @@ func pick(p Player, e Entry, first, last string, now time.Time, force bool) (str
 	return p.Games[i].Day, nil
 }
 
+// joinedOn is the day a starter came into a slot that counts only some
+// games: kept while he stays in it, or, coming in, the day of his next game
+// once one of his this week has begun. Empty is from the start of the week.
+func joinedOn(p Player, slot string, now time.Time) string {
+	if p.Slot == slot {
+		return p.joined
+	}
+	if !slices.ContainsFunc(p.Games, func(g Game) bool { return !g.StartsAt.After(now) }) {
+		return ""
+	}
+	if i := slices.IndexFunc(p.Games, func(g Game) bool { return g.StartsAt.After(now) }); i >= 0 {
+		return p.Games[i].Day
+	}
+	return ""
+}
+
 // Set replaces the lineup for a day (or the week containing it). Every
 // starter must be on the main roster and fit his slot, and a player who has
 // locked cannot be moved in or out. force is the commissioner's override of
@@ -465,6 +506,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		wanted := map[pgtype.UUID]string{}
 		filled := map[string]int{}
 		counts := map[pgtype.UUID]pgtype.Date{}
+		joined := map[pgtype.UUID]pgtype.Date{}
 		onAuto := map[pgtype.UUID]bool{}
 		now := time.Now()
 		for _, e := range entries {
@@ -500,6 +542,10 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 					from, _ := sportsday.Parse(day)
 					counts[e.PlayerID] = sportsday.Date(from)
 				}
+				if day := joinedOn(player, e.Slot, now); day != "" {
+					on, _ := sportsday.Parse(day)
+					joined[e.PlayerID] = sportsday.Date(on)
+				}
 			}
 		}
 		if !force {
@@ -525,7 +571,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		for _, e := range entries {
 			if err := q.InsertLineupEntry(ctx, db.InsertLineupEntryParams{
 				LeagueID: league.ID, FranchiseID: franchiseID, EffectiveOn: sportsday.Date(first),
-				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID, CountsFrom: counts[e.PlayerID], CountsLast: onAuto[e.PlayerID],
+				Slot: e.Slot, SlotIndex: index[e.Slot], PlayerID: e.PlayerID, CountsFrom: counts[e.PlayerID], CountsLast: onAuto[e.PlayerID], JoinedOn: joined[e.PlayerID],
 			}); err != nil {
 				return err
 			}
@@ -683,6 +729,30 @@ func Fits(positions []string, slot settings.Slot) bool {
 		return true
 	}
 	return slices.ContainsFunc(positions, func(p string) bool { return slices.Contains(slot.Positions, p) })
+}
+
+// Held refuses to let a starter leave a franchise's main roster, by a drop,
+// a trade or a move to reserve, once a game that counts for him this week
+// has begun in a slot that counts only some games. The slot is his until
+// the week is over, so it cannot be emptied and filled again with another
+// player's game.
+func Held(ctx context.Context, q *db.Queries, league db.League, franchiseID, playerID pgtype.UUID) error {
+	view, err := load(ctx, q, league, franchiseID, sportsday.Today())
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(view.Players, func(p Player) bool { return p.PlayerID == playerID })
+	if i < 0 {
+		return nil
+	}
+	p, now := view.Players[i], time.Now()
+	if p.Slot == "" || gamesCounted(settings.Lineup{Slots: view.Slots}, p.Slot) == 0 {
+		return nil
+	}
+	if slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && !g.StartsAt.After(now) }) {
+		return problem.New("%s has played in his game that counts this week, so he stays in your lineup until the week is over.", p.FullName)
+	}
+	return nil
 }
 
 // Bench takes a player out of a franchise's lineups from now on, in the

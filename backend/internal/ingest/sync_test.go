@@ -223,9 +223,18 @@ func TestSyncGames(t *testing.T) {
 		}
 	}
 
-	// A finished game is fetched once; a live one every time; a future one never.
-	if src.fetched["final"] != 1 || src.fetched["live"] != 2 || src.fetched["later"] != 0 {
-		t.Errorf("box score fetches = %v, want final 1, live 2, later 0", src.fetched)
+	// A live game is fetched every time, a future one never, and a finished
+	// one every time until an hour after it ended, while the feed fills in
+	// its last details.
+	if src.fetched["final"] != 2 || src.fetched["live"] != 2 || src.fetched["later"] != 0 {
+		t.Errorf("box score fetches = %v, want final 2, live 2, later 0", src.fetched)
+	}
+	pool.Exec(ctx, `update games set final_at = now() - interval '2 hours' where competition = $1 and provider_id = 'final'`, competition)
+	if err := syncer.SyncGames(ctx, competition, src, from, to); err != nil {
+		t.Fatal(err)
+	}
+	if src.fetched["final"] != 2 {
+		t.Errorf("finished game fetched %d times after its box score settled, want still 2", src.fetched["final"])
 	}
 
 	var games, withHome, lines int
@@ -393,11 +402,16 @@ func TestPollLive(t *testing.T) {
 		t.Errorf("mid-game with no change: %+v", update)
 	}
 
-	// The final whistle: one last box score, then the game is left alone.
+	// The final whistle: the box score is fetched for a few minutes more,
+	// while the feed fills in its last details, then the game is left alone.
 	src.games[0].Status, src.games[0].Detail = ingest.GameFinal, "Final"
 	if update := poll(); !update.Scoreboard || len(update.Games) != 1 || src.fetched["tonight"] != 3 {
 		t.Fatalf("at the end: %+v, box fetches %v", update, src.fetched)
 	}
+	if update := poll(); update.Scoreboard || len(update.Games) != 1 || src.fetched["tonight"] != 4 {
+		t.Fatalf("just after the end: %+v, box fetches %v", update, src.fetched)
+	}
+	pool.Exec(ctx, `update games set final_at = now() - interval '11 minutes' where competition = $1 and provider_id = 'tonight'`, competition)
 	before := src.scoreboards
 	if update := poll(); update.Scoreboard || len(update.Games) != 0 || src.scoreboards != before {
 		t.Errorf("after the end: %+v with %d more scoreboard requests; want no requests at all", update, src.scoreboards-before)

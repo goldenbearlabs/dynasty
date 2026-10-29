@@ -165,6 +165,9 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 		if i < 0 {
 			return nil, problem.New("That player is not on this roster.")
 		}
+		if err := held(ctx, q, c); err != nil {
+			return nil, err
+		}
 		if _, err := q.DeleteRosterEntry(ctx, db.DeleteRosterEntryParams{
 			LeagueID: c.League.ID, FranchiseID: c.Franchise.ID, PlayerID: c.PlayerID,
 		}); err != nil {
@@ -176,6 +179,15 @@ func DropIn(ctx context.Context, q *db.Queries, c Change) error {
 		}
 		return slices.Delete(roster, i, i+1), lineup.Bench(ctx, q, c.League.ID, c.Franchise.ID, c.PlayerID)
 	})
+}
+
+// held refuses to take a starter off the main roster while his counted
+// game this week stands; see lineup.Held. The commissioner is not held.
+func held(ctx context.Context, q *db.Queries, c Change) error {
+	if c.Source == Commissioner {
+		return nil
+	}
+	return lineup.Held(ctx, q, c.League, c.Franchise.ID, c.PlayerID)
 }
 
 // waive puts a released player on waivers for as long as the league's rule
@@ -324,6 +336,11 @@ func moveIn(ctx context.Context, q *db.Queries, c Change, checked bool) error {
 			return nil, problem.New("This player used an injury swap and must remain on reserve for the rest of the season.")
 		}
 		managed := c.Source != Commissioner
+		if c.List == settings.ListReserve && entry.List == settings.ListMain {
+			if err := held(ctx, q, c); err != nil {
+				return nil, err
+			}
+		}
 		if c.List != entry.List && entry.List != settings.ListRights {
 			if err := heldForSeason(ctx, q, c, rules); err != nil {
 				return nil, err

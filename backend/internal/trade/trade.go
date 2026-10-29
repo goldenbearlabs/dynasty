@@ -557,6 +557,15 @@ func execute(ctx context.Context, q *db.Queries, trade db.Trade, items []Item, r
 	for _, item := range items {
 		var err error
 		if item.PlayerID.Valid {
+			if !reversing {
+				league, err := q.GetLeague(ctx, item.LeagueID)
+				if err != nil {
+					return err
+				}
+				if err := lineup.Held(ctx, q, league, item.From, item.PlayerID); err != nil {
+					return err
+				}
+			}
 			// He stops starting for the franchise he is leaving.
 			if err := lineup.Bench(ctx, q, item.LeagueID, item.From, item.PlayerID); err != nil {
 				return err

@@ -21,6 +21,9 @@ func (s *Service) InjurySwap(ctx context.Context, c Change, replacement pgtype.U
 			if injured < 0 || called < 0 || c.PlayerID == replacement || entries[injured].List != settings.ListMain || entries[called].List != settings.ListReserve {
 				return nil, problem.New("Choose an injured player on your main roster and a replacement from your reserve list.")
 			}
+			if err := held(ctx, q, c); err != nil {
+				return nil, err
+			}
 			season, err := q.InjurySwapSeason(ctx, db.InjurySwapSeasonParams{LeagueID: c.League.ID, Day: sportsday.Date(sportsday.Today())})
 			if err != nil {
 				return nil, problem.New("An injury swap requires a season in progress.")
