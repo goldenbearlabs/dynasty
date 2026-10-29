@@ -474,7 +474,8 @@ func pick(p Player, e Entry, first, last string, now time.Time, force bool) (str
 
 // joinedOn is the day a starter came into a slot that counts only some
 // games: kept while he stays in it, or, coming in, the day of his next game
-// once one of his this week has begun. Empty is from the start of the week.
+// once one of his this week has begun. Empty is from the start of the week,
+// as it is for any pick the commissioner forces.
 func joinedOn(p Player, slot string, now time.Time) string {
 	if p.Slot == slot {
 		return p.joined
@@ -545,7 +546,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 					from, _ := sportsday.Parse(day)
 					counts[e.PlayerID] = sportsday.Date(from)
 				}
-				if day := joinedOn(player, e.Slot, now); day != "" {
+				if day := joinedOn(player, e.Slot, now); day != "" && !force {
 					on, _ := sportsday.Parse(day)
 					joined[e.PlayerID] = sportsday.Date(on)
 				}

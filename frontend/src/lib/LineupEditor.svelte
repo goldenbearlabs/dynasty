@@ -234,7 +234,8 @@
 	}
 	// Points from the games that count, as the lineup is now arranged.
 	const total = (player: LineupPlayer) => player.games.reduce((n, g) => n + (counts(player, g) ? g.points : 0), 0);
-	const pickable = (player: LineupPlayer, game: LineupGame) => limit(player) > 0 && !frozen(player) && !begun(game);
+	// With the override a commissioner may count any game of the week, even one already played.
+	const pickable = (player: LineupPlayer, game: LineupGame) => limit(player) > 0 && !frozen(player) && (!begun(game) || override);
 	const played = (game: LineupGame) => game.status !== 'scheduled';
 	// The games a row's stats come from: those played, and for a starter in a
 	// slot that counts only some, only the ones that count. A bench player in

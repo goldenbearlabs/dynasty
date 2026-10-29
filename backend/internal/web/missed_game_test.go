@@ -223,6 +223,17 @@ func TestPickedGameMissed(t *testing.T) {
 		t.Fatalf("second run = %+v, %v; want no changes", changed, err)
 	}
 
-	// The commissioner may still overrule it.
+	// --- the commissioner may count any game of the week, even one played ----
+	ann.want(http.StatusUnprocessableEntity, "PUT", lineupURL, map[string]any{"day": day(0), "entries": []map[string]string{
+		entry("G", "Zqmiss Guard", day(-2)), entry("UTIL", "Zqmiss Wing", ""),
+	}}, nil)
+	ann.want(http.StatusNoContent, "PUT", lineupURL, map[string]any{"day": day(0), "force": true, "entries": []map[string]string{
+		entry("G", "Zqmiss Guard", day(-2)), entry("UTIL", "Zqmiss Wing", ""),
+	}}, nil)
+	if got, p := total(), lineup()["Zqmiss Guard"]; math.Abs(got-35) > 0.001 || p.Points != 20 || p.CountsFrom != day(-2) {
+		t.Fatalf("total = %v, guard %+v; want his 20 from %s counted, 35 in all", got, p, day(-2))
+	}
+
+	// The commissioner may still overrule the hold.
 	ann.want(http.StatusNoContent, "POST", rosterURL+"drop", map[string]any{"player_id": id["Zqmiss Wing"], "force": true}, nil)
 }
