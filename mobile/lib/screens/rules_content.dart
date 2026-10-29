@@ -137,12 +137,12 @@ const generalRules = <RuleTopic>[
         detail: 'Weekly lineup and matchup periods use the same days; short opening or closing stretches join a neighboring week.',
       ),
       (
-        lead: 'Playoffs re-seed.',
-        detail: 'The best remaining seed plays the worst. Higher seeds may receive byes, and the better seed wins a tied playoff matchup.',
+        lead: 'Playoffs.',
+        detail: 'By default, the top eight qualify for a fixed bracket with no reseeding. The commissioner can change playoff size, seeding, and reseeding. The higher bracket seed wins a tied playoff matchup.',
       ),
       (
-        lead: 'Standings account for byes.',
-        detail: 'Head-to-head leagues rank by the share of matchups won, counting a tie as half a win, then by points.',
+        lead: 'Standings.',
+        detail: 'By default, head-to-head leagues rank by wins, then fewer losses. Tiebreakers are points for, head-to-head record among tied teams, then points against; these rules are customizable.',
       ),
       (
         lead: 'Commissioners can set matchups by hand.',

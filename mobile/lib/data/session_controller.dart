@@ -118,6 +118,11 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearLocalSession() async {
+    await _clear();
+    notifyListeners();
+  }
+
   Future<void> _accept(MobileAuth value) async {
     await store.write(value.token);
     token = value.token;

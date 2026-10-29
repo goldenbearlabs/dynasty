@@ -7,9 +7,12 @@ import 'data/api_client.dart';
 import 'data/models.dart';
 import 'data/session_controller.dart';
 import 'screens/auth_screen.dart';
+import 'screens/account_screen.dart';
 import 'screens/league_dashboard_screen.dart';
 import 'screens/leagues_screen.dart';
 import 'screens/players_screen.dart';
+import 'screens/profile_avatar.dart';
+import 'screens/rules_screen.dart';
 import 'screens/scores_screen.dart';
 import 'screens/teams_screen.dart';
 
@@ -130,12 +133,42 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     child: SafeArea(
       child: ListView(
         children: [
-          ListTile(
-            title: const Text(
-              'Mosaic Fantasy',
-              style: TextStyle(fontWeight: FontWeight.w800),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => navigate('account'),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 22, 18, 20),
+                child: Row(
+                  children: [
+                    ProfileAvatar(
+                      name:
+                          widget.session.session?.franchise?.name ??
+                          widget.session.session?.email ??
+                          'Mosaic Fantasy',
+                      imageUrl:
+                          widget.session.session?.franchise?.imageUrl ?? '',
+                      size: 54,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        widget.session.session?.franchise?.managerName
+                                    .trim()
+                                    .isNotEmpty ==
+                                true
+                            ? widget.session.session!.franchise!.managerName
+                            : widget.session.session?.email ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            subtitle: Text(widget.session.session?.email ?? ''),
           ),
           const Divider(),
           drawerEntry('Leagues', Icons.home_outlined, 'leagues'),
@@ -166,57 +199,32 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             Icons.scoreboard_outlined,
             selectedLeague == null ? null : 'scores',
           ),
-          drawerEntry('Rules', Icons.menu_book_outlined, null),
+          drawerEntry('Rules', Icons.menu_book_outlined, 'rules'),
           if (selectedLeague != null &&
               widget.session.session?.franchise?.isCommissioner == true)
             drawerEntry('Commissioner', Icons.settings_outlined, null),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.account_circle_outlined),
-            title: const Text('Account'),
-            onTap: () {
-              Navigator.of(context).pop();
-              showModalBottomSheet<void>(
-                context: context,
-                builder: (sheetContext) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Account',
-                          style: Theme.of(sheetContext).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(widget.session.session?.email ?? ''),
-                        Text(
-                          widget.session.session?.verified == false
-                              ? 'Email not verified'
-                              : 'Email verified',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign out'),
-            onTap: () {
-              Navigator.of(context).pop();
-              signOut();
-            },
-          ),
         ],
       ),
     ),
   );
 
   Widget currentScreen() {
+    if (section == 'account') {
+      return AccountScreen(
+        key: ValueKey('account-${selectedLeague?.id ?? 'none'}'),
+        api: widget.api,
+        session: widget.session,
+        selectedLeague: selectedLeague,
+        onSignOut: signOut,
+      );
+    }
+    if (section == 'rules') {
+      return RulesScreen(
+        key: ValueKey('rules-${selectedLeague?.id ?? 'none'}'),
+        api: widget.api,
+        selectedLeague: selectedLeague,
+      );
+    }
     if (section == 'leagues' ||
         selectedLeague == null ||
         selectedDynasty == null) {
@@ -269,26 +277,30 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return AuthScreen(session: widget.session);
     }
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          section == 'leagues'
-              ? 'Mosaic Fantasy'
-              : section == 'league'
-              ? selectedLeague?.name ?? 'League'
-              : section[0].toUpperCase() + section.substring(1),
-        ),
-        actions: [
-          if (selectedLeague != null && section != 'leagues')
-            IconButton(
-              tooltip: 'Choose league',
-              icon: const Icon(Icons.swap_horiz),
-              onPressed: () => setState(() => section = 'leagues'),
+      appBar: section == 'leagues'
+          ? null
+          : AppBar(
+              title: Text(
+                section == 'league'
+                    ? selectedLeague?.name ?? 'League'
+                    : section[0].toUpperCase() + section.substring(1),
+              ),
+              actions: [
+                if (selectedLeague != null)
+                  IconButton(
+                    tooltip: 'Choose league',
+                    icon: const Icon(Icons.swap_horiz),
+                    onPressed: () => setState(() => section = 'leagues'),
+                  ),
+              ],
             ),
-        ],
-      ),
       drawer: appDrawer(),
       body: SafeArea(child: currentScreen()),
-      bottomNavigationBar: selectedLeague == null || section == 'leagues'
+      bottomNavigationBar:
+          selectedLeague == null ||
+              section == 'leagues' ||
+              section == 'account' ||
+              section == 'rules'
           ? null
           : SafeArea(
               top: false,

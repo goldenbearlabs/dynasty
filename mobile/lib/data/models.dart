@@ -39,15 +39,18 @@ class TeamIdentity {
     required this.franchiseId,
     required this.leagueId,
     required this.name,
+    this.imageUrl = '',
   });
   final String franchiseId;
   final String leagueId;
   final String name;
+  final String imageUrl;
 
   factory TeamIdentity.fromJson(Json json) => TeamIdentity(
     franchiseId: json['franchise_id'] as String? ?? '',
     leagueId: json['league_id'] as String? ?? '',
     name: json['name'] as String? ?? '',
+    imageUrl: json['image_url'] as String? ?? '',
   );
 }
 
@@ -263,12 +266,14 @@ class Franchise {
     required this.slug,
     this.id = '',
     this.isCommissioner = false,
+    this.imageUrl = '',
   });
   final String id;
   final String name;
   final String managerName;
   final String slug;
   final bool isCommissioner;
+  final String imageUrl;
 
   factory Franchise.fromJson(Json json) => Franchise(
     id: json['id'] as String? ?? '',
@@ -276,6 +281,7 @@ class Franchise {
     managerName: json['manager_name'] as String? ?? '',
     slug: json['slug'] as String? ?? '',
     isCommissioner: json['is_commissioner'] as bool? ?? false,
+    imageUrl: json['image_url'] as String? ?? '',
   );
 }
 

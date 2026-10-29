@@ -1,0 +1,5 @@
+# Keeps generated Xcode build and user-specific state out of the new app project.
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/

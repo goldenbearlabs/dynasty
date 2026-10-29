@@ -28,7 +28,7 @@ class ApiClient {
     String method,
     String path, {
     Map<String, String>? query,
-    Map<String, String>? body,
+    Map<String, dynamic>? body,
     String? token,
   }) async {
     final uri = baseUri.resolve(path).replace(queryParameters: query);
@@ -70,6 +70,8 @@ class ApiClient {
       asJson(await request('GET', path, query: query));
 
   Future<Dynasty> dynasty() async => Dynasty.fromJson(await get('api/dynasty'));
+  Future<List<Json>> competitions() async =>
+      readList(await request('GET', 'api/competitions'), (json) => json);
   Future<List<MyLeague>> myLeagues() async =>
       readList(await request('GET', 'api/my-leagues'), MyLeague.fromJson);
   Future<List<StandingsTable>> standings() async =>
@@ -172,5 +174,70 @@ class ApiClient {
 
   Future<void> mobileLogout(String token) async {
     await request('POST', 'api/mobile/auth/logout', token: token);
+  }
+
+  Future<void> changePassword(String current, String next) async {
+    await request(
+      'POST',
+      'api/account/password',
+      body: {'current_password': current, 'new_password': next},
+    );
+  }
+
+  Future<void> beginEmailChange(String current, String email) async {
+    await request(
+      'POST',
+      'api/account/email-change',
+      body: {'current_password': current, 'new_email': email},
+    );
+  }
+
+  Future<void> confirmEmailChange(String code) async {
+    await request(
+      'POST',
+      'api/account/email-change/confirm',
+      body: {'code': code},
+    );
+  }
+
+  Future<List<Json>> deletionOptions() async => readList(
+    await request('GET', 'api/account/deletion-options'),
+    (json) => json,
+  );
+
+  Future<void> deleteAccount(
+    String password,
+    Map<String, String> transfers,
+  ) async {
+    await request(
+      'DELETE',
+      'api/account',
+      body: {'password': password, 'commissioner_transfers': transfers},
+    );
+  }
+
+  Future<void> setFranchiseIdentity(
+    String franchiseId,
+    String name,
+    String imageUrl,
+  ) async {
+    await request(
+      'PUT',
+      'api/franchises/${Uri.encodeComponent(franchiseId)}/identity',
+      body: {'name': name, 'image_url': imageUrl},
+    );
+  }
+
+  Future<void> setTeamIdentity(
+    String franchiseId,
+    String leagueId,
+    String name,
+    String imageUrl,
+  ) async {
+    await request(
+      'PUT',
+      'api/franchises/${Uri.encodeComponent(franchiseId)}/leagues/${Uri.encodeComponent(leagueId)}/identity',
+      body: {'name': name, 'image_url': imageUrl},
+    );
   }
 }

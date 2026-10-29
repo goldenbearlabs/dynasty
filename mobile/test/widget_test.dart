@@ -119,7 +119,7 @@ void main() {
     await session.signIn('ada@example.com', 'password');
     await tester.pumpWidget(MosaicApp(api: privateApi, session: session));
     await tester.pumpAndSettle();
-    expect(find.text('Choose a league'), findsOneWidget);
+    expect(find.text('Leagues'), findsOneWidget);
     expect(find.text('Ice League'), findsOneWidget);
     await tester.tap(find.text('Ice League'));
     await tester.pumpAndSettle();
