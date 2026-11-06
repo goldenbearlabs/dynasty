@@ -95,6 +95,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// A game that starts while the batch is computing must not receive a
+	// newly published forecast claiming it was available before tipoff.
+	now = time.Now().UTC()
 	hash := modelHash
 	snapshot := nbalive.Snapshot{Version: nbalive.Version, GeneratedAt: now, HistoryThrough: historyThrough, ModelSHA256: hex.EncodeToString(hash[:]), Records: map[string]nbalive.Record{}}
 	// Preserve pre-tip forecasts for games that have started. Never replace them
