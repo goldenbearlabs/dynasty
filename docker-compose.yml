@@ -31,7 +31,7 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       FETCH_VIA: ${FETCH_VIA:-}
       SCHEDULE_DAYS: ${SCHEDULE_DAYS:-365} # full schedules; active fantasy seasons can extend this
-      NBA_PROJECTIONS_PATH: ${NBA_PROJECTIONS_PATH:-/nba/live-projections.json}
+      NBA_PROJECTIONS_PATH: ${NBA_PROJECTIONS_PATH-/nba/live-projections.json}
       TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
     volumes:
       - ./data/nba:/nba:ro
