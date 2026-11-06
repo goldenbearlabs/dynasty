@@ -1067,6 +1067,8 @@ export const getMatchup = (id: string) => request<MatchupDetail>('GET', `/matchu
 export const setMatchups = (periodId: string, matchups: MatchupPairing[]) =>
 	request<void>('PUT', `/admin/periods/${periodId}/matchups`, { matchups });
 export const resetMatchups = (periodId: string) => request<void>('DELETE', `/admin/periods/${periodId}/matchups`);
+/** Carries the round robin on from a period's matchups through the rest of the regular season; returns the round they matched. */
+export const continuePattern = (periodId: string) => request<{ round: number }>('POST', `/admin/periods/${periodId}/continue`);
 export const setSchedule = (seasonId: string, periods: CustomPeriod[]) => request<void>('PUT', `/admin/seasons/${seasonId}/schedule`, { periods });
 export const generateSchedule = (seasonId: string) => request<void>('POST', `/admin/seasons/${seasonId}/schedule`);
 export const advancePlayoffs = () => request<void>('POST', '/admin/playoffs/advance');

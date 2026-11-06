@@ -31,6 +31,8 @@ type CacheRevision struct {
 	Public              int64       `json:"public"`
 	ResearchTransaction int64       `json:"research_transaction"`
 	PublicTransaction   int64       `json:"public_transaction"`
+	Live                int64       `json:"live"`
+	LiveTransaction     int64       `json:"live_transaction"`
 }
 
 type CustomSchedule struct {
@@ -361,6 +363,7 @@ type Season struct {
 	Status              string             `json:"status"`
 	ChampionFranchiseID pgtype.UUID        `json:"champion_franchise_id"`
 	RosterDeadline      pgtype.Timestamptz `json:"roster_deadline"`
+	RotationOffset      int32              `json:"rotation_offset"`
 }
 
 type SeasonRoster struct {
@@ -372,6 +375,12 @@ type SeasonRoster struct {
 type Secret struct {
 	Name  string `json:"name"`
 	Value []byte `json:"value"`
+}
+
+type SettledWeek struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	StartsOn pgtype.Date `json:"starts_on"`
+	EndsOn   pgtype.Date `json:"ends_on"`
 }
 
 type StatLine struct {
@@ -493,4 +502,13 @@ type WatchlistEntry struct {
 	Category    string             `json:"category"`
 	Notes       string             `json:"notes"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type WeekScore struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	StartsOn    pgtype.Date `json:"starts_on"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Games       int32       `json:"games"`
+	Points      float64     `json:"points"`
 }

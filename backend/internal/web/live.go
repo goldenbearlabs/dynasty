@@ -205,6 +205,22 @@ func (s *Server) setMatchups(w http.ResponseWriter, r *http.Request) {
 	s.done(w, r, s.Scoring.SetMatchups(r.Context(), id, body.Matchups))
 }
 
+// continuePattern carries the round robin on from a period's matchups
+// through the rest of the regular season; see scoring.ContinuePattern.
+func (s *Server) continuePattern(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	found, err := s.Scoring.ContinuePattern(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"round": found})
+}
+
 // resetMatchups hands a period's matchups back to the schedule.
 func (s *Server) resetMatchups(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")

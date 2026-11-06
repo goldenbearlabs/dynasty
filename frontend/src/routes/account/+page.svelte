@@ -9,7 +9,7 @@
 	let notice = $state('');
 	let busy = $state(false);
 	const sectionNames: Record<string, string> = {
-		team: 'My team', league: 'League', matchups: 'Matchups', players: 'Players',
+		team: 'My team', league: 'League', matchups: 'Matchups', players: 'Leaders',
 		watchlist: 'Watchlist', research: 'Research', waivers: 'Waivers',
 		drafts: 'Drafts', trades: 'Trades', rules: 'Rules'
 	};

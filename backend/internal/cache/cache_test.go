@@ -185,17 +185,21 @@ func TestDatabaseGenerationsFollowCommittedChanges(t *testing.T) {
 	if read(Research) != initialResearch {
 		t.Fatal("rollback changed generation")
 	}
-	if _, err := pool.Exec(ctx, "update games set status=status where false"); err != nil {
-		t.Fatal(err)
+	initialLive := read(Live)
+	for _, live := range []string{"update games set status=status where false", "update stat_lines set stats=stats where false"} {
+		if _, err := pool.Exec(ctx, live); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if read(Research) != initialResearch || read(Public) == initialPublic {
-		t.Fatal("live changes must invalidate public only")
+	if read(Research) != initialResearch || read(Public) != initialPublic || read(Live) == initialLive {
+		t.Fatal("live games must invalidate live reads only")
 	}
+	afterGames := read(Live)
 	if _, err := pool.Exec(ctx, "update leagues set settings=settings where false"); err != nil {
 		t.Fatal(err)
 	}
-	if read(Research) == initialResearch {
-		t.Fatal("league rule changes did not invalidate research")
+	if read(Research) == initialResearch || read(Public) == initialPublic || read(Live) == afterGames {
+		t.Fatal("league rule changes must invalidate every scope")
 	}
 	// Multiple statements in an import transaction only bump each scope once.
 	var before int64

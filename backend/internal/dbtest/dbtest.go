@@ -21,7 +21,12 @@ func Open(t *testing.T) *pgxpool.Pool {
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set; run `make test`")
 	}
-	pool, err := pgxpool.New(context.Background(), url)
+	config, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["plan_cache_mode"] = "force_custom_plan" // as the server runs; see main.go
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)
 	}

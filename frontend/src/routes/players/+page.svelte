@@ -1,8 +1,9 @@
 <script lang="ts">
 	import Icon from '#lib/ui/Icon.svelte';
 	import { dropPlayer } from '#lib/dropPlayer.ts';
-	// The player pool. Signed-in managers can add free agents from here; a
-	// commissioner can also place a player on any roster.
+	// Leaders: every player, best first, in one sport or across them all.
+	// Signed-in managers can add free agents from here; a commissioner can
+	// also place a player on any roster.
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { snapshot, invalidateAll } from '$app/navigation';
@@ -100,12 +101,12 @@
 	});
 </script>
 
-<svelte:head><title>Players</title></svelte:head>
+<svelte:head><title>Leaders</title></svelte:head>
 
 <div class="stack">
 	<header class="stack tight">
-		<h1>Players</h1>
-		<p class="muted small-text">Season stats, fantasy value, and roster moves in one place.</p>
+		<h1>Leaders</h1>
+		<p class="muted small-text">Every player, best first by fantasy points this season, with roster moves in one place.</p>
 		<Tabs {tabs} bind:value={competition} label="Sport" />
 	</header>
 

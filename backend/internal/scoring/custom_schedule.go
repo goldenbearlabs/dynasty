@@ -142,7 +142,7 @@ func (s *Service) SetSchedule(ctx context.Context, id pgtype.UUID, input []Custo
 					return err
 				}
 			} else if !p.IsPlayoff {
-				pairs = rotation[int(seq-1)%len(rotation)]
+				pairs = round(rotation, seq, season.RotationOffset)
 			}
 			if p.Matchups != nil {
 				if err := pairCustom(ctx, q, period, p.Matchups, pairs); err != nil {

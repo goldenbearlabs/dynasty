@@ -383,7 +383,7 @@
 <svelte:head><title>{profile?.player.full_name ?? 'Player profile'}</title></svelte:head>
 <div class="profile">
 	<nav class="profile-nav">
-		<a href={origin?.from || '/players'} onclick={goBack}>← {origin?.label || 'Players'}</a>
+		<a href={origin?.from || '/players'} onclick={goBack}>← {origin?.label || 'Leaders'}</a>
 		<details class="find-player">
 			<summary>Find another player</summary><PlayerSearch competitions={data.competitions} />
 		</details>

@@ -193,13 +193,18 @@ with days as (
   select d::date as day, w.week_start
   from (select @week_start::date as week_start) w
   cross join generate_series(w.week_start, @to_day::date, interval '1 day') d
+), lineup_spans as (
+  -- Each lineup and the day the next one takes over from it.
+  select n.franchise_id, n.effective_on,
+         lead(n.effective_on) over (partition by n.franchise_id order by n.effective_on) as replaced_on
+  from lineups n
+  where n.league_id = @league_id and n.effective_on <= @to_day::date
 ), in_force as (
-  select f.id as franchise_id, d.day, d.week_start,
-         (select max(n.effective_on) from lineups n
-          where n.league_id = @league_id and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
-  from franchises f
-  cross join days d
-  where f.dynasty_id = (select dynasty_id from leagues where id = @league_id)
+  -- The lineup in force each day: found by its span, not looked up day by
+  -- day, so the planner knows how few rows it is joining.
+  select s.franchise_id, d.day, d.week_start, s.effective_on
+  from lineup_spans s
+  join days d on d.day >= s.effective_on and (s.replaced_on is null or d.day < s.replaced_on)
 ), started as (
   select i.franchise_id, e.player_id, e.slot, g.id as game_id, g.day, sl.stats, l.settings,
          coalesce((select (def.rule->>'games_per_week')::int
@@ -269,7 +274,8 @@ with days as (
   ) dp
   -- Auto counts nothing from before counts_from; a picked game may fall back
   -- to an earlier one, but none from before he came into the slot.
-  where (e.counts_from is null or g.day >= e.counts_from
+  where g.day between @week_start::date and @to_day::date -- the span's games, found first by their days
+    and (e.counts_from is null or g.day >= e.counts_from
          or (not e.counts_last and (e.joined_on is null or g.day >= e.joined_on)))
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -486,3 +492,34 @@ delete from period_scores where period_id = @period_id;
 -- name: BumpPublicCache :exec
 -- A new generation for the public response cache, after a write no trigger sees.
 update cache_revision set public = public + 1 where singleton;
+
+-- ---- settled weeks ----
+
+-- name: ListSettledWeeks :many
+-- The weeks of a span already added up and stored for a league.
+select starts_on, ends_on from settled_weeks
+where league_id = @league_id and starts_on between @from_day and @to_day;
+
+-- name: ListWeekScores :many
+-- What each starter scored in a league's stored weeks over a span.
+select ws.starts_on, ws.franchise_id, ws.player_id, ws.games, ws.points,
+       p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname
+from week_scores ws
+join players p on p.id = ws.player_id
+left join player_nicknames n on n.franchise_id = ws.franchise_id and n.player_id = ws.player_id
+where ws.league_id = @league_id and ws.starts_on between @from_day and @to_day;
+
+-- name: LockWeek :exec
+-- Held while a week is settled, and taken by whatever would unsettle it.
+select pg_advisory_xact_lock(hashtextextended((@league_id::uuid)::text || (@starts_on::date)::text, 0));
+
+-- name: InsertSettledWeek :execrows
+insert into settled_weeks (league_id, starts_on, ends_on) values (@league_id, @starts_on, @ends_on)
+on conflict do nothing;
+
+-- name: InsertWeekScore :exec
+insert into week_scores (league_id, starts_on, franchise_id, player_id, games, points)
+values (@league_id, @starts_on, @franchise_id, @player_id, @games, @points);
+
+-- name: SetRotationOffset :exec
+update seasons set rotation_offset = @rotation_offset where id = @id;

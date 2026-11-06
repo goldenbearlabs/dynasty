@@ -80,7 +80,7 @@ func (q *Queries) HasInjuryReserveLock(ctx context.Context, arg HasInjuryReserve
 }
 
 const injurySwapSeason = `-- name: InjurySwapSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where league_id = $1 and status = 'active'
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset from seasons where league_id = $1 and status = 'active'
  and $2::date between starts_on and ends_on
 `
 
@@ -101,6 +101,7 @@ func (q *Queries) InjurySwapSeason(ctx context.Context, arg InjurySwapSeasonPara
 		&i.Status,
 		&i.ChampionFranchiseID,
 		&i.RosterDeadline,
+		&i.RotationOffset,
 	)
 	return i, err
 }
@@ -463,7 +464,7 @@ func (q *Queries) MarkSeasonRosterSet(ctx context.Context, arg MarkSeasonRosterS
 }
 
 const openSeason = `-- name: OpenSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset from seasons
 where league_id = $1 and status = 'active' and ends_on >= $2::date
 order by starts_on
 limit 1
@@ -488,6 +489,7 @@ func (q *Queries) OpenSeason(ctx context.Context, arg OpenSeasonParams) (Season,
 		&i.Status,
 		&i.ChampionFranchiseID,
 		&i.RosterDeadline,
+		&i.RotationOffset,
 	)
 	return i, err
 }

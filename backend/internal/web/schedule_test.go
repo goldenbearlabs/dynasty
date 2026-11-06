@@ -295,3 +295,121 @@ func TestCommissionerSetsMatchups(t *testing.T) {
 	}
 
 }
+
+// TestContinuePattern covers the commissioner lining the week under way up
+// with another round of the round robin, then carrying the pattern on: the
+// later weeks play the rounds after it, in order, and a rebuild keeps them.
+func TestContinuePattern(t *testing.T) {
+	pool := dbtest.Open(t)
+	dbtest.Reset(t, pool)
+	t.Cleanup(func() { dbtest.Reset(t, pool) })
+
+	server, registry := startServer(t, pool)
+	ann := newBrowser(t, server.URL)
+	nba, _ := registry.Get("nba")
+	ann.want(http.StatusCreated, "POST", "/api/dynasty", dynasty.Setup{
+		Name: "Pattern Test", Settings: dynastySettings(10),
+		Leagues: []dynasty.LeagueSetup{{Competition: "nba", Settings: nba.Defaults}},
+		Franchises: []dynasty.FranchiseSetup{
+			{Name: "Ann", ManagerName: "Ann"}, {Name: "Bob", ManagerName: "Bob"}, {Name: "Cy", ManagerName: "Cy"}, {Name: "Di", ManagerName: "Di"},
+		},
+		Account: dynasty.Account{Email: "ann@example.com", Password: "correct horse"},
+	}, nil)
+	var view struct{ Leagues []struct{ ID string } }
+	ann.want(http.StatusOK, "GET", "/api/dynasty", nil, &view)
+	league := view.Leagues[0].ID
+
+	// The season opened two days ago, so its first week is under way.
+	today := sportsday.Today()
+	day := func(offset int) string { return today.AddDate(0, 0, offset).Format(time.DateOnly) }
+	var season struct{ ID string }
+	ann.want(http.StatusCreated, "POST", "/api/admin/seasons", map[string]any{
+		"league_id": league, "year": today.Year(), "starts_on": day(-2), "ends_on": day(-2 + 76),
+	}, &season)
+
+	type pairing struct {
+		Home string  `json:"home_franchise_id"`
+		Away *string `json:"away_franchise_id"`
+	}
+	type period struct {
+		ID        string    `json:"id"`
+		Seq       int       `json:"seq"`
+		IsPlayoff bool      `json:"is_playoff"`
+		ByHand    bool      `json:"by_hand"`
+		Matchups  []pairing `json:"matchups"`
+	}
+	schedule := func() []period {
+		t.Helper()
+		var s []period
+		ann.want(http.StatusOK, "GET", "/api/leagues/"+league+"/schedule", nil, &s)
+		return s
+	}
+	// Who plays whom in a period, whoever is at home.
+	round := func(p period) map[string]bool {
+		set := map[string]bool{}
+		for _, m := range p.Matchups {
+			a, b := m.Home, *m.Away
+			if a > b {
+				a, b = b, a
+			}
+			set[a+"/"+b] = true
+		}
+		return set
+	}
+	same := func(a, b map[string]bool) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for k := range a {
+			if !b[k] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Four teams play three rounds over and over.
+	built := schedule()
+	if len(built) < 5 || !same(round(built[0]), round(built[3])) {
+		t.Fatalf("schedule = %+v, want at least five weeks repeating every three", built)
+	}
+	week1, week2, week3 := round(built[0]), round(built[1]), round(built[2])
+
+	// Week one, under way, is set to play what week two would have.
+	continueURL := "/api/admin/periods/" + built[0].ID + "/continue"
+	ann.want(http.StatusNoContent, "PUT", "/api/admin/periods/"+built[0].ID+"/matchups", map[string]any{"matchups": built[1].Matchups}, nil)
+	var found struct{ Round int }
+	ann.want(http.StatusOK, "POST", continueURL, nil, &found)
+	if found.Round != 2 {
+		t.Errorf("continued from round %d, want 2", found.Round)
+	}
+	check := func(label string) {
+		t.Helper()
+		after := schedule()
+		if !after[0].ByHand || !same(round(after[0]), week2) {
+			t.Errorf("%s: week 1 = %+v, want week 2's matchups kept as set", label, after[0])
+		}
+		for i, want := range []map[string]bool{week3, week1, week2, week3} {
+			p := after[i+1]
+			if p.IsPlayoff {
+				break
+			}
+			if p.ByHand || !same(round(p), want) {
+				t.Errorf("%s: week %d = %+v, want the next round of the pattern", label, p.Seq, p.Matchups)
+			}
+		}
+	}
+	check("carried on")
+
+	// Rebuilding the schedule keeps the pattern.
+	ann.want(http.StatusNoContent, "PUT", "/api/admin/seasons/"+season.ID, map[string]any{"starts_on": day(-2), "ends_on": day(-2 + 90)}, nil)
+	check("after a rebuild")
+
+	// Matchups that are no round of the round robin have no pattern to carry on.
+	ids := []string{built[0].Matchups[0].Home, *built[0].Matchups[0].Away, built[0].Matchups[1].Home, *built[0].Matchups[1].Away}
+	ann.want(http.StatusNoContent, "PUT", "/api/admin/periods/"+built[0].ID+"/matchups", map[string]any{"matchups": []pairing{{ids[0], &ids[1]}}}, nil)
+	ann.want(http.StatusUnprocessableEntity, "POST", continueURL, nil, nil)
+	// Nor does a playoff round.
+	last := schedule()
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/admin/periods/"+last[len(last)-1].ID+"/continue", nil, nil)
+}

@@ -64,7 +64,7 @@ const createSeason = `-- name: CreateSeason :one
 
 insert into seasons (league_id, year, starts_on, ends_on)
 values ($1, $2, $3, $4)
-returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline
+returning id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset
 `
 
 type CreateSeasonParams struct {
@@ -92,6 +92,7 @@ func (q *Queries) CreateSeason(ctx context.Context, arg CreateSeasonParams) (Sea
 		&i.Status,
 		&i.ChampionFranchiseID,
 		&i.RosterDeadline,
+		&i.RotationOffset,
 	)
 	return i, err
 }
@@ -328,7 +329,7 @@ func (q *Queries) GetPeriod(ctx context.Context, id pgtype.UUID) (Period, error)
 }
 
 const getSeason = `-- name: GetSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where id = $1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset from seasons where id = $1
 `
 
 func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error) {
@@ -343,6 +344,7 @@ func (q *Queries) GetSeason(ctx context.Context, id pgtype.UUID) (Season, error)
 		&i.Status,
 		&i.ChampionFranchiseID,
 		&i.RosterDeadline,
+		&i.RotationOffset,
 	)
 	return i, err
 }
@@ -487,6 +489,51 @@ func (q *Queries) InsertPeriodScore(ctx context.Context, arg InsertPeriodScorePa
 	return err
 }
 
+const insertSettledWeek = `-- name: InsertSettledWeek :execrows
+insert into settled_weeks (league_id, starts_on, ends_on) values ($1, $2, $3)
+on conflict do nothing
+`
+
+type InsertSettledWeekParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	StartsOn pgtype.Date `json:"starts_on"`
+	EndsOn   pgtype.Date `json:"ends_on"`
+}
+
+func (q *Queries) InsertSettledWeek(ctx context.Context, arg InsertSettledWeekParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSettledWeek, arg.LeagueID, arg.StartsOn, arg.EndsOn)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertWeekScore = `-- name: InsertWeekScore :exec
+insert into week_scores (league_id, starts_on, franchise_id, player_id, games, points)
+values ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertWeekScoreParams struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	StartsOn    pgtype.Date `json:"starts_on"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Games       int32       `json:"games"`
+	Points      float64     `json:"points"`
+}
+
+func (q *Queries) InsertWeekScore(ctx context.Context, arg InsertWeekScoreParams) error {
+	_, err := q.db.Exec(ctx, insertWeekScore,
+		arg.LeagueID,
+		arg.StartsOn,
+		arg.FranchiseID,
+		arg.PlayerID,
+		arg.Games,
+		arg.Points,
+	)
+	return err
+}
+
 const lastScheduledDay = `-- name: LastScheduledDay :one
 select max(day)::date from games where competition = $1
 `
@@ -500,7 +547,7 @@ func (q *Queries) LastScheduledDay(ctx context.Context, competition string) (pgt
 }
 
 const latestSeason = `-- name: LatestSeason :one
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where league_id = $1 order by year desc limit 1
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset from seasons where league_id = $1 order by year desc limit 1
 `
 
 func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Season, error) {
@@ -515,6 +562,7 @@ func (q *Queries) LatestSeason(ctx context.Context, leagueID pgtype.UUID) (Seaso
 		&i.Status,
 		&i.ChampionFranchiseID,
 		&i.RosterDeadline,
+		&i.RotationOffset,
 	)
 	return i, err
 }
@@ -541,7 +589,7 @@ func (q *Queries) LineupInForce(ctx context.Context, arg LineupInForceParams) (p
 }
 
 const listActiveSeasons = `-- name: ListActiveSeasons :many
-select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline from seasons where status = 'active'
+select id, league_id, year, starts_on, ends_on, status, champion_franchise_id, roster_deadline, rotation_offset from seasons where status = 'active'
 `
 
 func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
@@ -562,6 +610,7 @@ func (q *Queries) ListActiveSeasons(ctx context.Context) ([]Season, error) {
 			&i.Status,
 			&i.ChampionFranchiseID,
 			&i.RosterDeadline,
+			&i.RotationOffset,
 		); err != nil {
 			return nil, err
 		}
@@ -895,13 +944,18 @@ with days as (
   select d::date as day, w.week_start
   from (select $2::date as week_start) w
   cross join generate_series(w.week_start, $3::date, interval '1 day') d
+), lineup_spans as (
+  -- Each lineup and the day the next one takes over from it.
+  select n.franchise_id, n.effective_on,
+         lead(n.effective_on) over (partition by n.franchise_id order by n.effective_on) as replaced_on
+  from lineups n
+  where n.league_id = $4 and n.effective_on <= $3::date
 ), in_force as (
-  select f.id as franchise_id, d.day, d.week_start,
-         (select max(n.effective_on) from lineups n
-          where n.league_id = $4 and n.franchise_id = f.id and n.effective_on <= d.day) as effective_on
-  from franchises f
-  cross join days d
-  where f.dynasty_id = (select dynasty_id from leagues where id = $4)
+  -- The lineup in force each day: found by its span, not looked up day by
+  -- day, so the planner knows how few rows it is joining.
+  select s.franchise_id, d.day, d.week_start, s.effective_on
+  from lineup_spans s
+  join days d on d.day >= s.effective_on and (s.replaced_on is null or d.day < s.replaced_on)
 ), started as (
   select i.franchise_id, e.player_id, e.slot, g.id as game_id, g.day, sl.stats, l.settings,
          coalesce((select (def.rule->>'games_per_week')::int
@@ -971,7 +1025,8 @@ with days as (
   ) dp
   -- Auto counts nothing from before counts_from; a picked game may fall back
   -- to an earlier one, but none from before he came into the slot.
-  where (e.counts_from is null or g.day >= e.counts_from
+  where g.day between $2::date and $3::date -- the span's games, found first by their days
+    and (e.counts_from is null or g.day >= e.counts_from
          or (not e.counts_last and (e.joined_on is null or g.day >= e.joined_on)))
     and (l.competition <> 'cbb'
       or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
@@ -1351,7 +1406,7 @@ func (q *Queries) ListSeasonMatchups(ctx context.Context, seasonID pgtype.UUID) 
 }
 
 const listSeasons = `-- name: ListSeasons :many
-select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id, s.roster_deadline from seasons s
+select s.id, s.league_id, s.year, s.starts_on, s.ends_on, s.status, s.champion_franchise_id, s.roster_deadline, s.rotation_offset from seasons s
 join leagues l on l.id = s.league_id
 where l.dynasty_id = $1
 order by s.year desc
@@ -1375,7 +1430,47 @@ func (q *Queries) ListSeasons(ctx context.Context, dynastyID pgtype.UUID) ([]Sea
 			&i.Status,
 			&i.ChampionFranchiseID,
 			&i.RosterDeadline,
+			&i.RotationOffset,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSettledWeeks = `-- name: ListSettledWeeks :many
+
+select starts_on, ends_on from settled_weeks
+where league_id = $1 and starts_on between $2 and $3
+`
+
+type ListSettledWeeksParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	FromDay  pgtype.Date `json:"from_day"`
+	ToDay    pgtype.Date `json:"to_day"`
+}
+
+type ListSettledWeeksRow struct {
+	StartsOn pgtype.Date `json:"starts_on"`
+	EndsOn   pgtype.Date `json:"ends_on"`
+}
+
+// ---- settled weeks ----
+// The weeks of a span already added up and stored for a league.
+func (q *Queries) ListSettledWeeks(ctx context.Context, arg ListSettledWeeksParams) ([]ListSettledWeeksRow, error) {
+	rows, err := q.db.Query(ctx, listSettledWeeks, arg.LeagueID, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSettledWeeksRow{}
+	for rows.Next() {
+		var i ListSettledWeeksRow
+		if err := rows.Scan(&i.StartsOn, &i.EndsOn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1411,6 +1506,62 @@ func (q *Queries) ListUnplayedGamesOnDay(ctx context.Context, arg ListUnplayedGa
 			return nil, err
 		}
 		items = append(items, provider_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWeekScores = `-- name: ListWeekScores :many
+select ws.starts_on, ws.franchise_id, ws.player_id, ws.games, ws.points,
+       p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname
+from week_scores ws
+join players p on p.id = ws.player_id
+left join player_nicknames n on n.franchise_id = ws.franchise_id and n.player_id = ws.player_id
+where ws.league_id = $1 and ws.starts_on between $2 and $3
+`
+
+type ListWeekScoresParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	FromDay  pgtype.Date `json:"from_day"`
+	ToDay    pgtype.Date `json:"to_day"`
+}
+
+type ListWeekScoresRow struct {
+	StartsOn    pgtype.Date `json:"starts_on"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	PlayerID    pgtype.UUID `json:"player_id"`
+	Games       int32       `json:"games"`
+	Points      float64     `json:"points"`
+	FullName    string      `json:"full_name"`
+	HeadshotUrl string      `json:"headshot_url"`
+	Nickname    string      `json:"nickname"`
+}
+
+// What each starter scored in a league's stored weeks over a span.
+func (q *Queries) ListWeekScores(ctx context.Context, arg ListWeekScoresParams) ([]ListWeekScoresRow, error) {
+	rows, err := q.db.Query(ctx, listWeekScores, arg.LeagueID, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWeekScoresRow{}
+	for rows.Next() {
+		var i ListWeekScoresRow
+		if err := rows.Scan(
+			&i.StartsOn,
+			&i.FranchiseID,
+			&i.PlayerID,
+			&i.Games,
+			&i.Points,
+			&i.FullName,
+			&i.HeadshotUrl,
+			&i.Nickname,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1491,6 +1642,21 @@ select pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 // Held while a period is settled, and taken by whatever would unsettle it.
 func (q *Queries) LockPeriod(ctx context.Context, periodID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, lockPeriod, periodID)
+	return err
+}
+
+const lockWeek = `-- name: LockWeek :exec
+select pg_advisory_xact_lock(hashtextextended(($1::uuid)::text || ($2::date)::text, 0))
+`
+
+type LockWeekParams struct {
+	LeagueID pgtype.UUID `json:"league_id"`
+	StartsOn pgtype.Date `json:"starts_on"`
+}
+
+// Held while a week is settled, and taken by whatever would unsettle it.
+func (q *Queries) LockWeek(ctx context.Context, arg LockWeekParams) error {
+	_, err := q.db.Exec(ctx, lockWeek, arg.LeagueID, arg.StartsOn)
 	return err
 }
 
@@ -1614,6 +1780,20 @@ type SetPeriodDoubleGamesParams struct {
 
 func (q *Queries) SetPeriodDoubleGames(ctx context.Context, arg SetPeriodDoubleGamesParams) error {
 	_, err := q.db.Exec(ctx, setPeriodDoubleGames, arg.DoubleGames, arg.ID)
+	return err
+}
+
+const setRotationOffset = `-- name: SetRotationOffset :exec
+update seasons set rotation_offset = $1 where id = $2
+`
+
+type SetRotationOffsetParams struct {
+	RotationOffset int32       `json:"rotation_offset"`
+	ID             pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetRotationOffset(ctx context.Context, arg SetRotationOffsetParams) error {
+	_, err := q.db.Exec(ctx, setRotationOffset, arg.RotationOffset, arg.ID)
 	return err
 }
 

@@ -1,7 +1,8 @@
 <script lang="ts">
  import { onMount } from 'svelte';
  import { invalidateAll } from '$app/navigation';
- import { getGameCounts, type GameDayCount, getSchedule, setSchedule, generateSchedule, type League, type Season, type Franchise, type SchedulePeriod, type CustomPeriod } from '#lib/api.ts';
+ import { getGameCounts, type GameDayCount, getSchedule, setSchedule, generateSchedule, continuePattern, type League, type Season, type Franchise, type SchedulePeriod, type CustomPeriod } from '#lib/api.ts';
+ import MatchupEditor from '#lib/MatchupEditor.svelte';
  import { dayLabel, sportsToday } from '#lib/ui/time.ts';
  import { toast } from '#lib/ui/toast.svelte.ts';
 
@@ -40,6 +41,9 @@
  const today = sportsToday;
  const kept = $derived(periods.filter((p) => p.starts_on <= today()));
  const locked = $derived(kept.some((p) => p.is_playoff));
+ // The period under way: its dates are fixed, but its opponents can change until it ends.
+ const current = $derived(periods.find((p) => p.starts_on <= today() && p.ends_on >= today()));
+ let editingCurrent = $state(false);
  const bracketRounds = (n: number) => n < 2 ? 0 : Math.ceil(Math.log2(n));
  const rounds = $derived(Math.max(bracketRounds(Math.min(league.settings.format.playoff_teams, teams.length)), league.settings.format.consolation !== false ? bracketRounds(Math.max(0,teams.length-league.settings.format.playoff_teams)) : 0));
  const addDays = (day: string, count: number) => {
@@ -119,6 +123,17 @@
   period.matchups = original?.matchups.length ? original.matchups.map((m) => ({home_franchise_id:m.home_franchise_id,away_franchise_id:m.away_franchise_id,bracket:m.bracket,bracket_slot:m.bracket_slot})) : [{home_franchise_id:'',away_franchise_id:null}];
   dirty=true;
  }
+ async function carryOn(period: SchedulePeriod) {
+  if (!confirm(`Carry the round robin on from period ${period.seq}? Every later regular-season period plays the next round in turn, replacing its opponents, including any set by hand.`)) return;
+  busy=true;
+  try {
+   const { round } = await continuePattern(period.id);
+   await load(); await invalidateAll();
+   toast.good(`Period ${period.seq} is round ${round} of the round robin; the periods after it carry on from there.`);
+  }
+  catch (err) { toast.error(err); }
+  finally { busy=false; }
+ }
  function addPeriod() {
   const start=draft.length ? addDays(draft.at(-1)!.ends_on,1) : first();
   draft.push({starts_on:start,ends_on:addDays(start,length-1),is_playoff:false,double_games:false,matchups:null}); dirty=true;
@@ -131,9 +146,32 @@
  <p class="muted small-text">Set dates for every matchup period, choose when playoffs begin, and set opponents or byes. Each period can have a different length. Saved custom dates stay in place until you restore the automatic schedule.</p>
  {#if loading}
   <p class="muted">Loading schedule…</p>
- {:else if locked}
-  <p class="muted">The playoffs have begun. Schedule dates are locked; opponents can still be edited from <a href="/matchups">Matchups</a> until a period finishes.</p>
- {:else}
+ {/if}
+ {#if !loading && current}
+  <div class="period stack tight" aria-label="Period under way">
+   <div class="row end">
+    <strong>Period {current.seq} · under way</strong>
+    <span class="muted small-text">{dayLabel(current.starts_on)} – {dayLabel(current.ends_on)}</span>
+    {#if current.by_hand}<span class="pill gold">Set by hand</span>{/if}
+   </div>
+   {#if editingCurrent}
+    <MatchupEditor period={current} matchups={current.matchups} teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+     ondone={(changed) => { editingCurrent = false; if (changed) load().then(invalidateAll).catch(toast.error); }} />
+   {:else}
+    <ul class="pairs">
+     {#each current.matchups as m (m.id)}<li>{name(m.home_franchise_id)} <span class="muted">vs</span> {name(m.away_franchise_id)}</li>{/each}
+    </ul>
+    <div class="row">
+     <button class="small" disabled={busy || dirty} title={dirty ? 'Save or discard the schedule changes below first' : ''} onclick={() => editingCurrent = true}>Edit opponents</button>
+     {#if !current.is_playoff}<button class="small" disabled={busy || dirty} title={dirty ? 'Save or discard the schedule changes below first' : ''} onclick={() => carryOn(current!)}>Continue pattern</button>{/if}
+    </div>
+    <p class="muted small-text">Its dates are fixed now it has started, but its opponents can change until it ends.{#if !current.is_playoff} To line this league up with another sport, set this period to the matchups that sport has this week, then choose Continue pattern: every later regular-season period plays the next round of the round robin in turn.{/if}</p>
+   {/if}
+  </div>
+ {/if}
+ {#if !loading && locked}
+  <p class="muted">The playoffs have begun. Schedule dates are locked; the opponents of the period under way can still be edited above until it finishes.</p>
+ {:else if !loading}
   <fieldset disabled={busy} class="stack tight">
    <div class="row end">
     <label class="field">Matchup length (days)<input type="number" min="1" max="31" bind:value={length} /></label>
@@ -213,6 +251,7 @@
  .schedule-editor { border-top: 1px solid var(--rule); padding-top: 1rem; }
  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
  .period { border: 1px solid var(--rule); border-radius: .5rem; padding: .8rem; }
+ .pairs { margin: 0; padding-left: 1.1rem; display: grid; gap: .15rem; }
  input[type='number'] { max-width: 8rem; }
  .bad { color: var(--bad); }
  .double { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 600; white-space: nowrap; }

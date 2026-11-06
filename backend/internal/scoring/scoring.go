@@ -166,7 +166,7 @@ func table(ctx context.Context, q *db.Queries, league db.League, season *db.Seas
 	}
 
 	if season != nil {
-		scored, err := scores(ctx, q, league, season.StartsOn.Time, season.EndsOn.Time)
+		scored, err := seasonScores(ctx, q, league, *season)
 		if err != nil {
 			return nil, err
 		}

@@ -98,7 +98,7 @@
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
 	let availableOnly = $state(false);
-	let ownership = $state<string[]>(untrack(() => (workspace ? ['available'] : [])));
+	let ownership = $state<string[]>([]); // none is every player, owned or not
 	let owners = $state<string[]>([]);
 	let perGame = $state(false);
 	const statKeys = $derived(
@@ -126,8 +126,9 @@
 			: [...ownership, value];
 		page = 1;
 	}
-	const usual = () =>
-		workspace ? 'points' : !byPoints ? 'name' : competition ? 'points' : 'index';
+	// Leaders first: a sport by its fantasy points, every sport together by
+	// the index that puts them on one scale.
+	const usual = () => (!workspace && !byPoints ? 'name' : competition ? 'points' : 'index');
 	let order = $state(untrack(usual));
 	let ascending = $state(false);
 	const textSort = (key: string) => ['name', 'position', 'team'].includes(key);

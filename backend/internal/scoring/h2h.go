@@ -135,7 +135,7 @@ func schedule(ctx context.Context, q *db.Queries, league db.League, season db.Se
 		case period.IsPlayoff:
 			continue // playoff matchups are set as each round is reached
 		default:
-			pairs = rotation[int(period.Seq-1)%len(rotation)]
+			pairs = round(rotation, period.Seq, season.RotationOffset)
 		}
 		if err := pair(ctx, q, period.ID, pairs); err != nil {
 			return err
@@ -276,7 +276,7 @@ func (s *Service) ResetMatchups(ctx context.Context, periodID pgtype.UUID) error
 			ids[i] = f.ID
 		}
 		rotation := roundRobin(ids)
-		return pair(ctx, q, period.ID, rotation[int(period.Seq-1)%len(rotation)])
+		return pair(ctx, q, period.ID, round(rotation, period.Seq, season.RotationOffset))
 	})
 }
 
@@ -409,6 +409,103 @@ func reschedule(ctx context.Context, q *db.Queries, leagueID pgtype.UUID) error 
 		return nil
 	}
 	return schedule(ctx, q, league, season)
+}
+
+// round is the round of the round robin a period plays: its place in the
+// season, moved on by the season's offset.
+func round(rotation [][][2]pgtype.UUID, seq, offset int32) [][2]pgtype.UUID {
+	n := len(rotation)
+	return rotation[((int(seq-1)+int(offset))%n+n)%n]
+}
+
+// ContinuePattern carries the round robin on from a period whose matchups
+// the commissioner set by hand, say to line the week under way up with
+// another sport's. Its matchups must be one round of the round robin;
+// every later regular-season period then plays the rounds after it, in
+// order, in place of whatever it had. The season keeps the shift, so
+// rebuilding the schedule keeps the pattern. It returns the round's number.
+func (s *Service) ContinuePattern(ctx context.Context, periodID pgtype.UUID) (int, error) {
+	var found int
+	err := db.InTx(ctx, s.pool, func(q *db.Queries) error {
+		period, season, league, err := openPeriod(ctx, q, periodID)
+		if err != nil {
+			return err
+		}
+		if period.IsPlayoff {
+			return problem.New("The playoffs follow the bracket, not the round robin.")
+		}
+		franchises, err := q.ListFranchises(ctx, league.DynastyID)
+		if err != nil {
+			return err
+		}
+		ids := make([]pgtype.UUID, len(franchises))
+		for i, f := range franchises {
+			ids[i] = f.ID
+		}
+		if len(ids) < 2 {
+			return problem.New("A head-to-head league needs at least two franchises.")
+		}
+		matchups, err := q.ListSeasonMatchups(ctx, season.ID)
+		if err != nil {
+			return err
+		}
+		set := map[[2]pgtype.UUID]bool{}
+		for _, m := range matchups {
+			if m.PeriodID == period.ID && m.AwayFranchiseID.Valid {
+				set[unordered(m.HomeFranchiseID, m.AwayFranchiseID)] = true
+			}
+		}
+		rotation := roundRobin(ids)
+		// Byes are left out on both sides: a team left out sits out either way.
+		r := slices.IndexFunc(rotation, func(pairs [][2]pgtype.UUID) bool {
+			played := 0
+			for _, p := range pairs {
+				if p[1].Valid {
+					if !set[unordered(p[0], p[1])] {
+						return false
+					}
+					played++
+				}
+			}
+			return played == len(set)
+		})
+		if r < 0 {
+			return problem.New("These matchups are not one round of the round robin, so there is no pattern to carry on. Set the later weeks by hand instead.")
+		}
+		found = r + 1
+		offset := int32(r) - (period.Seq - 1)
+		if err := q.SetRotationOffset(ctx, db.SetRotationOffsetParams{ID: season.ID, RotationOffset: offset}); err != nil {
+			return err
+		}
+		periods, err := q.ListPeriods(ctx, season.ID)
+		if err != nil {
+			return err
+		}
+		for _, p := range periods {
+			if p.Seq <= period.Seq || p.IsPlayoff || !p.StartsOn.Time.After(sportsday.Today()) {
+				continue
+			}
+			if err := q.DeleteMatchups(ctx, p.ID); err != nil {
+				return err
+			}
+			if err := q.SetPeriodByHand(ctx, db.SetPeriodByHandParams{ID: p.ID, ByHand: false}); err != nil {
+				return err
+			}
+			if err := pair(ctx, q, p.ID, round(rotation, p.Seq, offset)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return found, err
+}
+
+// unordered is a pairing whichever side is at home.
+func unordered(a, b pgtype.UUID) [2]pgtype.UUID {
+	if a.String() > b.String() {
+		return [2]pgtype.UUID{b, a}
+	}
+	return [2]pgtype.UUID{a, b}
 }
 
 // roundRobin returns rounds in which every team plays every other once,

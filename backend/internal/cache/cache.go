@@ -16,8 +16,14 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const Research = "research"
-const Public = "public"
+// Scopes: what a cached read depends on. Research is season data alone;
+// Public is the dynasty's own state, which season data also moves; Live is
+// that and the games being played, which change with every poll.
+const (
+	Research = "research"
+	Public   = "public"
+	Live     = "live"
+)
 const maxEntryBytes = 8 << 20
 
 // Backend is the small Redis surface needed by the cache; tests can simulate
@@ -92,11 +98,8 @@ func New(client Backend, pool *pgxpool.Pool, log *slog.Logger) *Store {
 	return &Store{redis: client, log: log, revision: func(ctx context.Context, scope string) (string, error) {
 		var revision string
 		// Scope is chosen by the application, never supplied by the request.
-		column := "public"
-		if scope == Research {
-			column = "research"
-		}
-		err := pool.QueryRow(ctx, "select namespace::text || ':' || "+column+"::text from cache_revision where singleton").Scan(&revision)
+		columns := map[string]string{Research: "research", Public: "public", Live: "public::text || ':' || live"}[scope]
+		err := pool.QueryRow(ctx, "select namespace::text || ':' || "+columns+"::text from cache_revision where singleton").Scan(&revision)
 		return revision, err
 	}}
 }

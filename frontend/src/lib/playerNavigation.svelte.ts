@@ -2,7 +2,7 @@ import { tick } from 'svelte';
 
 export const playerNavigation = $state<{ from: string; label: string; destination: string }>({
 	from: '',
-	label: 'Players',
+	label: 'Leaders',
 	destination: '',
 });
 
@@ -20,7 +20,7 @@ export function rememberPlayerOrigin(from: URL | null, to: URL | null) {
 	playerNavigation.destination = to.pathname;
 	const sources: [string, string][] = [
 		['/research', 'Research'],
-		['/players', 'Players'],
+		['/players', 'Leaders'],
 		['/franchise/', 'Team'],
 		['/watchlist', 'Watchlist'],
 		['/draft', 'Draft'],
@@ -54,7 +54,7 @@ export function restorePlayerOrigin(url: URL) {
 		)
 			Object.assign(playerNavigation, saved);
 	} catch {
-		/* A direct visit falls back to Players. */
+		/* A direct visit falls back to Leaders. */
 	}
 }
 
