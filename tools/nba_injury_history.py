@@ -192,7 +192,7 @@ def main():
                         audit['unmatched'].append({'game':game,'team':team,**player});audit['ambiguous']+=int(len(ids)>1);continue
                     audit['matches']+=1;side['players'].append(dict(player,player_id=next(iter(ids)),match_method=method))
                 sides[team]=side
-            output[game]={'published_at':published.isoformat(),'starts_at':row['starts_at'],'url':url,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'teams':sides}
+            output[game]={'source':'nba_official','published_at':published.isoformat(),'starts_at':row['starts_at'],'url':url,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'teams':sides}
     result={'reports':output,'audit':audit,'note':'One snapshot per slate, strictly before its first game; unsubmitted/missing teams and unmatched names are unknown, never healthy.'}
     path=Path(args.out);path.write_text(json.dumps(result,indent=2)+'\n')
     print('Saved',len(output),'game reports;',audit['snapshots_found'],'slates;',len(audit['missing_slates']),'missing slates;',len(audit['unmatched']),'unmatched entries',flush=True)

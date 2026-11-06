@@ -31,6 +31,11 @@ func PredictBatch(rows []Row, model Model, targets []Target, reports map[string]
 			if r.PublishedAt.IsZero() || r.PublishedAt.After(observedAt) || !r.PublishedAt.Before(t.StartsAt) || r.StartsAt.Sub(t.StartsAt).Abs() > time.Minute {
 				return nil, nil, fmt.Errorf("invalid report cutoff for %s", t.GameID)
 			}
+			for _, team := range r.Teams {
+				if team.ObservedAt != nil && (team.ObservedAt.After(observedAt) || team.ObservedAt.IsZero() || !team.ObservedAt.Before(t.StartsAt)) {
+					return nil, nil, fmt.Errorf("invalid team observation cutoff for %s", t.GameID)
+				}
+			}
 			state.reports[t.GameID] = r
 		}
 		features[i] = state.Build(t, model.Config)

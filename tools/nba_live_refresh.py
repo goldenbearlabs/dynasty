@@ -35,6 +35,51 @@ def merge_history(old,new):
     return rows
 
 
+def availability_fallback(events,rosters,observed):
+    """Current roster statuses for each team's next game within 36 hours only.
+
+    This is an observation timestamp, not a claimed official publication time.
+    Unlisted players stay unknown. Do not project today's injury into later games.
+    """
+    source='espn_roster_observed'
+    earliest={};reports={}
+    for event in sorted(events,key=lambda e:e['date']):
+        start=dt.datetime.fromisoformat(event['date'].replace('Z','+00:00'))
+        if not observed<start<=observed+dt.timedelta(hours=36):continue
+        for side in event['competitions'][0]['competitors']:
+            earliest.setdefault(str(side['team']['id']),str(event['id']))
+    for event in events:
+        start=dt.datetime.fromisoformat(event['date'].replace('Z','+00:00'))
+        if not observed<start<=observed+dt.timedelta(hours=36):continue
+        sides={}
+        for side in event['competitions'][0]['competitors']:
+            team=str(side['team']['id'])
+            if earliest.get(team)!=str(event['id']) or team not in rosters:continue
+            players=[]
+            for person in rosters[team]:
+                injuries=person.get('injuries',[])
+                if not injuries:continue
+                injury=max(injuries,key=lambda i:i.get('date',''))
+                status={'Out':'Out','Doubtful':'Doubtful','Questionable':'Questionable','Probable':'Probable','Day-To-Day':'Questionable'}.get(injury.get('status'))
+                if status:players.append({'player_id':str(person['id']),'status':status,'original_status':injury['status']})
+            sides[team]={'submitted':True,'source':source,'observed_at':observed.isoformat(),'players':players}
+        if sides:reports[str(event['id'])]={'starts_at':start.isoformat(),'published_at':observed.isoformat(),'source':source,'teams':sides}
+    return reports
+
+
+def merge_availability(official,fallback):
+    merged=dict(official)
+    for game,report in fallback.items():
+        if game not in merged:merged[game]=report;continue
+        current=merged[game]
+        for existing in current.get('teams',{}).values():existing.setdefault('source','nba_official')
+        for team,side in report['teams'].items():
+            if not current.get('teams',{}).get(team,{}).get('submitted'):
+                current.setdefault('teams',{})[team]=side
+                current['source']='nba_official+espn_roster_observed'
+    return merged
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary',default='backend/nba-refresh')
@@ -86,11 +131,12 @@ def refresh(args,root):
         for row in merged:out.write(json.dumps(row,separators=(',',':'))+'\n')
     temporary.replace(root/'history-enriched.jsonl')
     teams=fetch('teams',BASE+'/teams?limit=100')['sports'][0]['leagues'][0]['teams']
-    roster={};identities=[]
+    roster={};roster_people={};identities=[]
     for item in teams:
         team=str(item['team']['id']);payload=fetch('roster-'+team,BASE+'/teams/'+team+'/roster')
         players=payload.get('athletes',[])
         if not players:raise ValueError('empty team roster '+team)
+        roster_people[team]=players
         roster[team]=[]
         for person in players:
             player=str(person['id']);roster[team].append(player);identities.append({'player_id':player,'name':person['displayName']})
@@ -108,9 +154,16 @@ def refresh(args,root):
     atomic_json(folder/'targets.json',{'observed_at':observed.isoformat(),'targets':targets})
     atomic_json(folder/'injury-scoreboard.json',{'events':injury_events})
     # Official reports can be absent before teams submit. A missing report stays
-    # unknown; transport/parsing failures abort instead of publishing partial data.
-    subprocess.run(['python3','tools/nba_injury_history.py','--scheduled-scoreboard',str(folder/'injury-scoreboard.json'),'--observed-at',observed.isoformat(),'--only-scheduled','--latest','--identity-catalog',str(folder/'identities.json'),'--extractor',args.extractor,'--out',str(folder/'injuries.json')],check=True)
-    atomic_json(folder/'manifest.json',{'started_at':started.isoformat(),'observed_at':observed.isoformat(),'captures':captures,'targets':len(targets),'completed_games_refreshed':len(completed)})
+    # unknown. Current ESPN roster observations supply an explicitly marked fallback.
+    official_path=folder/'official-injuries.json'
+    official_run=subprocess.run(['python3','tools/nba_injury_history.py','--scheduled-scoreboard',str(folder/'injury-scoreboard.json'),'--observed-at',observed.isoformat(),'--only-scheduled','--latest','--identity-catalog',str(folder/'identities.json'),'--extractor',args.extractor,'--out',str(official_path)])
+    official=json.loads(official_path.read_text()).get('reports',{}) if official_run.returncode==0 else {}
+    fallback=availability_fallback(injury_events,roster_people,observed)
+    reports=merge_availability(official,fallback)
+    atomic_json(folder/'injuries.json',{'reports':reports,'note':'Official reports preferred; fallback is explicitly timestamped ESPN roster observation for next game only.'})
+    sources={side.get('source','nba_official') for report in reports.values() for side in report['teams'].values() if side.get('submitted')}
+    print('Availability sources:',','.join(sorted(sources)) or 'none',flush=True)
+    atomic_json(folder/'manifest.json',{'started_at':started.isoformat(),'observed_at':observed.isoformat(),'captures':captures,'targets':len(targets),'completed_games_refreshed':len(completed),'availability_sources':sorted(sources),'official_fetch_succeeded':official_run.returncode==0})
     subprocess.run([args.binary,'--model',str(root/'model.json'),'--data',str(root/'history-enriched.jsonl'),'--targets',str(folder/'targets.json'),'--availability',str(folder/'injuries.json'),'--out',str(root/'live-projections.json')],check=True)
     archive=root/'forecast-archive';archive.mkdir(exist_ok=True)
     with (root/'live-projections.json').open('rb') as source,gzip.open(archive/(started.strftime('%Y%m%dT%H%M%SZ')+'.json.gz'),'wb') as target:

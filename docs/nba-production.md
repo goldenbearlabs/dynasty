@@ -8,7 +8,7 @@ objects include `projection_source: "nba_model"` when that model was used.
 The selected coefficients are versioned in `models/nba/model.json` (SHA-256
 `c52b0fe19e39a378bf415b6b7f76eb8f0285631086726ac4596ae3d52fcf9841`).
 The collector refreshes the inputs and forecasts; it does not retrain or select
-a different model automatically. Accuracy is conditional on playing. A verified
+a different model automatically. Accuracy is conditional on playing. A reported
 Out for that game produces zero; other statuses do not imply a calibrated
 probability of appearing.
 
@@ -38,8 +38,15 @@ Each run:
    window), preserving the earlier historical corpus.
 2. Reads current team rosters and schedules for the next 14 days.
 3. Reads recent official injury-report PDFs for upcoming games, using the
-   actual publication timestamp and current roster identities. Missing and
-   unsubmitted reports remain unknown.
+   actual publication timestamp and current roster identities. When the PDF
+   host denies requests or a team has not submitted, current ESPN roster injury
+   observations supply a marked fallback for that team's next game within 36
+   hours. The fallback's timestamp is its observation time, not an official
+   publication time. Unlisted players remain unknown; today's injury status is
+   not propagated into later games. The production host currently receives
+   HTTP 403 from the PDF host, so ESPN is its active availability source.
+   This source substitution has not been historically backtested against the
+   official-report feature recipe; prospective evaluation must track it.
 4. Rebuilds historical form and opponent/role features using completed prior
    sports days. Today's game outcomes do not enter forecasts.
 5. Publishes the complete snapshot by atomic rename and archives it compressed.

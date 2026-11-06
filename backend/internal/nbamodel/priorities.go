@@ -14,16 +14,20 @@ type ReportedPlayer struct {
 	Status   string `json:"status"`
 }
 type ReportedTeam struct {
-	Submitted bool             `json:"submitted"`
-	Players   []ReportedPlayer `json:"players"`
+	ObservedAt *time.Time       `json:"observed_at,omitempty"`
+	Source     string           `json:"source,omitempty"`
+	Submitted  bool             `json:"submitted"`
+	Players    []ReportedPlayer `json:"players"`
 }
 type PregameReport struct {
+	Source      string                  `json:"source,omitempty"`
 	PublishedAt time.Time               `json:"published_at"`
 	StartsAt    time.Time               `json:"starts_at"`
 	Teams       map[string]ReportedTeam `json:"teams"`
 }
 
 type OfficialFeatures struct {
+	Source             string     `json:"source,omitempty"`
 	Available          bool       `json:"team_report_available"`
 	PublishedAt        *time.Time `json:"published_at,omitempty"`
 	PlayerStatus       string     `json:"player_status,omitempty"`
@@ -40,6 +44,13 @@ func ReadPregameReports(reader io.Reader, rows []Row) (map[string]*PregameReport
 	for id, r := range source.Reports {
 		if r == nil || r.PublishedAt.IsZero() || r.StartsAt.IsZero() || !r.PublishedAt.Before(r.StartsAt) {
 			return nil, fmt.Errorf("invalid/non-pregame report for %s", id)
+		}
+	}
+	for id, r := range source.Reports {
+		for _, team := range r.Teams {
+			if team.ObservedAt != nil && (team.ObservedAt.IsZero() || !team.ObservedAt.Before(r.StartsAt)) {
+				return nil, fmt.Errorf("invalid team observation for %s", id)
+			}
 		}
 	}
 	for i := range rows {
@@ -151,10 +162,22 @@ func (s *State) extendPriorities(t Target, c Config, f *Features) {
 		if report := s.reports[t.GameID]; report != nil && report.PublishedAt.Before(t.StartsAt) {
 			published := report.PublishedAt
 			f.Official.PublishedAt = &published
+			f.Official.Source = report.Source
+			if f.Official.Source == "" {
+				f.Official.Source = "nba_official"
+			}
 			if team, ok := report.Teams[t.Team]; ok && team.Submitted {
 				available = 1
+				if team.Source != "" {
+					f.Official.Source = team.Source
+				}
 				f.Official.Available = true
-				age = min(24, t.StartsAt.Sub(report.PublishedAt).Hours()) / 24
+				stamp := report.PublishedAt
+				if team.ObservedAt != nil {
+					stamp = *team.ObservedAt
+					f.Official.PublishedAt = team.ObservedAt
+				}
+				age = min(24, t.StartsAt.Sub(stamp).Hours()) / 24
 				for _, p := range team.Players {
 					if p.PlayerID == t.PlayerID {
 						f.Official.PlayerStatus = p.Status

@@ -41,6 +41,12 @@ func TestBatchMatchesSingleAndRejectsFutureInformation(t *testing.T) {
 	if _, _, err = PredictBatch(rows, model, []Target{target}, reports, observed); err == nil {
 		t.Fatal("accepted report after capture")
 	}
+	futureObservation := observed.Add(time.Minute)
+	reports[target.GameID].PublishedAt = observed.Add(-time.Hour)
+	reports[target.GameID].Teams = map[string]ReportedTeam{"a": {ObservedAt: &futureObservation}}
+	if _, _, err = PredictBatch(rows, model, []Target{target}, reports, observed); err == nil {
+		t.Fatal("accepted team observation after capture")
+	}
 	if _, _, err = PredictBatch(rows, model, []Target{target}, nil, target.StartsAt); err == nil {
 		t.Fatal("accepted started target")
 	}
