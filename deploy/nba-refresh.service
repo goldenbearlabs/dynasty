@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh NBA model projections and pregame inputs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mosaic
+ExecStart=/usr/bin/python3 tools/nba_live_refresh.py --binary /root/mosaic/backend/nba-refresh
+TimeoutStartSec=30min
+Nice=10
+UMask=0022

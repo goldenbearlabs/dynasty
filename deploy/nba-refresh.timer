@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh NBA projections every two hours
+
+[Timer]
+OnCalendar=*-*-* 00/2:15:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=nba-refresh.service
+
+[Install]
+WantedBy=timers.target

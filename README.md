@@ -330,6 +330,16 @@ current by triggers in the same commit as the change behind it:
 - `period_scores`, what each side scored in a finished head-to-head period.
   It is written the first time standings need the period and cleared when a
   stat correction, lineup change or rule change touches it.
+- `settled_weeks` and `week_scores` (migration 0052), what each starter
+  scored in a scoring week that is over (a doubled matchup counts as one).
+  Standings and the overall table add these up and work out only the week
+  under way from box scores, so they cost the same in week 20 as in week 2.
+  A week is cleared by the same kinds of change, and by a game's status or a
+  matchup being doubled.
+
+Live games start a cache generation of their own (`live`), so a poll only
+makes pages that show live points read again; rosters, activity, the
+players list and the dynasty stay cached through a night of games.
 
 Feed syncs write each team, box score and season in one transaction, so a sync
 starts one new cache generation per batch rather than one per row.
@@ -392,3 +402,25 @@ Block, Team Needs, Targets and Interest each have their own focused view. Listin
 and targeting forms expand when needed; notes stay with their player, team needs
 stay grouped beneath each block, and targets can be toggled directly from league
 listings. Target and interest visibility is unchanged.
+
+The [NBA projection laboratory](docs/nba-model.md) downloads historical game
+logs, trains minutes and per-minute stat models, and compares chronological
+holdouts with the existing proxy and recent averages. It includes game/player
+filters and a standalone review page. The research harness runs offline; the validated NBA model is now served by
+the production integration described below.
+The [feature experiment results](docs/nba-feature-study.md) compare seven
+additions and four combinations against the frozen model; the selected offline
+candidate adds rest and workload features.
+The [variation study](docs/nba-variation.md) tests within-player matchup ordering,
+multi-game trends, forecast calibration and player-specific uncertainty using
+prior-day histories and frozen-origin game comparisons.
+
+The [next-priority experiments](docs/nba-priority-study.md) recover official
+pregame injury history and test role changes, shooting structure and matchup
+ranking. Their selected combined model is the current offline default; the
+workload checkpoint remains available for comparison.
+
+The [NBA production integration](docs/nba-production.md) serves that model in
+lineups and matchup forecasts, with input/projection refreshes every two hours,
+locked pregame expectations and a health endpoint. Model coefficients remain
+fixed between evaluated releases.

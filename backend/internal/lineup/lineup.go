@@ -17,6 +17,7 @@ import (
 
 	"crossover/internal/competition"
 	"crossover/internal/db"
+	"crossover/internal/nbalive"
 	"crossover/internal/problem"
 	"crossover/internal/projection"
 	"crossover/internal/settings"
@@ -24,6 +25,7 @@ import (
 )
 
 type Service struct {
+	NBA      *nbalive.Service // optional NBA forecast snapshot; other sports keep their proxy
 	pool     *pgxpool.Pool
 	registry competition.Registry // what each sport's stats move with, for projections
 }
@@ -125,9 +127,10 @@ type Game struct {
 	Projected float64 `json:"projected"`
 	// Expected is the same projection for any game, kept once it starts, so
 	// a finished game can be held up against what was expected of it.
-	Expected float64 `json:"expected"`
-	market   projection.Game
-	detail   string // where a game under way stands, as the feed says it
+	Expected         float64 `json:"expected"`
+	ProjectionSource string  `json:"projection_source,omitempty"`
+	market           projection.Game
+	detail           string // where a game under way stands, as the feed says it
 	// Stats is his stat line, by the competition's stat keys; empty until he plays.
 	Stats json.RawMessage `json:"stats"`
 }
@@ -187,6 +190,16 @@ func (s *Service) project(ctx context.Context, q *db.Queries, league db.League, 
 		for j := range p.Games {
 			g := &p.Games[j]
 			g.market.Average = average
+			if league.Competition == "nba" {
+				if points, ok := s.NBA.Points(p.PlayerID, g.GameID, rules.Scoring, g.StartsAt, g.Status == "scheduled"); ok {
+					g.Expected = points
+					g.ProjectionSource = "nba_model"
+					if g.Status == "scheduled" {
+						g.Projected = points
+					}
+					continue
+				}
+			}
 			if g.Status == "scheduled" {
 				g.Projected = projection.Points(perGame, plays, g.market, rules.Scoring, c.Follows)
 				g.Expected = g.Projected

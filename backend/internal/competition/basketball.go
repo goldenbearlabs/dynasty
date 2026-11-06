@@ -31,7 +31,8 @@ var (
 
 	// ESPN's names for those stats, in box scores and season totals.
 	basketballFeed = map[string]string{
-		"points": "pts", "rebounds": "reb", "assists": "ast", "steals": "stl", "blocks": "blk", "turnovers": "tov",
+		"minutes": "min", // retained for projection training, independently of scoring
+		"points":  "pts", "rebounds": "reb", "assists": "ast", "steals": "stl", "blocks": "blk", "turnovers": "tov",
 		"threePointFieldGoalsMade": "tpm", "fieldGoalsMade": "fgm", "fieldGoalsAttempted": "fga",
 		"freeThrowsMade": "ftm", "freeThrowsAttempted": "fta",
 		"doubleDouble": "dd", "tripleDouble": "td", // season totals only; in a game they are worked out below

@@ -8,6 +8,8 @@
 
 # backend
 backend/crossover
+data/nba/
+tools/__pycache__/
 backend/internal/web/dist/*
 !backend/internal/web/dist/.gitkeep
 
@@ -15,3 +17,5 @@ backend/internal/web/dist/*
 frontend/node_modules
 frontend/build
 frontend/.svelte-kit
+
+backend/nba-refresh

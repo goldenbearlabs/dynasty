@@ -5,3 +5,6 @@ backend/crossover
 backend/internal/web/dist
 docs
 .env
+
+data
+tools/__pycache__

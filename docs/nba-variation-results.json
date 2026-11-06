@@ -1,0 +1,1734 @@
+{
+  "as_of": "2026-11-05",
+  "provenance": {
+    "dataset_sha256": "07b524c208f1e50960c083d291fe4931e81abf3456dcb27c64a252868f94e7d2",
+    "source_sha256": "d3d247c9e62397f9f2d08c368cfc202c1136e48cd7c8650615e9d475c7457164",
+    "calibration_validation_reports": {
+      "historical": "2025-10-01T00:00:00Z",
+      "current": "2026-10-20T00:00:00Z"
+    }
+  },
+  "notes": [
+    "All headline MAEs retain every positive-minute appearance. Core/outlier diagnostics are hindsight cohorts, never deployable filters.",
+    "Block errors average consecutive one-game forecasts made at their respective times; they are not multi-game forecasts issued at block start.",
+    "Within-player correlations and game selection are measured on test outcomes only for scoring. Prior percentiles and reference scores use completed prior days only.",
+    "The current-season window spans six days and offers few games per player; historical within-player results are more informative.",
+    "Benchmarks have been reused in development. Calibration improvements need future-game confirmation.",
+    "Expected-score/stat models are unchanged. Median/typical-score calibration is a separate target and artifact; no automatic promotion."
+  ],
+  "selection": {
+    "point": {
+      "config": {
+        "anchor": "mean",
+        "alpha": 1,
+        "offset": "bucket"
+      },
+      "tuning": {
+        "historical": {
+          "mae": 5.0240860747838685,
+          "pair_accuracy": 0.39414634146341465,
+          "pairs": 3075
+        },
+        "current": {
+          "mae": 5.1801192655563355,
+          "pair_accuracy": 0.3359683794466403,
+          "pairs": 253
+        }
+      },
+      "relative_mae": 0.9804185401626455,
+      "ranking_guard_passed": true
+    },
+    "best_mae_without_ranking_guard": {
+      "config": {
+        "anchor": "mean",
+        "alpha": 1,
+        "offset": "bucket"
+      },
+      "tuning": {
+        "historical": {
+          "mae": 5.0240860747838685,
+          "pair_accuracy": 0.39414634146341465,
+          "pairs": 3075
+        },
+        "current": {
+          "mae": 5.1801192655563355,
+          "pair_accuracy": 0.3359683794466403,
+          "pairs": 253
+        }
+      },
+      "relative_mae": 0.9804185401626455,
+      "ranking_guard_passed": true
+    },
+    "distribution": {
+      "personalized": false,
+      "scaled": true,
+      "tuning_quantile_loss": {
+        "historical": 1.7408781082512956,
+        "current": 1.8172931036602982
+      }
+    },
+    "distribution_candidates": [
+      {
+        "personalized": false,
+        "scaled": false,
+        "tuning_quantile_loss": {
+          "historical": 1.7519605419385678,
+          "current": 1.82500744053205
+        }
+      },
+      {
+        "personalized": false,
+        "scaled": true,
+        "tuning_quantile_loss": {
+          "historical": 1.7408781082512956,
+          "current": 1.8172931036602982
+        }
+      },
+      {
+        "personalized": true,
+        "scaled": false,
+        "tuning_quantile_loss": {
+          "historical": 1.7616360555512465,
+          "current": 1.807223475535879
+        }
+      },
+      {
+        "personalized": true,
+        "scaled": true,
+        "tuning_quantile_loss": {
+          "historical": 1.7582565909145809,
+          "current": 1.8020720827499095
+        }
+      }
+    ],
+    "protocol": "Fit on first 60% of validation sports days; choose on last 40%; refit calibration on all validation before testing. Point selection rejects >0.5 percentage-point loss of within-player same-week pair accuracy on either tuning window."
+  },
+  "folds": {
+    "historical": {
+      "methods": {
+        "baseline": {
+          "n": 15751,
+          "mae": 5.126969176284547,
+          "rmse": 6.5626757587143425,
+          "bias": 0.08914458010580889,
+          "median_absolute_error": 4.241630917348736,
+          "p90_absolute_error": 10.442798957726284,
+          "p95_absolute_error": 12.940229522368497,
+          "largest_10_percent_error_share": 0.2744843728009838,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.135412165860033,
+          "normalized_mae_by_prior_sd": 0.7814148194580262,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.07882492443165454,
+            "pair_accuracy": 0.5327446651949963,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5324074948351204,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4632911745429699,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.14843644894898236,
+            "median_forecast_to_outcome_sd_ratio": 0.22674703083456765
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2966237942122186,
+            "mean_points_left_on_table": 5.967041800643087,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.917001607717042,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.096642212423387
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.44396479493084
+            }
+          }
+        },
+        "combined_all": {
+          "n": 15751,
+          "mae": 5.09187887551344,
+          "rmse": 6.5253420818056425,
+          "bias": 0.08755639711540944,
+          "median_absolute_error": 4.213912335447532,
+          "p90_absolute_error": 10.40173413677951,
+          "p95_absolute_error": 12.867398527177844,
+          "largest_10_percent_error_share": 0.2750761567409271,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.110744254817693,
+          "normalized_mae_by_prior_sd": 0.7760010911833021,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.09051890258334241,
+            "pair_accuracy": 0.5391547757219909,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5388244092019836,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4696080208609318,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.16330769137772194,
+            "median_forecast_to_outcome_sd_ratio": 0.2584449139720251
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2940112540192926,
+            "mean_points_left_on_table": 6.024417202572347,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.859626205787782,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.0453995318302214
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.384997716008155
+            }
+          }
+        },
+        "team_budget": {
+          "n": 15751,
+          "mae": 5.115062320487319,
+          "rmse": 6.563190725719575,
+          "bias": 0.06331692192429639,
+          "median_absolute_error": 4.220221990636723,
+          "p90_absolute_error": 10.46483411061131,
+          "p95_absolute_error": 12.936211362313646,
+          "largest_10_percent_error_share": 0.2756163680381064,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.127116336052621,
+          "normalized_mae_by_prior_sd": 0.7794861051952985,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.08394477640545707,
+            "pair_accuracy": 0.5350242370451287,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5346736211565554,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4637095087362124,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.15133998698256718,
+            "median_forecast_to_outcome_sd_ratio": 0.24505083220314444
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2992363344051447,
+            "mean_points_left_on_table": 6.000502411575563,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.883540996784566,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.0883235749571982
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.427013986445753
+            }
+          }
+        },
+        "teammate_minutes": {
+          "n": 15751,
+          "mae": 5.104069648804424,
+          "rmse": 6.541107103846874,
+          "bias": 0.06766439498000915,
+          "median_absolute_error": 4.204417303103682,
+          "p90_absolute_error": 10.400415524164448,
+          "p95_absolute_error": 12.894344153673218,
+          "largest_10_percent_error_share": 0.2750712129526649,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.114004398749181,
+          "normalized_mae_by_prior_sd": 0.777882129036042,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.0859012394166503,
+            "pair_accuracy": 0.5355893888016507,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.535259037122926,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.46550834576715516,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.15743478710493086,
+            "median_forecast_to_outcome_sd_ratio": 0.23316448548664995
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.30064308681672025,
+            "mean_points_left_on_table": 5.96875,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.915293408360128,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.07904579718793
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.430777965439178
+            }
+          }
+        },
+        "workload": {
+          "n": 15751,
+          "mae": 5.121304271405414,
+          "rmse": 6.560460969333177,
+          "bias": 0.07554258352483706,
+          "median_absolute_error": 4.216586005849985,
+          "p90_absolute_error": 10.456559542756981,
+          "p95_absolute_error": 12.923727500148704,
+          "largest_10_percent_error_share": 0.2750553402402777,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.125888727218219,
+          "normalized_mae_by_prior_sd": 0.7805301526988523,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.07979070829609118,
+            "pair_accuracy": 0.5339622068986444,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5336274261714928,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4645182881764813,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.1520918226414017,
+            "median_forecast_to_outcome_sd_ratio": 0.23541739767108155
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.289991961414791,
+            "mean_points_left_on_table": 6.0633038585209,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.820739549839228,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.0826240514090357
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.437592717579682
+            }
+          }
+        },
+        "workload_teammates": {
+          "n": 15751,
+          "mae": 5.104433174686325,
+          "rmse": 6.540847371742008,
+          "bias": 0.0905753856194829,
+          "median_absolute_error": 4.213926834061628,
+          "p90_absolute_error": 10.417527291852135,
+          "p95_absolute_error": 12.885091141447518,
+          "largest_10_percent_error_share": 0.2751955298017669,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.112574781022081,
+          "normalized_mae_by_prior_sd": 0.7778544155131296,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.08632427786365078,
+            "pair_accuracy": 0.5355666310127974,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5352477064913188,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.46556412365958755,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.15883070591860013,
+            "median_forecast_to_outcome_sd_ratio": 0.23756652229599676
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.29240353697749194,
+            "mean_points_left_on_table": 6.047126205787781,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.836917202572348,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.065745649601768
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.4226486911150347
+            }
+          }
+        },
+        "rolling_player_mean": {
+          "n": 15751,
+          "mae": 5.250070451159238,
+          "rmse": 6.760232329938354,
+          "bias": -0.2421061548983092,
+          "median_absolute_error": 4.275,
+          "p90_absolute_error": 10.825,
+          "p95_absolute_error": 13.3,
+          "largest_10_percent_error_share": 0.2766332959300223,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.26860260079984,
+          "normalized_mae_by_prior_sd": 0.8000203663287232,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": -0.058930258525982195,
+            "pair_accuracy": 0.48615188548280647,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.48599911621073466,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4168769958027136,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.03290163637087402,
+            "median_forecast_to_outcome_sd_ratio": 0.1963901199714246
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2411575562700964,
+            "mean_points_left_on_table": 6.797879823151124,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.086163585209002,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.341996851394153
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.7569253913329956
+            }
+          }
+        },
+        "rolling_player_median": {
+          "n": 15751,
+          "mae": 5.321471652593486,
+          "rmse": 6.931623885373019,
+          "bias": -0.7707447146212939,
+          "median_absolute_error": 4.25,
+          "p90_absolute_error": 11.0,
+          "p95_absolute_error": 14.0,
+          "largest_10_percent_error_share": 0.28377685117247387,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.313787387133183,
+          "normalized_mae_by_prior_sd": 0.810872037468817,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.05904545981928394,
+            "pair_accuracy": 0.4885471427596095,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.48845786326949153,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4320416103077545,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.031480420702397066,
+            "median_forecast_to_outcome_sd_ratio": 0.23115095120032644
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.27218649517684734,
+            "mean_points_left_on_table": 6.344213893354771,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.539829515005362,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.494986203647621
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.9248528329654158
+            }
+          }
+        },
+        "calibrated_typical_score": {
+          "n": 15751,
+          "mae": 5.144285041240369,
+          "rmse": 6.710631041362233,
+          "bias": -0.717090598094945,
+          "median_absolute_error": 4.084142278806572,
+          "p90_absolute_error": 10.941882373642631,
+          "p95_absolute_error": 13.511527177890084,
+          "largest_10_percent_error_share": 0.28537833903331583,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.09695326118861,
+          "normalized_mae_by_prior_sd": 0.7843684907879693,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.07964626358875086,
+            "pair_accuracy": 0.5338218672007161,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5335065661010163,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4641138984563468,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.15189108619787836,
+            "median_forecast_to_outcome_sd_ratio": 0.2648100563174544
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.28938906752411575,
+            "mean_points_left_on_table": 6.068127009646302,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.815916398713826,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.1928107208179863
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.5826101958743197
+            }
+          }
+        },
+        "distribution_median": {
+          "n": 15751,
+          "mae": 5.084856950958609,
+          "rmse": 6.604444096893819,
+          "bias": -0.7862844971837633,
+          "median_absolute_error": 4.083177996928283,
+          "p90_absolute_error": 10.586808430200282,
+          "p95_absolute_error": 13.206463583262165,
+          "largest_10_percent_error_share": 0.28361669507788534,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.059903307486984,
+          "normalized_mae_by_prior_sd": 0.7748733391889205,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.08102947079906066,
+            "pair_accuracy": 0.5342921948370163,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5339446838564937,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4653270676167501,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.1522249526802591,
+            "median_forecast_to_outcome_sd_ratio": 0.2342202610143801
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.289991961414791,
+            "mean_points_left_on_table": 6.060992765273312,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.823050643086816,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.0920348393919106
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.4614184394867915
+            }
+          }
+        }
+      },
+      "amplification": {
+        "0": {
+          "n": 15751,
+          "mae": 5.250070451159238,
+          "rmse": 6.760232329938354,
+          "bias": -0.2421061548983092,
+          "median_absolute_error": 4.275,
+          "p90_absolute_error": 10.825,
+          "p95_absolute_error": 13.3,
+          "largest_10_percent_error_share": 0.2766332959300223,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.26860260079984,
+          "normalized_mae_by_prior_sd": 0.8000203663287232,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": -0.058930258525982195,
+            "pair_accuracy": 0.48615188548280647,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.48599911621073466,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4168769958027136,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.03290163637087402,
+            "median_forecast_to_outcome_sd_ratio": 0.1963901199714246
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2411575562700964,
+            "mean_points_left_on_table": 6.797879823151124,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.086163585209002,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.341996851394153
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.7569253913329956
+            }
+          }
+        },
+        "0.5": {
+          "n": 15751,
+          "mae": 5.144449538780524,
+          "rmse": 6.60568335704562,
+          "bias": -0.08328178568673607,
+          "median_absolute_error": 4.234359775419433,
+          "p90_absolute_error": 10.511506460017003,
+          "p95_absolute_error": 12.99644275421554,
+          "largest_10_percent_error_share": 0.27600507978318717,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.151426184450206,
+          "normalized_mae_by_prior_sd": 0.7841143761688242,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.015756003754794416,
+            "pair_accuracy": 0.5118378431684911,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5114949257654786,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.43902779133490444,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.10217215845326723,
+            "median_forecast_to_outcome_sd_ratio": 0.18547490110628553
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.2592443729903537,
+            "mean_points_left_on_table": 6.528838424437299,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.35520498392283,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.157728281637927
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.5428154667293468
+            }
+          }
+        },
+        "1": {
+          "n": 15751,
+          "mae": 5.121304271405414,
+          "rmse": 6.560460969333177,
+          "bias": 0.07554258352483706,
+          "median_absolute_error": 4.216586005849985,
+          "p90_absolute_error": 10.456559542756981,
+          "p95_absolute_error": 12.923727500148704,
+          "largest_10_percent_error_share": 0.2750553402402777,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.125888727218219,
+          "normalized_mae_by_prior_sd": 0.7805301526988523,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.07979070829609118,
+            "pair_accuracy": 0.5339622068986444,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5336274261714928,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4645182881764813,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.1520918226414017,
+            "median_forecast_to_outcome_sd_ratio": 0.23541739767108155
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.289991961414791,
+            "mean_points_left_on_table": 6.0633038585209,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 12.820739549839228,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.0826240514090357
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.437592717579682
+            }
+          }
+        },
+        "1.5": {
+          "n": 15751,
+          "mae": 5.181740900488693,
+          "rmse": 6.6268037321568025,
+          "bias": 0.23436695273641017,
+          "median_absolute_error": 4.281829951387294,
+          "p90_absolute_error": 10.583933716670032,
+          "p95_absolute_error": 13.07908132184187,
+          "largest_10_percent_error_share": 0.2738193603348628,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.193219388716204,
+          "normalized_mae_by_prior_sd": 0.7894050912626438,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.1099754723796285,
+            "pair_accuracy": 0.5440097706773477,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5437267958106878,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.48093093302469564,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.17102180231518826,
+            "median_forecast_to_outcome_sd_ratio": 0.30900309535245896
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.30787781350482313,
+            "mean_points_left_on_table": 5.790795819935691,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 13.093247588424438,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.114920348449286
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.460199897280397
+            }
+          }
+        },
+        "2": {
+          "n": 15751,
+          "mae": 5.326360643685255,
+          "rmse": 6.8014477382906815,
+          "bias": 0.3931913219479833,
+          "median_absolute_error": 4.4440294164321115,
+          "p90_absolute_error": 10.915457335602028,
+          "p95_absolute_error": 13.48726835279544,
+          "largest_10_percent_error_share": 0.27217789806697273,
+          "common_baseline_core_n": 14176,
+          "common_baseline_core_mae": 4.354086183848382,
+          "normalized_mae_by_prior_sd": 0.8109389245447206,
+          "within_player": {
+            "minimum_games": 10,
+            "players": 467,
+            "undefined_constant_correlations": 0,
+            "macro_spearman_nonconstant": 0.12047491219402852,
+            "pair_accuracy": 0.5469644902634594,
+            "pairs": 263646,
+            "all_repeat_players_pair_accuracy": 0.5466500987653389,
+            "all_repeat_players_pairs": 264769,
+            "nearby_14_day_pair_accuracy": 0.4893394503088701,
+            "nearby_14_day_pairs": 71713,
+            "pooled_demeaned_pearson": 0.174576160484702,
+            "median_forecast_to_outcome_sd_ratio": 0.39446523120012744
+          },
+          "weekly_game_selection": {
+            "player_weeks": 4976,
+            "best_game_hit_rate": 0.3187299035369775,
+            "mean_points_left_on_table": 5.648914790996785,
+            "random_choice_points_left_on_table": 4.946397709003211,
+            "chosen_game_actual_mean": 13.235128617363344,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 4953,
+              "mae_of_block_mean": 3.25777266571184
+            },
+            "5": {
+              "blocks": 2718,
+              "mae_of_block_mean": 2.602457523580741
+            }
+          }
+        }
+      },
+      "distribution": {
+        "n": 15751,
+        "brier_beating_prior_median": 0.23706143029836652,
+        "brier_always_50_percent": 0.25,
+        "actual_above_usual_rate": 0.4967938543584534,
+        "calibration_bins": [
+          {
+            "bin": 0,
+            "n": 5,
+            "mean_probability": 0.07946983038279731,
+            "actual_above_usual_fraction": 0.0,
+            "actual_mean_prior_percentile": 0.13743589743589743
+          },
+          {
+            "bin": 1,
+            "n": 70,
+            "mean_probability": 0.17090687605100433,
+            "actual_above_usual_fraction": 0.14285714285714285,
+            "actual_mean_prior_percentile": 0.29481604052893334
+          },
+          {
+            "bin": 2,
+            "n": 598,
+            "mean_probability": 0.2634169076580228,
+            "actual_above_usual_fraction": 0.26421404682274247,
+            "actual_mean_prior_percentile": 0.42697330204056694
+          },
+          {
+            "bin": 3,
+            "n": 2317,
+            "mean_probability": 0.35965462673122567,
+            "actual_above_usual_fraction": 0.3733275787656452,
+            "actual_mean_prior_percentile": 0.4813059187542784
+          },
+          {
+            "bin": 4,
+            "n": 4837,
+            "mean_probability": 0.4537067928798988,
+            "actual_above_usual_fraction": 0.44862518089725034,
+            "actual_mean_prior_percentile": 0.49320801023088295
+          },
+          {
+            "bin": 5,
+            "n": 4775,
+            "mean_probability": 0.5468676987759978,
+            "actual_above_usual_fraction": 0.5290052356020942,
+            "actual_mean_prior_percentile": 0.5094945886048983
+          },
+          {
+            "bin": 6,
+            "n": 2170,
+            "mean_probability": 0.642618206886772,
+            "actual_above_usual_fraction": 0.6345622119815668,
+            "actual_mean_prior_percentile": 0.560000399654038
+          },
+          {
+            "bin": 7,
+            "n": 726,
+            "mean_probability": 0.7402843984294789,
+            "actual_above_usual_fraction": 0.7052341597796143,
+            "actual_mean_prior_percentile": 0.6128069894504979
+          },
+          {
+            "bin": 8,
+            "n": 216,
+            "mean_probability": 0.8349472027407888,
+            "actual_above_usual_fraction": 0.8009259259259259,
+            "actual_mean_prior_percentile": 0.7017103963497503
+          },
+          {
+            "bin": 9,
+            "n": 37,
+            "mean_probability": 0.9273359001786103,
+            "actual_above_usual_fraction": 0.918918918918919,
+            "actual_mean_prior_percentile": 0.8353950254377199
+          }
+        ],
+        "quantile_coverage": {
+          "0.1": 0.10227922036696083,
+          "0.25": 0.24823820709796204,
+          "0.5": 0.4957780458383595,
+          "0.75": 0.7394451145958987,
+          "0.9": 0.8911180242524284
+        },
+        "intervals": {
+          "0.8": {
+            "coverage": 0.7888388038854676,
+            "mean_width": 15.608592653113968
+          },
+          "0.95": {
+            "coverage": 0.9422893784521618,
+            "mean_width": 24.735516845622538
+          }
+        },
+        "mean_quantile_pinball_loss": 1.7782238816996834,
+        "point_percentile_spearman": 0.3058625406233138,
+        "point_percentile_mae": 0.24198139615214506
+      },
+      "same_origin_matchup_test": {
+        "forecast": {
+          "mae": 5.181322405255236,
+          "pair_accuracy": 0.5421808027016496,
+          "pairs": 15398
+        },
+        "flat_reference": {
+          "mae": 5.2913363806009555,
+          "pair_accuracy": 0.5,
+          "pairs": 15398
+        },
+        "weekly_selection": {
+          "player_weeks": 4905,
+          "best_game_hit_rate": 0.41855249745158,
+          "mean_points_left_on_table": 4.305606523955148,
+          "random_choice_points_left_on_table": 4.954515800203871,
+          "chosen_game_actual_mean": 14.632313965341488,
+          "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+        },
+        "flat_weekly_selection": {
+          "player_weeks": 4905,
+          "best_game_hit_rate": 0.38076452599387406,
+          "mean_points_left_on_table": 4.954515800203871,
+          "random_choice_points_left_on_table": 4.954515800203871,
+          "chosen_game_actual_mean": 13.983404689092769,
+          "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+        },
+        "forecast_notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day.",
+          "Teammate participation and historical roster membership are estimated using prior box scores only; target-game DNPs, appearances, starts and final roster lists are not supplied as pregame information.",
+          "Same-origin benchmark: forecasts for the remaining week's scheduled games are frozen before the first eligible sports day. Roster membership is inferred at that origin; unknown/new/traded players without a matching prior roster are excluded and counted separately. No subsequent results update these forecasts."
+        ],
+        "unknown_origin_roster_exclusions": 200,
+        "note": "Player form/rest/workload are frozen at the origin; only future opponent/home context differs. Tests matchup ordering without intervening outcomes. Conditional on appearances of players on the inferred origin roster."
+      },
+      "oracle_minutes_mae_diagnostic": 3.754696445258878,
+      "without_bonus_mae_diagnostic": 5.047565852519227
+    },
+    "current": {
+      "methods": {
+        "baseline": {
+          "n": 1126,
+          "mae": 5.070513386089705,
+          "rmse": 6.4002762939702835,
+          "bias": 0.5604898069122268,
+          "median_absolute_error": 4.514440889173708,
+          "p90_absolute_error": 9.88371704144381,
+          "p95_absolute_error": 12.290961582374354,
+          "largest_10_percent_error_share": 0.26070050847663345,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.17761484029151,
+          "normalized_mae_by_prior_sd": 0.7564736257873182,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.2848703460381177,
+            "pair_accuracy": 0.3903846153846154,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.38793879387938796,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.3903846153846154,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.24105118980764031,
+            "median_forecast_to_outcome_sd_ratio": 0.12555609425061431
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.40414507772020725,
+            "mean_points_left_on_table": 4.177461139896373,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.812176165803109,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.0618132820722437
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "combined_all": {
+          "n": 1126,
+          "mae": 5.1401820160278895,
+          "rmse": 6.441663510547667,
+          "bias": 0.8655134130829985,
+          "median_absolute_error": 4.56377998400753,
+          "p90_absolute_error": 10.036757703562408,
+          "p95_absolute_error": 12.494330931396242,
+          "largest_10_percent_error_share": 0.25535800452685475,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.289557385494883,
+          "normalized_mae_by_prior_sd": 0.7666775082207029,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.19134587112307974,
+            "pair_accuracy": 0.4201923076923077,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.42034203420342037,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.4201923076923077,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.20457674464049702,
+            "median_forecast_to_outcome_sd_ratio": 0.13885112346939643
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.4119170984455959,
+            "mean_points_left_on_table": 4.025906735751295,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.963730569948186,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.176501569517942
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "team_budget": {
+          "n": 1126,
+          "mae": 5.103677852294092,
+          "rmse": 6.4182116018487205,
+          "bias": 0.6852690300463453,
+          "median_absolute_error": 4.550191620209009,
+          "p90_absolute_error": 10.037344813076471,
+          "p95_absolute_error": 12.381028047545025,
+          "largest_10_percent_error_share": 0.2586648027385764,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.223105122881049,
+          "normalized_mae_by_prior_sd": 0.7615225056338063,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.23146431807767248,
+            "pair_accuracy": 0.4153846153846154,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.414041404140414,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.4153846153846154,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.2287213741129984,
+            "median_forecast_to_outcome_sd_ratio": 0.14086555571857004
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.4170984455958549,
+            "mean_points_left_on_table": 4.1217616580310885,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.867875647668393,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.0597442512913484
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "teammate_minutes": {
+          "n": 1126,
+          "mae": 5.043878242326944,
+          "rmse": 6.375068525689085,
+          "bias": 0.46453011480830486,
+          "median_absolute_error": 4.453246750502215,
+          "p90_absolute_error": 9.69722186606364,
+          "p95_absolute_error": 12.280165908165499,
+          "largest_10_percent_error_share": 0.2617904449033286,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.147768603429148,
+          "normalized_mae_by_prior_sd": 0.7521403988015101,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.25844177460954626,
+            "pair_accuracy": 0.40192307692307694,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.40054005400540055,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.40192307692307694,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.23845579201068998,
+            "median_forecast_to_outcome_sd_ratio": 0.12403292436203829
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.41450777202072536,
+            "mean_points_left_on_table": 4.146373056994818,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.843264248704664,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.066445430412664
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "workload": {
+          "n": 1126,
+          "mae": 5.062243624589204,
+          "rmse": 6.386732851046599,
+          "bias": 0.537042556148126,
+          "median_absolute_error": 4.53229334147607,
+          "p90_absolute_error": 9.867206696959844,
+          "p95_absolute_error": 12.22590503418455,
+          "largest_10_percent_error_share": 0.2600061186011919,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.169522887470127,
+          "normalized_mae_by_prior_sd": 0.7548702454859657,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.2924779425342684,
+            "pair_accuracy": 0.3875,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.387038703870387,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.3875,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.25765976139614294,
+            "median_forecast_to_outcome_sd_ratio": 0.1317540096894207
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.39378238341968913,
+            "mean_points_left_on_table": 4.274611398963731,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.715025906735752,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.055365540827192
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "workload_teammates": {
+          "n": 1126,
+          "mae": 5.049008547354831,
+          "rmse": 6.384904290617139,
+          "bias": 0.47332161360082264,
+          "median_absolute_error": 4.497728747069225,
+          "p90_absolute_error": 9.810413426793463,
+          "p95_absolute_error": 12.334278042140472,
+          "largest_10_percent_error_share": 0.26148345271175083,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.151504449392847,
+          "normalized_mae_by_prior_sd": 0.7527636807382837,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.29807233584944426,
+            "pair_accuracy": 0.38076923076923075,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.38073807380738073,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.38076923076923075,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.25104520730933005,
+            "median_forecast_to_outcome_sd_ratio": 0.13599548325649402
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.38860103626943004,
+            "mean_points_left_on_table": 4.230569948186528,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.759067357512953,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.0661160932891893
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "rolling_player_mean": {
+          "n": 1126,
+          "mae": 5.374425568264378,
+          "rmse": 6.794740862634548,
+          "bias": 1.077811976113486,
+          "median_absolute_error": 4.487500000000001,
+          "p90_absolute_error": 11.225,
+          "p95_absolute_error": 12.833333333333332,
+          "largest_10_percent_error_share": 0.26070951475761694,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.555857088068627,
+          "normalized_mae_by_prior_sd": 0.8000409857804777,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.30214375499656726,
+            "pair_accuracy": 0.37115384615384617,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.36588658865886586,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.37115384615384617,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.2599151801775735,
+            "median_forecast_to_outcome_sd_ratio": 0.07795611758609265
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.36917098445595853,
+            "mean_points_left_on_table": 4.4630829015544045,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.526554404145077,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.5482623001751112
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "rolling_player_median": {
+          "n": 1126,
+          "mae": 5.355239786856128,
+          "rmse": 6.863495541483026,
+          "bias": 0.5373001776198935,
+          "median_absolute_error": 4.5,
+          "p90_absolute_error": 11.0,
+          "p95_absolute_error": 13.0,
+          "largest_10_percent_error_share": 0.2665837479270315,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.499013806706114,
+          "normalized_mae_by_prior_sd": 0.7966389776893399,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 47,
+            "macro_spearman_nonconstant": -0.3126657186953502,
+            "pair_accuracy": 0.4014423076923077,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.40054005400540055,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.4014423076923077,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.23065879676160433,
+            "median_forecast_to_outcome_sd_ratio": 0.09423908283391308
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.40803108808290156,
+            "mean_points_left_on_table": 4.148316062176166,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.841321243523316,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.6459074733096086
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "calibrated_typical_score": {
+          "n": 1126,
+          "mae": 4.868205945032118,
+          "rmse": 6.3818108294175255,
+          "bias": -1.0166364815130002,
+          "median_absolute_error": 3.865611076194779,
+          "p90_absolute_error": 10.340653153119568,
+          "p95_absolute_error": 12.992490111097602,
+          "largest_10_percent_error_share": 0.286871325301686,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 3.9106117467029438,
+          "normalized_mae_by_prior_sd": 0.7277038930828894,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.28484271115079474,
+            "pair_accuracy": 0.3894230769230769,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.38973897389738976,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.3894230769230769,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.22775836355134688,
+            "median_forecast_to_outcome_sd_ratio": 0.14605623300324427
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.3963730569948187,
+            "mean_points_left_on_table": 4.141191709844559,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.848445595854923,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.2109302712529924
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "distribution_median": {
+          "n": 1126,
+          "mae": 4.9726579583885835,
+          "rmse": 6.465633062576189,
+          "bias": -1.04279149773054,
+          "median_absolute_error": 4.019549106016922,
+          "p90_absolute_error": 10.476218403092354,
+          "p95_absolute_error": 12.639808091223316,
+          "largest_10_percent_error_share": 0.2809198851751257,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.023489133005339,
+          "normalized_mae_by_prior_sd": 0.7396117480198469,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.2893849946636097,
+            "pair_accuracy": 0.38846153846153847,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.38793879387938796,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.38846153846153847,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.25948046422110904,
+            "median_forecast_to_outcome_sd_ratio": 0.13139737246314556
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.3963730569948187,
+            "mean_points_left_on_table": 4.269430051813472,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.720207253886011,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.23135850381644
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        }
+      },
+      "amplification": {
+        "0": {
+          "n": 1126,
+          "mae": 5.374425568264378,
+          "rmse": 6.794740862634548,
+          "bias": 1.077811976113486,
+          "median_absolute_error": 4.487500000000001,
+          "p90_absolute_error": 11.225,
+          "p95_absolute_error": 12.833333333333332,
+          "largest_10_percent_error_share": 0.26070951475761694,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.555857088068627,
+          "normalized_mae_by_prior_sd": 0.8000409857804777,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.30214375499656726,
+            "pair_accuracy": 0.37115384615384617,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.36588658865886586,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.37115384615384617,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.2599151801775735,
+            "median_forecast_to_outcome_sd_ratio": 0.07795611758609265
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.36917098445595853,
+            "mean_points_left_on_table": 4.4630829015544045,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.526554404145077,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.5482623001751112
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "0.5": {
+          "n": 1126,
+          "mae": 5.150762374032629,
+          "rmse": 6.4973527292294815,
+          "bias": 0.807427266130806,
+          "median_absolute_error": 4.411076545196508,
+          "p90_absolute_error": 10.243534616446816,
+          "p95_absolute_error": 12.206980305199512,
+          "largest_10_percent_error_share": 0.25717635936989636,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.287654166846471,
+          "normalized_mae_by_prior_sd": 0.7674692923975215,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.3255614853910022,
+            "pair_accuracy": 0.375,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.37353735373537356,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.375,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.293622636529026,
+            "median_forecast_to_outcome_sd_ratio": 0.09577757331602113
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.38341968911917096,
+            "mean_points_left_on_table": 4.483160621761658,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.506476683937823,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.2254101702143774
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "1": {
+          "n": 1126,
+          "mae": 5.062243624589204,
+          "rmse": 6.386732851046599,
+          "bias": 0.537042556148126,
+          "median_absolute_error": 4.53229334147607,
+          "p90_absolute_error": 9.867206696959844,
+          "p95_absolute_error": 12.22590503418455,
+          "largest_10_percent_error_share": 0.2600061186011919,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.169522887470127,
+          "normalized_mae_by_prior_sd": 0.7548702454859657,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.2924779425342684,
+            "pair_accuracy": 0.3875,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.387038703870387,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.3875,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.25765976139614294,
+            "median_forecast_to_outcome_sd_ratio": 0.1317540096894207
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.39378238341968913,
+            "mean_points_left_on_table": 4.274611398963731,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.715025906735752,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.055365540827192
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "1.5": {
+          "n": 1126,
+          "mae": 5.087653011995894,
+          "rmse": 6.472464403779427,
+          "bias": 0.26665784616544613,
+          "median_absolute_error": 4.424074903270243,
+          "p90_absolute_error": 10.20343882961432,
+          "p95_absolute_error": 12.391525551253364,
+          "largest_10_percent_error_share": 0.2655877827212111,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.177903523373102,
+          "normalized_mae_by_prior_sd": 0.7593056089828287,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.23416004010853586,
+            "pair_accuracy": 0.4048076923076923,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.40684068406840684,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.4048076923076923,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.2125928961026421,
+            "median_forecast_to_outcome_sd_ratio": 0.19031552626151593
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.41968911917098445,
+            "mean_points_left_on_table": 4.02979274611399,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.959844559585493,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.0697339371445787
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        },
+        "2": {
+          "n": 1126,
+          "mae": 5.260834181517905,
+          "rmse": 6.747066720485848,
+          "bias": -0.003726863817233831,
+          "median_absolute_error": 4.364628299368194,
+          "p90_absolute_error": 10.797239145097109,
+          "p95_absolute_error": 13.308881122315409,
+          "largest_10_percent_error_share": 0.2691221971994318,
+          "common_baseline_core_n": 1014,
+          "common_baseline_core_mae": 4.350377873932735,
+          "normalized_mae_by_prior_sd": 0.7852595769727067,
+          "within_player": {
+            "minimum_games": 3,
+            "players": 281,
+            "undefined_constant_correlations": 1,
+            "macro_spearman_nonconstant": -0.20231781496013573,
+            "pair_accuracy": 0.41634615384615387,
+            "pairs": 1040,
+            "all_repeat_players_pair_accuracy": 0.41854185418541856,
+            "all_repeat_players_pairs": 1111,
+            "nearby_14_day_pair_accuracy": 0.41634615384615387,
+            "nearby_14_day_pairs": 1040,
+            "pooled_demeaned_pearson": -0.1794197562565382,
+            "median_forecast_to_outcome_sd_ratio": 0.2508993424305521
+          },
+          "weekly_game_selection": {
+            "player_weeks": 386,
+            "best_game_hit_rate": 0.43523316062176165,
+            "mean_points_left_on_table": 4.032383419689119,
+            "random_choice_points_left_on_table": 3.09779792746114,
+            "chosen_game_actual_mean": 12.957253886010363,
+            "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+          },
+          "trend_blocks": {
+            "3": {
+              "blocks": 281,
+              "mae_of_block_mean": 3.3172292649135513
+            },
+            "5": {
+              "blocks": 0,
+              "mae_of_block_mean": null
+            }
+          }
+        }
+      },
+      "distribution": {
+        "n": 1126,
+        "brier_beating_prior_median": 0.22576171023768485,
+        "brier_always_50_percent": 0.25,
+        "actual_above_usual_rate": 0.41207815275310833,
+        "calibration_bins": [
+          {
+            "bin": 1,
+            "n": 27,
+            "mean_probability": 0.1695281965382468,
+            "actual_above_usual_fraction": 0.07407407407407407,
+            "actual_mean_prior_percentile": 0.22846581354333292
+          },
+          {
+            "bin": 2,
+            "n": 139,
+            "mean_probability": 0.26002765626694624,
+            "actual_above_usual_fraction": 0.22302158273381295,
+            "actual_mean_prior_percentile": 0.37430883048365127
+          },
+          {
+            "bin": 3,
+            "n": 366,
+            "mean_probability": 0.3567238514979268,
+            "actual_above_usual_fraction": 0.35792349726775957,
+            "actual_mean_prior_percentile": 0.4352560571986425
+          },
+          {
+            "bin": 4,
+            "n": 296,
+            "mean_probability": 0.44827813051745213,
+            "actual_above_usual_fraction": 0.4358108108108108,
+            "actual_mean_prior_percentile": 0.44351341914962555
+          },
+          {
+            "bin": 5,
+            "n": 178,
+            "mean_probability": 0.5447603184461633,
+            "actual_above_usual_fraction": 0.5168539325842697,
+            "actual_mean_prior_percentile": 0.4832304997103824
+          },
+          {
+            "bin": 6,
+            "n": 83,
+            "mean_probability": 0.6403856632560392,
+            "actual_above_usual_fraction": 0.6144578313253012,
+            "actual_mean_prior_percentile": 0.5740098707245237
+          },
+          {
+            "bin": 7,
+            "n": 33,
+            "mean_probability": 0.7380462920663926,
+            "actual_above_usual_fraction": 0.7272727272727273,
+            "actual_mean_prior_percentile": 0.6399722760526043
+          },
+          {
+            "bin": 8,
+            "n": 4,
+            "mean_probability": 0.8263190954773869,
+            "actual_above_usual_fraction": 1.0,
+            "actual_mean_prior_percentile": 0.6979166666666666
+          }
+        ],
+        "quantile_coverage": {
+          "0.1": 0.06127886323268206,
+          "0.25": 0.2344582593250444,
+          "0.5": 0.4849023090586146,
+          "0.75": 0.7548845470692718,
+          "0.9": 0.9049733570159858
+        },
+        "intervals": {
+          "0.8": {
+            "coverage": 0.8436944937833037,
+            "mean_width": 16.902251387543405
+          },
+          "0.95": {
+            "coverage": 0.9635879218472468,
+            "mean_width": 25.98313339980474
+          }
+        },
+        "mean_quantile_pinball_loss": 1.7219204475653056,
+        "point_percentile_spearman": 0.26196558671194525,
+        "point_percentile_mae": 0.2523273782613496
+      },
+      "same_origin_matchup_test": {
+        "forecast": {
+          "mae": 5.055705605252685,
+          "pair_accuracy": 0.5230352303523035,
+          "pairs": 369
+        },
+        "flat_reference": {
+          "mae": 5.375563988880909,
+          "pair_accuracy": 0.5,
+          "pairs": 369
+        },
+        "weekly_selection": {
+          "player_weeks": 383,
+          "best_game_hit_rate": 0.5404699738903395,
+          "mean_points_left_on_table": 2.975195822454308,
+          "random_choice_points_left_on_table": 3.1155352480417755,
+          "chosen_game_actual_mean": 14.08485639686684,
+          "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+        },
+        "flat_weekly_selection": {
+          "player_weeks": 383,
+          "best_game_hit_rate": 0.5182767624020888,
+          "mean_points_left_on_table": 3.1155352480417755,
+          "random_choice_points_left_on_table": 3.1155352480417755,
+          "chosen_game_actual_mean": 13.944516971279374,
+          "note": "Conditional on observed positive-minute appearances; ties in forecast are evaluated as uniform random choice, never resolved using outcomes."
+        },
+        "forecast_notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day.",
+          "Teammate participation and historical roster membership are estimated using prior box scores only; target-game DNPs, appearances, starts and final roster lists are not supplied as pregame information.",
+          "Same-origin benchmark: forecasts for the remaining week's scheduled games are frozen before the first eligible sports day. Roster membership is inferred at that origin; unknown/new/traded players without a matching prior roster are excluded and counted separately. No subsequent results update these forecasts."
+        ],
+        "unknown_origin_roster_exclusions": 9,
+        "note": "Player form/rest/workload are frozen at the origin; only future opponent/home context differs. Tests matchup ordering without intervening outcomes. Conditional on appearances of players on the inferred origin roster."
+      },
+      "oracle_minutes_mae_diagnostic": 3.564231424115724,
+      "without_bonus_mae_diagnostic": 4.998236419425701
+    }
+  }
+}

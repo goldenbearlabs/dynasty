@@ -1,0 +1,791 @@
+{
+  "selection": {
+    "selected": "reported_combined",
+    "scores": {
+      "baseline": {
+        "historical": 5.125427352846149,
+        "current": 5.489337828265218
+      },
+      "role_state": {
+        "historical": 5.112769426059437,
+        "current": 5.463117668983804
+      },
+      "stat_windows": {
+        "historical": 5.126981637605848,
+        "current": 5.495026820285722
+      },
+      "opportunities": {
+        "historical": 5.133198224445964,
+        "current": 5.500239963747133
+      },
+      "official_absences": {
+        "historical": 5.067750276365894,
+        "current": 5.447824295207545
+      },
+      "official_budget": {
+        "historical": 5.428646944668408,
+        "current": 6.372219052710007
+      },
+      "structural_combined": {
+        "historical": 5.1221880469296925,
+        "current": 5.487210194421252
+      },
+      "reported_combined": {
+        "historical": 5.072615002204048,
+        "current": 5.4415151793702625
+      }
+    },
+    "relative": {
+      "baseline": 1.0,
+      "role_state": 0.9963769025707707,
+      "stat_windows": 1.0006698105295113,
+      "opportunities": 1.0017510988893084,
+      "official_absences": 0.9905921494572061,
+      "official_budget": 1.109997758268539,
+      "structural_combined": 0.9994901995559469,
+      "reported_combined": 0.9904920472566547
+    }
+  },
+  "evaluation": {
+    "baseline": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.121304271405395,
+          "rmse": 6.560460969333185,
+          "bias": 0.07554258352483699
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.059404541395688,
+          "rmse": 6.593886152155709,
+          "bias": 0.16608015401072526
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.062243624589207,
+          "rmse": 6.386732851046604,
+          "bias": 0.5370425561481259
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.1287816754626965,
+          "rmse": 6.5212148661941,
+          "bias": 0.5954402103229236
+        }
+      }
+    },
+    "role_state": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.113014565838585,
+          "rmse": 6.548720315644987,
+          "bias": 0.0721918901130068
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.030761201161558,
+          "rmse": 6.563455111711095,
+          "bias": 0.1568378941280285
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.036966916984203,
+          "rmse": 6.3793103961066615,
+          "bias": 0.47463884853279864
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.066677584951331,
+          "rmse": 6.457428040331616,
+          "bias": 0.4840761906828204
+        }
+      }
+    },
+    "stat_windows": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.122680821631411,
+          "rmse": 6.561576501297711,
+          "bias": 0.08304637440099086
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.059404541395688,
+          "rmse": 6.593886152155709,
+          "bias": 0.16608015401072526
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.069069808408251,
+          "rmse": 6.39488207880027,
+          "bias": 0.5409131521979492
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.1287816754626965,
+          "rmse": 6.5212148661941,
+          "bias": 0.5954402103229236
+        }
+      }
+    },
+    "opportunities": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.118989042310596,
+          "rmse": 6.5548745683014955,
+          "bias": 0.08470212618001006
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.059404541395688,
+          "rmse": 6.593886152155709,
+          "bias": 0.16608015401072526
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.060185353357677,
+          "rmse": 6.390814336753735,
+          "bias": 0.596998430219021
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.1287816754626965,
+          "rmse": 6.5212148661941,
+          "bias": 0.5954402103229236
+        }
+      }
+    },
+    "official_absences": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.007725290030995,
+          "rmse": 6.416664651252169,
+          "bias": 0.21243438876084442
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 4.857463004862402,
+          "rmse": 6.286660983618402,
+          "bias": 0.37740511537549426
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 4.959667604752045,
+          "rmse": 6.2955715165476525,
+          "bias": 0.26149521109215773
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 4.956400503808469,
+          "rmse": 6.264761720367554,
+          "bias": 0.16614163198956128
+        }
+      }
+    },
+    "official_budget": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.395568654654008,
+          "rmse": 6.834758479696497,
+          "bias": 2.0049365288593353
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.755503477316146,
+          "rmse": 7.420002626670879,
+          "bias": 3.36618481502614
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.30761270581952,
+          "rmse": 6.578099359719115,
+          "bias": 2.0708287958149363
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.445038811514716,
+          "rmse": 6.977761190631616,
+          "bias": 3.1410806980902075
+        }
+      }
+    },
+    "structural_combined": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.110007100943927,
+          "rmse": 6.54196130911657,
+          "bias": 0.08449643230763455
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.030761201161558,
+          "rmse": 6.563455111711095,
+          "bias": 0.1568378941280285
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 5.044849489379718,
+          "rmse": 6.395352295117413,
+          "bias": 0.5259021290642831
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.066677584951331,
+          "rmse": 6.457428040331616,
+          "bias": 0.4840761906828204
+        }
+      }
+    },
+    "reported_combined": {
+      "historical": {
+        "games": 734,
+        "model": {
+          "n": 15751,
+          "mae": 5.002849761105705,
+          "rmse": 6.406191139282589,
+          "bias": 0.23642286929572662
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 4.839451903975389,
+          "rmse": 6.2687295867455095,
+          "bias": 0.37166532448762757
+        }
+      },
+      "current": {
+        "games": 50,
+        "model": {
+          "n": 1126,
+          "mae": 4.955691779113863,
+          "rmse": 6.304846746735717,
+          "bias": 0.26827965250431346
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 4.918083088912188,
+          "rmse": 6.207403605285565,
+          "bias": 0.08693298860574182
+        }
+      }
+    }
+  },
+  "comparisons": {
+    "role_state": {
+      "historical": {
+        "mae_reduction": 0.008289705566815436,
+        "game_bootstrap_95_interval": [
+          0.0037650814902920023,
+          0.012887302099193951
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": 0.025276707604998047,
+        "game_bootstrap_95_interval": [
+          -0.0015615083921211158,
+          0.054660372536372355
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "stat_windows": {
+      "historical": {
+        "mae_reduction": -0.0013765502259573967,
+        "game_bootstrap_95_interval": [
+          -0.003109258305930073,
+          0.00027476476496613453
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": -0.006826183819052548,
+        "game_bootstrap_95_interval": [
+          -0.012075700470921956,
+          -0.0013315931553202283
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "opportunities": {
+      "historical": {
+        "mae_reduction": 0.002315229094847446,
+        "game_bootstrap_95_interval": [
+          -0.002687861776791538,
+          0.0074774203711032595
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": 0.002058271231525078,
+        "game_bootstrap_95_interval": [
+          -0.014387781331794943,
+          0.019953493602797703
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "official_absences": {
+      "historical": {
+        "mae_reduction": 0.1135789813744129,
+        "game_bootstrap_95_interval": [
+          0.09298226619318681,
+          0.13593032106898145
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": 0.102576019837156,
+        "game_bootstrap_95_interval": [
+          0.02233208712617379,
+          0.19202719206585073
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "official_budget": {
+      "historical": {
+        "mae_reduction": -0.27426438324853847,
+        "game_bootstrap_95_interval": [
+          -0.318858413899942,
+          -0.2266987336677104
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": -0.24536908123031834,
+        "game_bootstrap_95_interval": [
+          -0.4032533761064684,
+          -0.06323719196263108
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "structural_combined": {
+      "historical": {
+        "mae_reduction": 0.011297170461494005,
+        "game_bootstrap_95_interval": [
+          0.004361891966708682,
+          0.018311913808173874
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": 0.01739413520948168,
+        "game_bootstrap_95_interval": [
+          -0.016696198213340233,
+          0.05447321942548859
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    },
+    "reported_combined": {
+      "historical": {
+        "mae_reduction": 0.11845451029970049,
+        "game_bootstrap_95_interval": [
+          0.09639546203325025,
+          0.14254547210191898
+        ],
+        "games": 734,
+        "appearances": 15751
+      },
+      "current": {
+        "mae_reduction": 0.10655184547533791,
+        "game_bootstrap_95_interval": [
+          0.023304877738660332,
+          0.19445868216326023
+        ],
+        "games": 50,
+        "appearances": 1126
+      }
+    }
+  },
+  "earlier_check": {
+    "baseline": {
+      "games": 746,
+      "model": {
+        "n": 15802,
+        "mae": 5.178515614682454,
+        "rmse": 6.667919575908332,
+        "bias": -0.11402034394912837
+      },
+      "minutes": {
+        "n": 15802,
+        "mae": 5.161310110963626,
+        "rmse": 6.8050038967024875,
+        "bias": -0.07941803325177435
+      }
+    },
+    "reported_combined": {
+      "games": 746,
+      "model": {
+        "n": 15802,
+        "mae": 5.087813844628373,
+        "rmse": 6.549641917068231,
+        "bias": 0.17288142562894898
+      },
+      "minutes": {
+        "n": 15802,
+        "mae": 4.939982322725348,
+        "rmse": 6.501738755038436,
+        "bias": 0.3040291504631802
+      }
+    }
+  },
+  "ranking_experiment": {
+    "historical": {
+      "baseline": {
+        "pairs": 15398,
+        "pair_accuracy": 0.5421808027016496,
+        "player_weeks": 4905,
+        "regret": 4.305606523955148,
+        "selected_actual_score": 14.632313965341488,
+        "random_regret": 4.954515800203874,
+        "brier": null,
+        "probability_bins": []
+      },
+      "selected": {
+        "pairs": 15398,
+        "pair_accuracy": 0.5389336277438629,
+        "player_weeks": 4905,
+        "regret": 4.291335372069317,
+        "selected_actual_score": 14.64658511722732,
+        "random_regret": 4.954515800203874,
+        "brier": 0.24851710473473024,
+        "probability_bins": [
+          {
+            "bin": 3,
+            "n": 2,
+            "forecast": 0.3945547327990163,
+            "actual": 0.0
+          },
+          {
+            "bin": 4,
+            "n": 7579,
+            "forecast": 0.4854982275481622,
+            "actual": 0.4632537274046708
+          },
+          {
+            "bin": 5,
+            "n": 7817,
+            "forecast": 0.5136307776670292,
+            "actual": 0.540232825892286
+          }
+        ]
+      }
+    },
+    "current": {
+      "baseline": {
+        "pairs": 369,
+        "pair_accuracy": 0.5230352303523035,
+        "player_weeks": 383,
+        "regret": 2.975195822454308,
+        "selected_actual_score": 14.08485639686684,
+        "random_regret": 3.1155352480417755,
+        "brier": null,
+        "probability_bins": []
+      },
+      "selected": {
+        "pairs": 369,
+        "pair_accuracy": 0.5203252032520326,
+        "player_weeks": 383,
+        "regret": 2.97911227154047,
+        "selected_actual_score": 14.08093994778068,
+        "random_regret": 3.1155352480417755,
+        "brier": 0.2502226154638406,
+        "probability_bins": [
+          {
+            "bin": 3,
+            "n": 2,
+            "forecast": 0.37244769800026334,
+            "actual": 0.5
+          },
+          {
+            "bin": 4,
+            "n": 175,
+            "forecast": 0.4741289221812421,
+            "actual": 0.49714285714285716
+          },
+          {
+            "bin": 5,
+            "n": 189,
+            "forecast": 0.526914143642289,
+            "actual": 0.5396825396825397
+          },
+          {
+            "bin": 6,
+            "n": 1,
+            "forecast": 0.6003207034132497,
+            "actual": 0.0
+          },
+          {
+            "bin": 8,
+            "n": 2,
+            "forecast": 0.8362922125140555,
+            "actual": 0.5
+          }
+        ]
+      }
+    }
+  },
+  "distribution": {
+    "historical": {
+      "expected_mae": 5.002849761105713,
+      "typical_mae": 5.044636616162076,
+      "distribution": {
+        "n": 15751,
+        "brier_beating_prior_median": 0.23551157474103293,
+        "brier_always_50_percent": 0.25,
+        "actual_above_usual_rate": 0.4967938543584534,
+        "calibration_bins": [
+          {
+            "bin": 0,
+            "n": 7,
+            "mean_probability": 0.08351593379807973,
+            "actual_above_usual_fraction": 0.0,
+            "actual_mean_prior_percentile": 0.10956305599162743
+          },
+          {
+            "bin": 1,
+            "n": 188,
+            "mean_probability": 0.16720435335828143,
+            "actual_above_usual_fraction": 0.1595744680851064,
+            "actual_mean_prior_percentile": 0.3615865971039887
+          },
+          {
+            "bin": 2,
+            "n": 766,
+            "mean_probability": 0.2622281627465593,
+            "actual_above_usual_fraction": 0.2689295039164491,
+            "actual_mean_prior_percentile": 0.4045218156150462
+          },
+          {
+            "bin": 3,
+            "n": 2217,
+            "mean_probability": 0.3554294212251688,
+            "actual_above_usual_fraction": 0.37167343256653135,
+            "actual_mean_prior_percentile": 0.44870766526350386
+          },
+          {
+            "bin": 4,
+            "n": 3843,
+            "mean_probability": 0.4523403218610596,
+            "actual_above_usual_fraction": 0.4350767629456154,
+            "actual_mean_prior_percentile": 0.4747145019739572
+          },
+          {
+            "bin": 5,
+            "n": 4076,
+            "mean_probability": 0.5482350423792524,
+            "actual_above_usual_fraction": 0.5127576054955839,
+            "actual_mean_prior_percentile": 0.5180529760625163
+          },
+          {
+            "bin": 6,
+            "n": 2662,
+            "mean_probability": 0.6443301228402646,
+            "actual_above_usual_fraction": 0.5848985725018783,
+            "actual_mean_prior_percentile": 0.5530194571893937
+          },
+          {
+            "bin": 7,
+            "n": 1269,
+            "mean_probability": 0.7446514668965201,
+            "actual_above_usual_fraction": 0.6721828211189913,
+            "actual_mean_prior_percentile": 0.5877241665786995
+          },
+          {
+            "bin": 8,
+            "n": 525,
+            "mean_probability": 0.8424989242611682,
+            "actual_above_usual_fraction": 0.7961904761904762,
+            "actual_mean_prior_percentile": 0.6998227953130061
+          },
+          {
+            "bin": 9,
+            "n": 198,
+            "mean_probability": 0.9360243848154505,
+            "actual_above_usual_fraction": 0.8838383838383839,
+            "actual_mean_prior_percentile": 0.7991385966462629
+          }
+        ],
+        "quantile_coverage": {
+          "0.1": 0.10958034410513619,
+          "0.25": 0.2611262776966542,
+          "0.5": 0.5063170592343343,
+          "0.75": 0.7462383340740271,
+          "0.9": 0.8937845216176751
+        },
+        "intervals": {
+          "0.8": {
+            "coverage": 0.7842041775125389,
+            "mean_width": 15.654752475754389
+          },
+          "0.95": {
+            "coverage": 0.9333375658688338,
+            "mean_width": 24.575022030488373
+          }
+        },
+        "mean_quantile_pinball_loss": 1.7730312224714628,
+        "point_percentile_spearman": 0.3552821165156392,
+        "point_percentile_mae": 0.2353166198099377
+      }
+    },
+    "current": {
+      "expected_mae": 4.955691779113866,
+      "typical_mae": 4.886451157528835,
+      "distribution": {
+        "n": 1126,
+        "brier_beating_prior_median": 0.2213440596446,
+        "brier_always_50_percent": 0.25,
+        "actual_above_usual_rate": 0.41207815275310833,
+        "calibration_bins": [
+          {
+            "bin": 0,
+            "n": 5,
+            "mean_probability": 0.09403539436311989,
+            "actual_above_usual_fraction": 0.0,
+            "actual_mean_prior_percentile": 0.15666666666666668
+          },
+          {
+            "bin": 1,
+            "n": 69,
+            "mean_probability": 0.16129936984737925,
+            "actual_above_usual_fraction": 0.15942028985507245,
+            "actual_mean_prior_percentile": 0.2967840692057072
+          },
+          {
+            "bin": 2,
+            "n": 162,
+            "mean_probability": 0.25758514681007577,
+            "actual_above_usual_fraction": 0.2654320987654321,
+            "actual_mean_prior_percentile": 0.3754689137453671
+          },
+          {
+            "bin": 3,
+            "n": 295,
+            "mean_probability": 0.3523599615465096,
+            "actual_above_usual_fraction": 0.3423728813559322,
+            "actual_mean_prior_percentile": 0.425395781641932
+          },
+          {
+            "bin": 4,
+            "n": 250,
+            "mean_probability": 0.4470506237655724,
+            "actual_above_usual_fraction": 0.44,
+            "actual_mean_prior_percentile": 0.45566214142895595
+          },
+          {
+            "bin": 5,
+            "n": 187,
+            "mean_probability": 0.5485626617535493,
+            "actual_above_usual_fraction": 0.5240641711229946,
+            "actual_mean_prior_percentile": 0.505561460765361
+          },
+          {
+            "bin": 6,
+            "n": 115,
+            "mean_probability": 0.6448958250066248,
+            "actual_above_usual_fraction": 0.5739130434782609,
+            "actual_mean_prior_percentile": 0.5389082452494964
+          },
+          {
+            "bin": 7,
+            "n": 33,
+            "mean_probability": 0.7451607921940812,
+            "actual_above_usual_fraction": 0.7878787878787878,
+            "actual_mean_prior_percentile": 0.6420985008423432
+          },
+          {
+            "bin": 8,
+            "n": 10,
+            "mean_probability": 0.8489061378320173,
+            "actual_above_usual_fraction": 0.9,
+            "actual_mean_prior_percentile": 0.7151412429378531
+          }
+        ],
+        "quantile_coverage": {
+          "0.1": 0.0630550621669627,
+          "0.25": 0.2024866785079929,
+          "0.5": 0.4715808170515098,
+          "0.75": 0.7566607460035524,
+          "0.9": 0.9023090586145648
+        },
+        "intervals": {
+          "0.8": {
+            "coverage": 0.8392539964476021,
+            "mean_width": 16.850540464073404
+          },
+          "0.95": {
+            "coverage": 0.9609236234458259,
+            "mean_width": 24.96367291674448
+          }
+        },
+        "mean_quantile_pinball_loss": 1.7016795637933932,
+        "point_percentile_spearman": 0.29689033075531485,
+        "point_percentile_mae": 0.2464053854880454
+      }
+    }
+  },
+  "promotion": {
+    "offline_default_updated": true,
+    "previous_model_sha256": "6dcffb54100fd4614539057b81400ff7c388a870b2e4b8a8ed7535fd9b12515f",
+    "selected_model_sha256": "c52b0fe19e39a378bf415b6b7f76eb8f0285631086726ac4596ae3d52fcf9841",
+    "previous_model": "data/nba/workload-model.json",
+    "new_model": "data/nba/model.json",
+    "source": "validation-selected, improves historical/current and earlier-season MAE; same-origin ordering also improves",
+    "live_application_changed": false
+  },
+  "limits": [
+    "Conditional on positive-minute appearance; no DNP accuracy claim.",
+    "Reused research test windows; earlier-season recipe selected using later folds.",
+    "Current-season sample is 50 games. No outliers excluded.",
+    "Live application unchanged."
+  ]
+}

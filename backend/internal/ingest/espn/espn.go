@@ -420,6 +420,15 @@ func split(key, value string) map[string]float64 {
 		if i >= len(values) {
 			break
 		}
+		if name == "minutes" && strings.Contains(values[i], ":") {
+			minutes, seconds, ok := strings.Cut(values[i], ":")
+			m, me := strconv.ParseFloat(minutes, 64)
+			s, se := strconv.ParseFloat(seconds, 64)
+			if ok && me == nil && se == nil && m >= 0 && s >= 0 && s < 60 {
+				stats[name] = m + s/60
+			}
+			continue
+		}
 		number := strings.ReplaceAll(strings.TrimPrefix(values[i], "+"), ",", "") // "+9", "1,039"
 		if n, err := strconv.ParseFloat(number, 64); err == nil {
 			stats[name] = n

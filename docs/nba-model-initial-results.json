@@ -1,0 +1,1475 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-11-05",
+  "experiments": {
+    "historical": {
+      "coverage": {
+        "rows": 100511,
+        "positive_minute_appearances": 81747,
+        "dnp_or_zero_minutes": 18764,
+        "missing_minutes": 178,
+        "games": 3811,
+        "first_sports_day": "2023-10-24",
+        "last_sports_day": "2026-11-04",
+        "rows_by_season": {
+          "2024": 32500,
+          "2025": 32582,
+          "2026": 32148,
+          "2027": 3281
+        }
+      },
+      "dataset": "../data/nba/history.jsonl",
+      "dataset_sha256": "0a65aeb3714906e8b5b41d02704e235a188894fd70291109d6833d3e6a16f5fb",
+      "evaluation": {
+        "from": "2026-01-01T00:00:00Z",
+        "to_exclusive": "2026-07-01T00:00:00Z",
+        "games": 734,
+        "skipped_dnp_or_zero_minutes": 3462,
+        "model": {
+          "n": 15751,
+          "mae": 5.126969176284578,
+          "rmse": 6.5626757587143425,
+          "bias": 0.08914458010580853
+        },
+        "proxy_without_archived_market_or_injuries": {
+          "n": 15751,
+          "mae": 6.3634942113609965,
+          "rmse": 8.418244351817059,
+          "bias": -4.282719379936169
+        },
+        "proxy_if_active": {
+          "n": 15751,
+          "mae": 5.3442973186969525,
+          "rmse": 6.874143052763204,
+          "bias": -0.5169815710357591
+        },
+        "recent_10": {
+          "n": 15751,
+          "mae": 5.255151006913424,
+          "rmse": 6.775325845088853,
+          "bias": -0.19536091686308527
+        },
+        "minutes": {
+          "n": 15751,
+          "mae": 5.071014696376218,
+          "rmse": 6.610859883189503,
+          "bias": 0.19424512087865006
+        },
+        "recent_10_minutes": {
+          "n": 15751,
+          "mae": 5.202518002037321,
+          "rmse": 6.847961539039553,
+          "bias": -0.20571862281618397
+        },
+        "stats": {
+          "ast": {
+            "n": 15751,
+            "mae": 1.3585587052165506,
+            "rmse": 1.8391225788674697,
+            "bias": 0.025027861167078367
+          },
+          "blk": {
+            "n": 15751,
+            "mae": 0.5137735593793233,
+            "rmse": 0.7263803829238423,
+            "bias": -0.006832558980602943
+          },
+          "dd": {
+            "n": 15751,
+            "mae": 0.10613134325070368,
+            "rmse": 0.2289279872430349,
+            "bias": 0.00477711288811275
+          },
+          "fga": {
+            "n": 15751,
+            "mae": 2.8143978685311897,
+            "rmse": 3.654585174060823,
+            "bias": 0.06358966883472286
+          },
+          "fgm": {
+            "n": 15751,
+            "mae": 1.7590247184702343,
+            "rmse": 2.279113870298497,
+            "bias": 0.0230674291512204
+          },
+          "fta": {
+            "n": 15751,
+            "mae": 1.6035970435509326,
+            "rmse": 2.194391737873278,
+            "bias": 0.00692120807322087
+          },
+          "ftm": {
+            "n": 15751,
+            "mae": 1.3182582607802458,
+            "rmse": 1.8420320933698695,
+            "bias": 0.011501067846030845
+          },
+          "pts": {
+            "n": 15751,
+            "mae": 4.594426280457601,
+            "rmse": 5.9731487582418525,
+            "bias": 0.0656217362362909
+          },
+          "pts40": {
+            "n": 15751,
+            "mae": 0.009331603610251435,
+            "rmse": 0.06387033411137984,
+            "bias": 0.0012008477919170633
+          },
+          "pts50": {
+            "n": 15751,
+            "mae": 0.0011166430494784474,
+            "rmse": 0.021083768844133,
+            "bias": 0.0002307165466231588
+          },
+          "reb": {
+            "n": 15751,
+            "mae": 1.8902612627500996,
+            "rmse": 2.4890889441714386,
+            "bias": 0.03221336096476777
+          },
+          "stl": {
+            "n": 15751,
+            "mae": 0.7227565096858387,
+            "rmse": 0.9366520368985916,
+            "bias": -0.0001774007280748051
+          },
+          "td": {
+            "n": 15751,
+            "mae": 0.008724429705758211,
+            "rmse": 0.06331582799522516,
+            "bias": 0.0006481933137373223
+          },
+          "tov": {
+            "n": 15751,
+            "mae": 0.897275113933368,
+            "rmse": 1.1734225228665098,
+            "bias": -0.0009061540228639903
+          },
+          "tpm": {
+            "n": 15751,
+            "mae": 0.8932884406778469,
+            "rmse": 1.2371241046816235,
+            "bias": 0.006539254115282647
+          }
+        },
+        "groups": {
+          "back_to_back": {
+            "n": 2395,
+            "mae": 5.2883466857428,
+            "rmse": 6.747339889840661,
+            "bias": -0.13429125402959177
+          },
+          "cold_start": {
+            "n": 191,
+            "mae": 5.537643155284247,
+            "rmse": 6.748589602377201,
+            "bias": 1.6455457704046024
+          },
+          "established": {
+            "n": 15560,
+            "mae": 5.121928126799431,
+            "rmse": 6.560360921248485,
+            "bias": 0.07003965546910802
+          },
+          "minutes_changing": {
+            "n": 2225,
+            "mae": 5.183386313438545,
+            "rmse": 6.6405398598177365,
+            "bias": -0.32143317594093596
+          },
+          "position_C": {
+            "n": 2292,
+            "mae": 5.696442437096608,
+            "rmse": 7.3536826376979505,
+            "bias": 0.04809373118362487
+          },
+          "position_F": {
+            "n": 5694,
+            "mae": 5.058966956142349,
+            "rmse": 6.479659099445378,
+            "bias": -0.07024508318452696
+          },
+          "position_G": {
+            "n": 7729,
+            "mae": 4.9967566085893,
+            "rmse": 6.361000506204978,
+            "bias": 0.18687481885553522
+          },
+          "position_UNK": {
+            "n": 36,
+            "mae": 7.582104271421896,
+            "rmse": 8.547435816183205,
+            "bias": 6.930707724777594
+          },
+          "previous_meeting_available": {
+            "n": 12428,
+            "mae": 5.200648182207922,
+            "rmse": 6.646368254837015,
+            "bias": 0.13642225894557816
+          },
+          "season_2026": {
+            "n": 15751,
+            "mae": 5.126969176284578,
+            "rmse": 6.5626757587143425,
+            "bias": 0.08914458010580853
+          }
+        },
+        "notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day."
+        ]
+      },
+      "model_trained_before": "2026-01-01T00:00:00Z",
+      "model_training_examples": 61019,
+      "scoring": {
+        "ast": 1,
+        "blk": 2,
+        "dd": 1,
+        "pts": 0.5,
+        "pts40": 2,
+        "pts50": 2,
+        "reb": 1,
+        "stl": 2,
+        "td": 2,
+        "tov": -1,
+        "tpm": 0.5
+      },
+      "selected_config": {
+        "half_life_games": 25,
+        "prior_minutes": 240,
+        "ridge": 0.001,
+        "season_decay": 0.65
+      },
+      "validation_candidates": [
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.138746882003609,
+            "rmse": 6.558458227611478,
+            "bias": 0.1586129416846644
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.177843372299483,
+            "rmse": 6.58201509124312,
+            "bias": 0.3337476554056314
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.351342960588048,
+            "rmse": 6.724654765285018,
+            "bias": 0.6630174074691966
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.132801852055386,
+            "rmse": 6.551473929856935,
+            "bias": 0.19061024721099298
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.169898556589939,
+            "rmse": 6.578058865923126,
+            "bias": 0.3173957897457833
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 10789,
+            "mae": 5.33941125778146,
+            "rmse": 6.726973139584629,
+            "bias": 0.6328127291555862
+          }
+        }
+      ]
+    },
+    "preseason": {
+      "coverage": {
+        "rows": 100511,
+        "positive_minute_appearances": 81747,
+        "dnp_or_zero_minutes": 18764,
+        "missing_minutes": 178,
+        "games": 3811,
+        "first_sports_day": "2023-10-24",
+        "last_sports_day": "2026-11-04",
+        "rows_by_season": {
+          "2024": 32500,
+          "2025": 32582,
+          "2026": 32148,
+          "2027": 3281
+        }
+      },
+      "dataset": "../data/nba/history.jsonl",
+      "dataset_sha256": "0a65aeb3714906e8b5b41d02704e235a188894fd70291109d6833d3e6a16f5fb",
+      "evaluation": {
+        "from": "2026-10-20T00:00:00Z",
+        "to_exclusive": "2026-11-05T00:00:00Z",
+        "games": 121,
+        "skipped_dnp_or_zero_minutes": 563,
+        "model": {
+          "n": 2718,
+          "mae": 5.384189141882838,
+          "rmse": 6.749410191851057,
+          "bias": 0.5665991412389335
+        },
+        "proxy_without_archived_market_or_injuries": {
+          "n": 2718,
+          "mae": 6.23668052198313,
+          "rmse": 8.461706722228925,
+          "bias": -3.313325969114922
+        },
+        "proxy_if_active": {
+          "n": 2718,
+          "mae": 5.416295259142758,
+          "rmse": 6.813586927573837,
+          "bias": 0.9642647570493703
+        },
+        "recent_10": {
+          "n": 2718,
+          "mae": 5.636087495360772,
+          "rmse": 7.096507434755095,
+          "bias": 1.2686694984711968
+        },
+        "minutes": {
+          "n": 2718,
+          "mae": 5.55419239268705,
+          "rmse": 7.1068076033527605,
+          "bias": 0.6004937389389158
+        },
+        "recent_10_minutes": {
+          "n": 2718,
+          "mae": 5.8636024429922555,
+          "rmse": 7.7063567481793305,
+          "bias": 1.2360577409009632
+        },
+        "stats": {
+          "ast": {
+            "n": 2718,
+            "mae": 1.3456070333765333,
+            "rmse": 1.8068667406114376,
+            "bias": 0.09503195527266928
+          },
+          "blk": {
+            "n": 2718,
+            "mae": 0.5289124612880145,
+            "rmse": 0.7288606828994483,
+            "bias": -0.0001901767978460279
+          },
+          "dd": {
+            "n": 2718,
+            "mae": 0.10225724763486657,
+            "rmse": 0.2273007658331178,
+            "bias": -0.0026597402210261733
+          },
+          "fga": {
+            "n": 2718,
+            "mae": 2.96405749610605,
+            "rmse": 3.8021206075505907,
+            "bias": 0.32783226280201755
+          },
+          "fgm": {
+            "n": 2718,
+            "mae": 1.8060406257276749,
+            "rmse": 2.29799894238043,
+            "bias": 0.1864537653981412
+          },
+          "fta": {
+            "n": 2718,
+            "mae": 1.7331286611504004,
+            "rmse": 2.3590484857229956,
+            "bias": 0.03712052264509625
+          },
+          "ftm": {
+            "n": 2718,
+            "mae": 1.4338819902616553,
+            "rmse": 1.9646887610238448,
+            "bias": 0.03750513288361644
+          },
+          "pts": {
+            "n": 2718,
+            "mae": 4.804267774194817,
+            "rmse": 6.108382832654956,
+            "bias": 0.4688888274956517
+          },
+          "pts40": {
+            "n": 2718,
+            "mae": 0.010368555489940166,
+            "rmse": 0.07572111167564889,
+            "bias": -0.0017628387905437777
+          },
+          "pts50": {
+            "n": 2718,
+            "mae": 0.0015008960364725295,
+            "rmse": 0.027012486080470292,
+            "bias": 3.870820359498413e-05
+          },
+          "reb": {
+            "n": 2718,
+            "mae": 1.9262791570339683,
+            "rmse": 2.5088699087583977,
+            "bias": 0.08847145356732343
+          },
+          "stl": {
+            "n": 2718,
+            "mae": 0.7253515209344062,
+            "rmse": 0.9314310408918266,
+            "bias": 0.062485028108233365
+          },
+          "td": {
+            "n": 2718,
+            "mae": 0.006774707998604704,
+            "rmse": 0.053928548705409904,
+            "bias": 0.0010166494806950334
+          },
+          "tov": {
+            "n": 2718,
+            "mae": 0.9594303051347008,
+            "rmse": 1.2488043578310866,
+            "bias": -0.004264923918607252
+          },
+          "tpm": {
+            "n": 2718,
+            "mae": 0.9164302521115057,
+            "rmse": 1.2185166153816072,
+            "bias": 0.047742789090535157
+          }
+        },
+        "groups": {
+          "back_to_back": {
+            "n": 346,
+            "mae": 5.710760736288041,
+            "rmse": 7.162180726837714,
+            "bias": -0.35616434902101096
+          },
+          "cold_start": {
+            "n": 219,
+            "mae": 6.376779924719105,
+            "rmse": 7.667656743164699,
+            "bias": 2.8506655987471676
+          },
+          "established": {
+            "n": 2499,
+            "mae": 5.297203395007642,
+            "rmse": 6.662911384022268,
+            "bias": 0.36643485384625696
+          },
+          "minutes_changing": {
+            "n": 495,
+            "mae": 5.446885093817238,
+            "rmse": 6.728621373854197,
+            "bias": 1.634509161595255
+          },
+          "position_C": {
+            "n": 392,
+            "mae": 5.736874439316201,
+            "rmse": 7.034878362751989,
+            "bias": 0.8042221463353101
+          },
+          "position_F": {
+            "n": 1001,
+            "mae": 5.389079747540468,
+            "rmse": 6.848967581735085,
+            "bias": 0.23406747564737274
+          },
+          "position_G": {
+            "n": 1271,
+            "mae": 5.140005937143452,
+            "rmse": 6.427277087881096,
+            "bias": 0.44961246348806055
+          },
+          "position_UNK": {
+            "n": 54,
+            "mae": 8.480646926449948,
+            "rmse": 9.581239711508172,
+            "bias": 7.759303709400728
+          },
+          "previous_meeting_available": {
+            "n": 2235,
+            "mae": 5.281894556465584,
+            "rmse": 6.65648002231965,
+            "bias": 0.4422960326917307
+          },
+          "season_2027": {
+            "n": 2718,
+            "mae": 5.384189141882838,
+            "rmse": 6.749410191851057,
+            "bias": 0.5665991412389335
+          }
+        },
+        "notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day."
+        ]
+      },
+      "model_trained_before": "2026-10-20T00:00:00Z",
+      "model_training_examples": 76660,
+      "scoring": {
+        "ast": 1,
+        "blk": 2,
+        "dd": 1,
+        "pts": 0.5,
+        "pts40": 2,
+        "pts50": 2,
+        "reb": 1,
+        "stl": 2,
+        "td": 2,
+        "tov": -1,
+        "tpm": 0.5
+      },
+      "selected_config": {
+        "half_life_games": 10,
+        "prior_minutes": 240,
+        "ridge": 0.001,
+        "season_decay": 0.65
+      },
+      "validation_candidates": [
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.10970410957986,
+            "rmse": 6.544105847458393,
+            "bias": 0.03548254569586863
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.135585115937281,
+            "rmse": 6.570103161618393,
+            "bias": 0.010615941865741116
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.235270210474602,
+            "rmse": 6.642503857386309,
+            "bias": 0.07758721439360138
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.1269691762845175,
+            "rmse": 6.56267575871424,
+            "bias": 0.08914458010493974
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.15382027545062,
+            "rmse": 6.590620094466819,
+            "bias": 0.0600102646935245
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 15751,
+            "mae": 5.260413456223837,
+            "rmse": 6.685014771512392,
+            "bias": 0.06115027996419654
+          }
+        }
+      ]
+    },
+    "current": {
+      "coverage": {
+        "rows": 100511,
+        "positive_minute_appearances": 81747,
+        "dnp_or_zero_minutes": 18764,
+        "missing_minutes": 178,
+        "games": 3811,
+        "first_sports_day": "2023-10-24",
+        "last_sports_day": "2026-11-04",
+        "rows_by_season": {
+          "2024": 32500,
+          "2025": 32582,
+          "2026": 32148,
+          "2027": 3281
+        }
+      },
+      "dataset": "../data/nba/history.jsonl",
+      "dataset_sha256": "0a65aeb3714906e8b5b41d02704e235a188894fd70291109d6833d3e6a16f5fb",
+      "evaluation": {
+        "from": "2026-10-30T00:00:00Z",
+        "to_exclusive": "2026-11-05T00:00:00Z",
+        "games": 50,
+        "skipped_dnp_or_zero_minutes": 205,
+        "model": {
+          "n": 1126,
+          "mae": 5.070513386089711,
+          "rmse": 6.400276293970283,
+          "bias": 0.5604898069122266
+        },
+        "proxy_without_archived_market_or_injuries": {
+          "n": 1126,
+          "mae": 6.068035813998711,
+          "rmse": 8.172443053102757,
+          "bias": -3.2597639068102526
+        },
+        "proxy_if_active": {
+          "n": 1126,
+          "mae": 5.199316165879268,
+          "rmse": 6.583003355576761,
+          "bias": 0.8358933171860656
+        },
+        "recent_10": {
+          "n": 1126,
+          "mae": 5.3055463889302334,
+          "rmse": 6.780046354389452,
+          "bias": 0.7927471839907057
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.162696356588654,
+          "rmse": 6.593340402714973,
+          "bias": 0.6448400030417671
+        },
+        "recent_10_minutes": {
+          "n": 1126,
+          "mae": 5.493923694788178,
+          "rmse": 7.258796137222177,
+          "bias": 0.6646481302106573
+        },
+        "stats": {
+          "ast": {
+            "n": 1126,
+            "mae": 1.2926437181106225,
+            "rmse": 1.755504024761644,
+            "bias": 0.05956796665607511
+          },
+          "blk": {
+            "n": 1126,
+            "mae": 0.5020981633216897,
+            "rmse": 0.6930895610954719,
+            "bias": 0.010921574134004264
+          },
+          "dd": {
+            "n": 1126,
+            "mae": 0.0941262302420809,
+            "rmse": 0.21194229696535097,
+            "bias": 0.004496353025490811
+          },
+          "fga": {
+            "n": 1126,
+            "mae": 2.8319316005067083,
+            "rmse": 3.614870743119893,
+            "bias": 0.33759127933180066
+          },
+          "fgm": {
+            "n": 1126,
+            "mae": 1.7453643279620132,
+            "rmse": 2.226670295491522,
+            "bias": 0.21123382404816957
+          },
+          "fta": {
+            "n": 1126,
+            "mae": 1.677516636715916,
+            "rmse": 2.2949838405900445,
+            "bias": 0.014455724657962058
+          },
+          "ftm": {
+            "n": 1126,
+            "mae": 1.3970427690545029,
+            "rmse": 1.911719597675026,
+            "bias": 0.0060108488485734295
+          },
+          "pts": {
+            "n": 1126,
+            "mae": 4.612269797439756,
+            "rmse": 5.896660342579577,
+            "bias": 0.44737872889532937
+          },
+          "pts40": {
+            "n": 1126,
+            "mae": 0.011320423018085566,
+            "rmse": 0.08026299781363012,
+            "bias": -0.0027797309074330634
+          },
+          "pts50": {
+            "n": 1126,
+            "mae": 0.0015806076405806958,
+            "rmse": 0.029822013852710803,
+            "bias": -0.00019306817823332525
+          },
+          "reb": {
+            "n": 1126,
+            "mae": 1.8330646754049718,
+            "rmse": 2.3784694931995003,
+            "bias": 0.1419232534803184
+          },
+          "stl": {
+            "n": 1126,
+            "mae": 0.6982717113939275,
+            "rmse": 0.8950582086539839,
+            "bias": 0.08530970420689092
+          },
+          "td": {
+            "n": 1126,
+            "mae": 0.006240350315850935,
+            "rmse": 0.04879727478606093,
+            "bias": 0.0018744723419635615
+          },
+          "tov": {
+            "n": 1126,
+            "mae": 0.8784429967405645,
+            "rmse": 1.1156454092709618,
+            "bias": 0.0715062875908373
+          },
+          "tpm": {
+            "n": 1126,
+            "mae": 0.9137862583289788,
+            "rmse": 1.2530710254481485,
+            "bias": 0.02410650739826013
+          }
+        },
+        "groups": {
+          "back_to_back": {
+            "n": 104,
+            "mae": 5.35478620780909,
+            "rmse": 6.742882079775868,
+            "bias": -0.38327442708308407
+          },
+          "cold_start": {
+            "n": 62,
+            "mae": 5.472501456197002,
+            "rmse": 6.624058839219547,
+            "bias": 2.5803150283517855
+          },
+          "established": {
+            "n": 1064,
+            "mae": 5.0470892692225595,
+            "rmse": 6.386994584741804,
+            "bias": 0.44279322445992103
+          },
+          "minutes_changing": {
+            "n": 199,
+            "mae": 5.22917214355585,
+            "rmse": 6.121332670810999,
+            "bias": 2.15759077264735
+          },
+          "position_C": {
+            "n": 162,
+            "mae": 5.667835216954621,
+            "rmse": 6.781110038754012,
+            "bias": 0.39254848570277484
+          },
+          "position_F": {
+            "n": 425,
+            "mae": 4.8860355490085965,
+            "rmse": 6.370801539910458,
+            "bias": 0.6293440737768283
+          },
+          "position_G": {
+            "n": 536,
+            "mae": 4.995778452592874,
+            "rmse": 6.254578099386705,
+            "bias": 0.4909347534929897
+          },
+          "position_UNK": {
+            "n": 3,
+            "mae": 12.302136223974395,
+            "rmse": 12.354696825378317,
+            "bias": 12.302136223974395
+          },
+          "previous_meeting_available": {
+            "n": 935,
+            "mae": 5.034946522015526,
+            "rmse": 6.384157749103459,
+            "bias": 0.5900242661694981
+          },
+          "season_2027": {
+            "n": 1126,
+            "mae": 5.070513386089711,
+            "rmse": 6.400276293970283,
+            "bias": 0.5604898069122266
+          }
+        },
+        "notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day."
+        ]
+      },
+      "model_trained_before": "2026-10-30T00:00:00Z",
+      "model_training_examples": 78132,
+      "scoring": {
+        "ast": 1,
+        "blk": 2,
+        "dd": 1,
+        "pts": 0.5,
+        "pts40": 2,
+        "pts50": 2,
+        "reb": 1,
+        "stl": 2,
+        "td": 2,
+        "tov": -1,
+        "tpm": 0.5
+      },
+      "selected_config": {
+        "half_life_games": 25,
+        "prior_minutes": 240,
+        "ridge": 0.001,
+        "season_decay": 0.65
+      },
+      "validation_candidates": [
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.568758722966346,
+            "rmse": 6.943486601257591,
+            "bias": 0.5602553601659628
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.640197006160638,
+            "rmse": 6.977979695338057,
+            "bias": 0.9758900617620565
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 10,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.889307475472762,
+            "rmse": 7.187440116535318,
+            "bias": 1.6805747078920181
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.001,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.49342299660023,
+            "rmse": 6.845284553510265,
+            "bias": 0.6372295690929002
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.01,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.541495002772328,
+            "rmse": 6.857185594316279,
+            "bias": 1.002885543155158
+          }
+        },
+        {
+          "config": {
+            "half_life_games": 25,
+            "prior_minutes": 240,
+            "ridge": 0.1,
+            "season_decay": 0.65
+          },
+          "validation": {
+            "n": 1592,
+            "mae": 5.775114832776374,
+            "rmse": 7.050723985765526,
+            "bias": 1.7844995793753338
+          }
+        }
+      ]
+    },
+    "preseason-late": {
+      "coverage": {
+        "rows": 100511,
+        "positive_minute_appearances": 81747,
+        "dnp_or_zero_minutes": 18764,
+        "missing_minutes": 178,
+        "games": 3811,
+        "first_sports_day": "2023-10-24",
+        "last_sports_day": "2026-11-04",
+        "rows_by_season": {
+          "2024": 32500,
+          "2025": 32582,
+          "2026": 32148,
+          "2027": 3281
+        }
+      },
+      "dataset": "../data/nba/history.jsonl",
+      "dataset_sha256": "0a65aeb3714906e8b5b41d02704e235a188894fd70291109d6833d3e6a16f5fb",
+      "evaluation": {
+        "from": "2026-10-30T00:00:00Z",
+        "to_exclusive": "2026-11-05T00:00:00Z",
+        "games": 50,
+        "skipped_dnp_or_zero_minutes": 205,
+        "model": {
+          "n": 1126,
+          "mae": 5.123234636478797,
+          "rmse": 6.465080424607224,
+          "bias": 0.5755683237151086
+        },
+        "proxy_without_archived_market_or_injuries": {
+          "n": 1126,
+          "mae": 6.068035813998711,
+          "rmse": 8.172443053102755,
+          "bias": -3.259763906810253
+        },
+        "proxy_if_active": {
+          "n": 1126,
+          "mae": 5.199316165879268,
+          "rmse": 6.5830033555767615,
+          "bias": 0.8358933171860659
+        },
+        "recent_10": {
+          "n": 1126,
+          "mae": 5.3055463889302334,
+          "rmse": 6.780046354389452,
+          "bias": 0.7927471839907057
+        },
+        "minutes": {
+          "n": 1126,
+          "mae": 5.17924632335075,
+          "rmse": 6.630158008701503,
+          "bias": 0.6185274127195136
+        },
+        "recent_10_minutes": {
+          "n": 1126,
+          "mae": 5.493923694788178,
+          "rmse": 7.258796137222177,
+          "bias": 0.6646481302106573
+        },
+        "stats": {
+          "ast": {
+            "n": 1126,
+            "mae": 1.3040952501895318,
+            "rmse": 1.7656711103373677,
+            "bias": 0.06570363636166147
+          },
+          "blk": {
+            "n": 1126,
+            "mae": 0.5059457563095587,
+            "rmse": 0.6973351439398304,
+            "bias": 0.011449544921164031
+          },
+          "dd": {
+            "n": 1126,
+            "mae": 0.09488033605841392,
+            "rmse": 0.21380632986018389,
+            "bias": 0.0022612199858466817
+          },
+          "fga": {
+            "n": 1126,
+            "mae": 2.851746078852031,
+            "rmse": 3.6252541552952895,
+            "bias": 0.34737569877700014
+          },
+          "fgm": {
+            "n": 1126,
+            "mae": 1.7607318409146397,
+            "rmse": 2.2394530316986234,
+            "bias": 0.20952334351387114
+          },
+          "fta": {
+            "n": 1126,
+            "mae": 1.6921908844869442,
+            "rmse": 2.3129942261042657,
+            "bias": 0.008248109467429529
+          },
+          "ftm": {
+            "n": 1126,
+            "mae": 1.4100625561556805,
+            "rmse": 1.9280104574547958,
+            "bias": 0.0023296294910428055
+          },
+          "pts": {
+            "n": 1126,
+            "mae": 4.6710286480839605,
+            "rmse": 5.941353633961289,
+            "bias": 0.44719131289658254
+          },
+          "pts40": {
+            "n": 1126,
+            "mae": 0.011211660262955775,
+            "rmse": 0.08081664421808375,
+            "bias": -0.0029903871385001724
+          },
+          "pts50": {
+            "n": 1126,
+            "mae": 0.001659458208866649,
+            "rmse": 0.029853664440461114,
+            "bias": -0.00011463156623967217
+          },
+          "reb": {
+            "n": 1126,
+            "mae": 1.8393935660590717,
+            "rmse": 2.3958299434971875,
+            "bias": 0.1367071101761395
+          },
+          "stl": {
+            "n": 1126,
+            "mae": 0.700120831943765,
+            "rmse": 0.8962374641744006,
+            "bias": 0.08915089819866515
+          },
+          "td": {
+            "n": 1126,
+            "mae": 0.0061828879579649615,
+            "rmse": 0.048617649169896325,
+            "bias": 0.0016701987729502113
+          },
+          "tov": {
+            "n": 1126,
+            "mae": 0.8872505278303872,
+            "rmse": 1.1218444775717702,
+            "bias": 0.061067158774829024
+          },
+          "tpm": {
+            "n": 1126,
+            "mae": 0.9207682708273067,
+            "rmse": 1.2535669999168675,
+            "bias": 0.02007322628383916
+          }
+        },
+        "groups": {
+          "back_to_back": {
+            "n": 104,
+            "mae": 5.316810422295439,
+            "rmse": 6.672136370191271,
+            "bias": -0.37656133437723754
+          },
+          "cold_start": {
+            "n": 62,
+            "mae": 5.674592860636554,
+            "rmse": 6.803339631610063,
+            "bias": 2.928404902558545
+          },
+          "established": {
+            "n": 1064,
+            "mae": 5.091106619657571,
+            "rmse": 6.444822454546572,
+            "bias": 0.43846694412084847
+          },
+          "minutes_changing": {
+            "n": 199,
+            "mae": 5.338613256082865,
+            "rmse": 6.252322976877227,
+            "bias": 2.286740661101112
+          },
+          "position_C": {
+            "n": 162,
+            "mae": 5.749515648923376,
+            "rmse": 6.881373960633253,
+            "bias": 0.31997204215788255
+          },
+          "position_F": {
+            "n": 425,
+            "mae": 4.937411238232158,
+            "rmse": 6.437041850372512,
+            "bias": 0.6425573101131089
+          },
+          "position_G": {
+            "n": 536,
+            "mae": 5.040224868724675,
+            "rmse": 6.305759166240067,
+            "bias": 0.5331851589759742
+          },
+          "position_UNK": {
+            "n": 3,
+            "mae": 12.460119888147318,
+            "rmse": 12.511871076984182,
+            "bias": 12.460119888147318
+          },
+          "previous_meeting_available": {
+            "n": 935,
+            "mae": 5.0862448325575205,
+            "rmse": 6.4547938436563275,
+            "bias": 0.5931347793657662
+          },
+          "season_2027": {
+            "n": 1126,
+            "mae": 5.123234636478797,
+            "rmse": 6.465080424607224,
+            "bias": 0.5755683237151086
+          }
+        },
+        "notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day."
+        ]
+      },
+      "model_trained_before": "2026-10-20T00:00:00Z",
+      "model_training_examples": 76660,
+      "scoring": {
+        "ast": 1,
+        "blk": 2,
+        "dd": 1,
+        "pts": 0.5,
+        "pts40": 2,
+        "pts50": 2,
+        "reb": 1,
+        "stl": 2,
+        "td": 2,
+        "tov": -1,
+        "tpm": 0.5
+      },
+      "selected_config": {
+        "half_life_games": 10,
+        "prior_minutes": 240,
+        "ridge": 0.001,
+        "season_decay": 0.65
+      },
+      "validation_candidates": null
+    },
+    "local": {
+      "coverage": {
+        "rows": 100511,
+        "positive_minute_appearances": 81747,
+        "dnp_or_zero_minutes": 18764,
+        "missing_minutes": 178,
+        "games": 3811,
+        "first_sports_day": "2023-10-24",
+        "last_sports_day": "2026-11-04",
+        "rows_by_season": {
+          "2024": 32500,
+          "2025": 32582,
+          "2026": 32148,
+          "2027": 3281
+        }
+      },
+      "dataset": "../data/nba/history.jsonl",
+      "dataset_sha256": "0a65aeb3714906e8b5b41d02704e235a188894fd70291109d6833d3e6a16f5fb",
+      "evaluation": {
+        "from": "2026-10-20T00:00:00Z",
+        "to_exclusive": "2026-11-05T00:00:00Z",
+        "games": 14,
+        "skipped_dnp_or_zero_minutes": 63,
+        "model": {
+          "n": 322,
+          "mae": 5.519845761520002,
+          "rmse": 6.999749414834693,
+          "bias": -0.035955828348022696
+        },
+        "proxy_without_archived_market_or_injuries": {
+          "n": 322,
+          "mae": 6.0357794625902335,
+          "rmse": 8.432619819441044,
+          "bias": -3.1714292760434475
+        },
+        "proxy_if_active": {
+          "n": 322,
+          "mae": 5.5044014630927585,
+          "rmse": 7.1507723363037625,
+          "bias": 0.7735576790574543
+        },
+        "recent_10": {
+          "n": 322,
+          "mae": 5.921813811552267,
+          "rmse": 7.321338664293174,
+          "bias": 2.571999035223611
+        },
+        "minutes": {
+          "n": 322,
+          "mae": 6.5347675749408305,
+          "rmse": 8.148262360333113,
+          "bias": -0.4949036108614147
+        },
+        "recent_10_minutes": {
+          "n": 322,
+          "mae": 6.4743816122440165,
+          "rmse": 8.39784016359906,
+          "bias": 2.889118214858214
+        },
+        "stats": {
+          "ast": {
+            "n": 322,
+            "mae": 1.418602050023583,
+            "rmse": 1.8720363346127087,
+            "bias": 0.09100769453037558
+          },
+          "blk": {
+            "n": 322,
+            "mae": 0.54064461928347,
+            "rmse": 0.7746909911604816,
+            "bias": -0.03395493050772933
+          },
+          "dd": {
+            "n": 322,
+            "mae": 0.09893989708593082,
+            "rmse": 0.22197109553666908,
+            "bias": -0.0076740686013875474
+          },
+          "fga": {
+            "n": 322,
+            "mae": 3.2777559234455067,
+            "rmse": 4.28221666638779,
+            "bias": -0.014212471490912513
+          },
+          "fgm": {
+            "n": 322,
+            "mae": 1.9236371266093544,
+            "rmse": 2.497709966038412,
+            "bias": 0.05807106450216393
+          },
+          "fta": {
+            "n": 322,
+            "mae": 1.9109073528010359,
+            "rmse": 2.6691713343350836,
+            "bias": -0.4093111343242155
+          },
+          "ftm": {
+            "n": 322,
+            "mae": 1.5786381372494465,
+            "rmse": 2.206810172363311,
+            "bias": -0.2770911226945414
+          },
+          "pts": {
+            "n": 322,
+            "mae": 5.214661768266578,
+            "rmse": 6.763544820480308,
+            "bias": -0.03790082635093109
+          },
+          "pts40": {
+            "n": 322,
+            "mae": 0.010266251058591747,
+            "rmse": 0.07776878015215663,
+            "bias": -0.0018697720263105577
+          },
+          "pts50": {
+            "n": 322,
+            "mae": 0.0007119859286957732,
+            "rmse": 0.0013372302884568572,
+            "bias": 0.0007119859286957732
+          },
+          "reb": {
+            "n": 322,
+            "mae": 1.858788515840081,
+            "rmse": 2.4599107936470546,
+            "bias": -0.1155942300533321
+          },
+          "stl": {
+            "n": 322,
+            "mae": 0.7522504904733912,
+            "rmse": 1.0156091438643406,
+            "bias": -0.07179973216951306
+          },
+          "td": {
+            "n": 322,
+            "mae": 0.0038048106341225284,
+            "rmse": 0.012549827552609376,
+            "bias": 0.0038048106341225284
+          },
+          "tov": {
+            "n": 322,
+            "mae": 0.9987050036777322,
+            "rmse": 1.296440027947525,
+            "bias": -0.16971036813273832
+          },
+          "tpm": {
+            "n": 322,
+            "mae": 0.9058494886332051,
+            "rmse": 1.2344963628345569,
+            "bias": 0.10352019420103614
+          }
+        },
+        "groups": {
+          "cold_start": {
+            "n": 31,
+            "mae": 7.436255808685101,
+            "rmse": 8.669502825307811,
+            "bias": 6.357603224788708
+          },
+          "established": {
+            "n": 291,
+            "mae": 5.315692113883861,
+            "rmse": 6.7977411160985355,
+            "bias": -0.7170566209502169
+          },
+          "minutes_changing": {
+            "n": 46,
+            "mae": 5.843574021254631,
+            "rmse": 7.66066804721676,
+            "bias": 0.37344141901658323
+          },
+          "position_C": {
+            "n": 46,
+            "mae": 5.773381464882719,
+            "rmse": 7.703952181221941,
+            "bias": -0.6506616403230774
+          },
+          "position_F": {
+            "n": 111,
+            "mae": 5.298552141968619,
+            "rmse": 6.628012916253664,
+            "bias": -0.35647821709856903
+          },
+          "position_G": {
+            "n": 135,
+            "mae": 5.155657391996026,
+            "rmse": 6.582052879970656,
+            "bias": -1.0096428238616963
+          },
+          "position_UNK": {
+            "n": 30,
+            "mae": 7.588725071561888,
+            "rmse": 8.797303742092907,
+            "bias": 6.474117401535617
+          },
+          "previous_meeting_available": {
+            "n": 261,
+            "mae": 5.08983009675222,
+            "rmse": 6.469982299914919,
+            "bias": -0.3108787326877245
+          },
+          "season_2027": {
+            "n": 322,
+            "mae": 5.519845761520002,
+            "rmse": 6.999749414834693,
+            "bias": -0.035955828348022696
+          }
+        },
+        "notes": [
+          "Conditional on appearing with positive minutes; DNP outcomes are retained in data but excluded from these accuracy metrics. Availability is not yet trained.",
+          "All features use completed prior sports days; current box-score minutes, starts, position and stats are outcomes only.",
+          "Proxy reuses the application's Baseline and Points functions on reconstructed prior game totals. Archived pregame odds and injury snapshots are unavailable, so market factors are neutral and current injury flags are not replayed.",
+          "Opponent defense uses current-season G/F/C buckets and schedule-adjusted per-minute residuals, not actual individual defensive matchups.",
+          "Coefficients are frozen during evaluation; player history and opponent features update after each completed day."
+        ]
+      },
+      "model_trained_before": "2026-10-20T00:00:00Z",
+      "model_training_examples": 76660,
+      "scoring": {
+        "ast": 1,
+        "blk": 2,
+        "dd": 1,
+        "pts": 0.5,
+        "pts40": 2,
+        "pts50": 2,
+        "reb": 1,
+        "stl": 2,
+        "td": 2,
+        "tov": -1,
+        "tpm": 0.5
+      },
+      "selected_config": {
+        "half_life_games": 10,
+        "prior_minutes": 240,
+        "ridge": 0.001,
+        "season_decay": 0.65
+      },
+      "validation_candidates": null
+    }
+  }
+}

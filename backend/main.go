@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -33,6 +34,7 @@ import (
 	"crossover/internal/lineup"
 	"crossover/internal/live"
 	"crossover/internal/mail"
+	"crossover/internal/nbalive"
 	"crossover/internal/players"
 	"crossover/internal/roster"
 	"crossover/internal/scoring"
@@ -336,6 +338,16 @@ func run(log *slog.Logger) error {
 	drafts := draft.NewService(pool, events, log)
 	go drafts.RunClock(ctx)
 
+	var nba *nbalive.Service
+	if path := os.Getenv("NBA_PROJECTIONS_PATH"); path != "" {
+		nba = nbalive.NewService(pool, path, log)
+		if err := nba.Reload(ctx); err != nil {
+			log.Warn("NBA forecasts not ready; using proxy fallback", "err", err)
+		}
+		go nba.Run(ctx)
+	}
+	lineups := lineup.NewService(pool, registry)
+	lineups.NBA = nba
 	playerService := players.NewService(pool, registry)
 	playerService.Cache = responseCache
 	server := &web.Server{
@@ -350,7 +362,7 @@ func run(log *slog.Logger) error {
 		Drafts:         drafts,
 		Trades:         trade.NewService(pool),
 		Waivers:        waivers,
-		Lineups:        lineup.NewService(pool, registry),
+		Lineups:        lineups,
 		Scoring:        scores,
 		Live:           games,
 		Log:            log,
@@ -379,9 +391,20 @@ func run(log *slog.Logger) error {
 			return nil
 		}
 	}
+	handler := http.NewServeMux()
+	handler.HandleFunc("GET /healthz/nba", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		status := nba.Status()
+		if nba != nil && status["available"] != true {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		json.NewEncoder(w).Encode(status)
+	})
+	handler.Handle("/", server.Handler())
 	httpServer := &http.Server{
 		Addr:              env("ADDR", ":8090"),
-		Handler:           server.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
