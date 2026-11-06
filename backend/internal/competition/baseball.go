@@ -3,7 +3,9 @@ package competition
 import (
 	"crossover/internal/ingest"
 	"crossover/internal/ingest/mlbam"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
+	"time"
 )
 
 func mlb(client *ingest.Client) Competition {
@@ -34,6 +36,7 @@ func mlb(client *ingest.Client) Competition {
 	source := mlbam.New(client)
 	return Competition{
 		Key: "mlb", Name: "MLB",
+		Play:      projection.Shape{Periods: 9, Length: 3 * time.Hour, Spread: 0.9},
 		Positions: []string{"SP", "RP", "P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH", "TWP"},
 		Stats: []Stat{
 			{"bat_tb", "Total bases"}, {"bat_r", "Runs"}, {"bat_h", "Hits"}, {"bat_hr", "Home runs"}, {"bat_rbi", "Runs batted in"},

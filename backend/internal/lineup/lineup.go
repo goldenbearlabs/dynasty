@@ -127,6 +127,7 @@ type Game struct {
 	// a finished game can be held up against what was expected of it.
 	Expected float64 `json:"expected"`
 	market   projection.Game
+	detail   string // where a game under way stands, as the feed says it
 	// Stats is his stat line, by the competition's stat keys; empty until he plays.
 	Stats json.RawMessage `json:"stats"`
 }
@@ -299,7 +300,7 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 		p := &view.Players[len(view.Players)-1]
 		p.Games = append(p.Games, Game{
 			GameID: r.GameID, Day: r.GameDay.Time.Format(time.DateOnly), StartsAt: r.StartsAt.Time, Status: r.GameStatus,
-			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true, Stats: r.Stats, Starter: r.Starter,
+			Opponent: r.Opponent, AtHome: r.AtHome, Points: r.Points, Counts: true, Stats: r.Stats, Starter: r.Starter, detail: r.GameDetail,
 			market: projection.Game{
 				TeamScore: r.TeamImplied, OpponentScore: r.OpponentImplied, Win: r.WinChance,
 				Starter: r.Starter, Injured: r.InjuryDesignation != "",
@@ -350,11 +351,10 @@ func gamesCounted(rules settings.Lineup, slot string) int {
 // settle works out which of a player's games count, his points, and
 // whether he can still be moved. Under the game-start rule:
 //   - a starter whose every game counts locks when his first game begins;
-//   - a starter in a slot that counts only some games locks when the first
-//     game that counts begins, so an earlier game he sat out does not hold him,
-//     and neither does a picked game he finished without a stat;
-//   - a bench player who could fill such a slot stays free while he has a
-//     game left to count.
+//   - a starter in a slot that counts only some games locks once a game of
+//     his that counts has begun (see counting);
+//   - a bench player who could fill such a slot is always free: none of his
+//     games count, and coming in only his games still to start can.
 //
 // mult is 2 in a doubled matchup, where such a slot counts twice the games.
 func settle(p *Player, rules settings.Lineup, now time.Time, mult int) {
@@ -407,18 +407,39 @@ func settle(p *Player, rules settings.Lineup, now time.Time, mult int) {
 	if rules.Lock != settings.LockGameStart {
 		return
 	}
-	started := func(g Game) bool { return !g.StartsAt.After(now) }
 	switch {
-	case limit > 0 && p.CountsLast:
-		// Any game of his may yet be the one that counts, so the first to begin holds him.
-		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Day >= p.CountsFrom && started(g) })
 	case limit > 0:
-		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && started(g) })
+		p.Locked = counting(*p, now)
 	case p.Slot == "" && slices.ContainsFunc(rules.Slots, func(s settings.Slot) bool { return s.GamesPerWeek > 0 && Fits(p.Positions, s) }):
-		p.Locked = len(p.Games) > 0 && !slices.ContainsFunc(p.Games, func(g Game) bool { return !started(g) })
+		p.Locked = false
 	default:
-		p.Locked = slices.ContainsFunc(p.Games, started)
+		p.Locked = slices.ContainsFunc(p.Games, func(g Game) bool { return !g.StartsAt.After(now) })
 	}
+}
+
+// counting reports whether a starter in a slot that counts only some games
+// has begun a game that counts for him, which holds him in the slot for
+// the rest of the week. With a game picked, that is the picked game (or the
+// one standing in for it). On auto it is his last game of the week, so he
+// is free until it begins; then whichever of his games has a stat counts.
+// A game he finished without a stat never holds him.
+func counting(p Player, now time.Time) bool {
+	started := func(g Game) bool { return !g.StartsAt.After(now) }
+	if !p.CountsLast {
+		return slices.ContainsFunc(p.Games, func(g Game) bool { return g.Counts && started(g) })
+	}
+	mine := func(g Game) bool { return g.Day >= p.CountsFrom }
+	if slices.ContainsFunc(p.Games, func(g Game) bool { return mine(g) && !started(g) }) {
+		return false
+	}
+	return slices.ContainsFunc(p.Games, func(g Game) bool { return mine(g) && started(g) && !(g.Status == "final" && !recorded(g.Stats)) })
+}
+
+// tomorrow is the day a player's counted games begin when he comes into a
+// slot with none of his week's games left to start: after all of them, so
+// none he has already played can count.
+func tomorrow() string {
+	return sportsday.Today().AddDate(0, 0, 1).Format(time.DateOnly)
 }
 
 // recorded reports whether a stat line has any stat in it: whether he
@@ -455,7 +476,7 @@ func pick(p Player, e Entry, first, last string, now time.Time, force bool) (str
 		}
 		i := slices.IndexFunc(p.Games, func(g Game) bool { return g.StartsAt.After(now) })
 		if i < 0 {
-			return "", problem.New("%s has no games left this week.", p.FullName)
+			return tomorrow(), nil // he may start, but nothing he has played counts
 		}
 		return p.Games[i].Day, nil
 	}
@@ -474,7 +495,7 @@ func pick(p Player, e Entry, first, last string, now time.Time, force bool) (str
 
 // joinedOn is the day a starter came into a slot that counts only some
 // games: kept while he stays in it, or, coming in, the day of his next game
-// once one of his this week has begun. Empty is from the start of the week,
+// (or tomorrow, with none left) once one of his this week has begun. Empty is from the start of the week,
 // as it is for any pick the commissioner forces.
 func joinedOn(p Player, slot string, now time.Time) string {
 	if p.Slot == slot {
@@ -486,7 +507,7 @@ func joinedOn(p Player, slot string, now time.Time) string {
 	if i := slices.IndexFunc(p.Games, func(g Game) bool { return g.StartsAt.After(now) }); i >= 0 {
 		return p.Games[i].Day
 	}
-	return ""
+	return tomorrow()
 }
 
 // Set replaces the lineup for a day (or the week containing it). Every
@@ -749,19 +770,11 @@ func Held(ctx context.Context, q *db.Queries, league db.League, franchiseID, pla
 	if i < 0 {
 		return nil
 	}
-	p, now := view.Players[i], time.Now()
+	p := view.Players[i]
 	if p.Slot == "" || gamesCounted(settings.Lineup{Slots: view.Slots}, p.Slot) == 0 {
 		return nil
 	}
-	// On auto nothing counts until the week is played out, so any game of
-	// his that has begun and was not missed may be the one.
-	mayCount := func(g Game) bool {
-		if p.CountsLast {
-			return g.Day >= p.CountsFrom && !(g.Status == "final" && !recorded(g.Stats))
-		}
-		return g.Counts
-	}
-	if slices.ContainsFunc(p.Games, func(g Game) bool { return mayCount(g) && !g.StartsAt.After(now) }) {
+	if counting(p, time.Now()) {
 		return problem.New("%s has played in his game that counts this week, so he stays in your lineup until the week is over.", p.FullName)
 	}
 	return nil

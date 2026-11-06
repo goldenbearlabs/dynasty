@@ -350,11 +350,10 @@ func TestAutoLastGame(t *testing.T) {
 	}
 	finish("za-y1", 6)
 	line("za-y1", "Zqauto Forward", `{"pts": 12}`)
-	if got, p := total(), lineup()["Zqauto Forward"]; !p.Locked || p.Points != 0 || got != 0 {
-		t.Fatalf("after his first game: %+v, total %v; want locked with nothing counted while games are to come", p, got)
+	// Nothing of his counts while games are to come, so he is still free.
+	if got, p := total(), lineup()["Zqauto Forward"]; p.Locked || p.Points != 0 || got != 0 {
+		t.Fatalf("after his first game: %+v, total %v; want free with nothing counted while games are to come", p, got)
 	}
-	// He has played, so he stays until the week is over.
-	ann.want(http.StatusUnprocessableEntity, "POST", "/api/leagues/"+league+"/roster/drop", map[string]any{"player_id": id["Zqauto Forward"]}, nil)
 	finish("za-y2", 4)
 	line("za-y2", "Zqauto Forward", `{"pts": 0, "reb": 0}`) // sat out
 	if got := total(); got != 0 {
@@ -362,9 +361,11 @@ func TestAutoLastGame(t *testing.T) {
 	}
 	finish("za-y3", 2)
 	line("za-y3", "Zqauto Forward", `{"pts": 5, "reb": 2}`)
-	if got, p := total(), lineup()["Zqauto Forward"]; math.Abs(got-7) > 0.001 || p.Points != 7 {
-		t.Fatalf("total = %v, forward %+v; want 7 from his last game, in place of the 12", got, p)
+	if got, p := total(), lineup()["Zqauto Forward"]; math.Abs(got-7) > 0.001 || p.Points != 7 || !p.Locked {
+		t.Fatalf("total = %v, forward %+v; want 7 from his last game, in place of the 12, and him locked", got, p)
 	}
+	// His game has counted, so he stays until the week is over.
+	ann.want(http.StatusUnprocessableEntity, "POST", "/api/leagues/"+league+"/roster/drop", map[string]any{"player_id": id["Zqauto Forward"]}, nil)
 	// A locked player cannot be moved, by hand or by auto set.
 	ann.want(http.StatusUnprocessableEntity, "PUT", lineupURL, map[string]any{"day": day(0), "entries": []map[string]any{
 		{"slot": "G", "player_id": id["Zqauto Guard"], "auto": true},

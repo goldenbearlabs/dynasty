@@ -5,6 +5,7 @@ import (
 
 	"crossover/internal/ingest"
 	"crossover/internal/ingest/espn"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
 )
 
@@ -93,6 +94,7 @@ func cbb(client *ingest.Client) Competition {
 	})
 	return Competition{
 		Key: "cbb", Name: "College Basketball", Conferences: collegeConferenceCatalog,
+		Play:      projection.Shape{Periods: 2, Minutes: 20, Length: 2 * time.Hour, Spread: 0.45},
 		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
 		Season: [2]string{"11-03", "04-06"},
 		Source: source, Games: source, Seasons: source,
@@ -132,6 +134,7 @@ func nba(client *ingest.Client) Competition {
 	})
 	return Competition{
 		Key: "nba", Name: "NBA",
+		Play:      projection.Shape{Periods: 4, Minutes: 12, Length: 135 * time.Minute, Spread: 0.35},
 		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
 		Season: [2]string{"10-20", "04-12"},
 		Source: source, Games: source, Seasons: source,
@@ -158,6 +161,7 @@ func wnba(client *ingest.Client) Competition {
 	})
 	return Competition{
 		Key: "wnba", Name: "WNBA",
+		Play:      projection.Shape{Periods: 4, Minutes: 10, Length: 2 * time.Hour, Spread: 0.4},
 		Positions: basketballPositions, Stats: basketballStats, Defaults: rules,
 		Season: [2]string{"05-08", "09-25"},
 		Source: source, Games: source, Seasons: source,

@@ -5,6 +5,7 @@ import (
 
 	"crossover/internal/ingest"
 	"crossover/internal/ingest/espn"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
 )
 
@@ -49,6 +50,7 @@ func nfl(client *ingest.Client) Competition {
 	})
 	return Competition{
 		Key: "nfl", Name: "NFL",
+		Play:      projection.Shape{Periods: 4, Minutes: 15, Length: 195 * time.Minute, Spread: 0.6},
 		Positions: footballPositions,
 		Stats: []Stat{
 			{"pass_yds", "Passing yards"}, {"pass_td", "Passing touchdowns"}, {"interceptions", "Interceptions thrown"},

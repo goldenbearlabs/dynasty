@@ -136,6 +136,7 @@ select p.id as player_id, p.full_name, p.positions, p.headshot_url,
        coalesce(n.nickname, '')::text as nickname,
        coalesce(t.abbrev, '')::text as team_abbrev, coalesce(t.conference, '')::text as conference,
        g.id as game_id, g.day as game_day, g.starts_at, coalesce(g.status, '')::text as game_status,
+       coalesce(g.detail, '')::text as game_detail, -- where a game under way stands: "7:32 - 3rd"
        coalesce(case when g.home_team_id = p.pro_team_id then away.abbrev else home.abbrev end, '')::text as opponent,
        coalesce(g.home_team_id = p.pro_team_id, false)::boolean as at_home,
        coalesce(sl.points, 0)::float8 as points,

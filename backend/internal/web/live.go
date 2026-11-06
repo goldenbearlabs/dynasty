@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"crossover/internal/problem"
+	"crossover/internal/projection"
 	"crossover/internal/scoring"
 	"crossover/internal/sportsday"
 )
@@ -141,12 +142,14 @@ func (s *Server) getMatchup(w http.ResponseWriter, r *http.Request) {
 }
 
 // projectedMatchup is a matchup with each side's projected final score:
-// its points so far and what its starters are projected to add. The
-// projections are absent once the matchup is final.
+// its points so far and what its starters are projected to add. The home
+// side's chance of winning comes from those and how far each could swing.
+// All are absent once the matchup is final, and the chance on a bye.
 type projectedMatchup struct {
 	scoring.MatchupDetail
 	HomeProjected *float64 `json:"home_projected"`
 	AwayProjected *float64 `json:"away_projected"`
+	HomeWinChance *float64 `json:"home_win_chance"`
 }
 
 func (s *Server) projectMatchup(ctx context.Context, m scoring.MatchupDetail) (projectedMatchup, error) {
@@ -162,19 +165,28 @@ func (s *Server) projectMatchup(ctx context.Context, m scoring.MatchupDetail) (p
 	if err != nil {
 		return out, err
 	}
-	side := func(franchise pgtype.UUID, points float64) (*float64, error) {
+	side := func(franchise pgtype.UUID, points float64) (projection.Outlook, *float64, error) {
 		if !franchise.Valid {
-			return nil, nil // a bye
+			return projection.Outlook{}, nil, nil // a bye
 		}
-		ahead, err := s.Lineups.Projected(ctx, league, franchise, m.Period.StartsOn.Time, m.Period.EndsOn.Time)
-		total := points + ahead
-		return &total, err
+		outlook, err := s.Lineups.Projected(ctx, league, franchise, m.Period.StartsOn.Time, m.Period.EndsOn.Time)
+		outlook.Points += points
+		return outlook, &outlook.Points, err
 	}
-	if out.HomeProjected, err = side(m.Home, m.HomePoints); err != nil {
+	home, homeTotal, err := side(m.Home, m.HomePoints)
+	if err != nil {
 		return out, err
 	}
-	out.AwayProjected, err = side(m.Away, m.AwayPoints)
-	return out, err
+	away, awayTotal, err := side(m.Away, m.AwayPoints)
+	if err != nil {
+		return out, err
+	}
+	out.HomeProjected, out.AwayProjected = homeTotal, awayTotal
+	if awayTotal != nil {
+		chance := projection.WinChance(home, away)
+		out.HomeWinChance = &chance
+	}
+	return out, nil
 }
 
 // setMatchups replaces a period's matchups with the commissioner's own.

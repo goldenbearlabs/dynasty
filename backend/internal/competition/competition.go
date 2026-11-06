@@ -6,6 +6,7 @@ package competition
 import (
 	"crossover/internal/ingest"
 	"crossover/internal/ingest/espn"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
 )
 
@@ -29,6 +30,10 @@ type Competition struct {
 
 	Injuries ingest.InjurySource  `json:"-"`
 	Previews ingest.PreviewSource `json:"-"` // betting lines and probable starters
+
+	// Play is how a game runs, for a live projection: its periods and
+	// clock, and how far one game's points stray from the projection.
+	Play projection.Shape `json:"-"`
 
 	// Follows says what a stat's projection moves with when a game has a
 	// betting line: "opponent" (the other side's implied score), "win" or

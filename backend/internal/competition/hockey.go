@@ -3,7 +3,9 @@ package competition
 import (
 	"crossover/internal/ingest"
 	"crossover/internal/ingest/nhle"
+	"crossover/internal/projection"
 	"crossover/internal/settings"
+	"time"
 )
 
 func nhl(client *ingest.Client) Competition {
@@ -24,6 +26,7 @@ func nhl(client *ingest.Client) Competition {
 	source := nhle.New(client)
 	return Competition{
 		Key: "nhl", Name: "NHL",
+		Play:      projection.Shape{Periods: 3, Minutes: 20, Length: 150 * time.Minute, Spread: 0.9},
 		Positions: []string{"C", "L", "R", "D", "G"},
 		Stats: []Stat{
 			{"goals", "Goals"}, {"assists", "Assists"}, {"shots", "Shots on goal"},

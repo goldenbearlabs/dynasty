@@ -503,6 +503,8 @@ export type MatchupDetail = Matchup & {
 	/** Each side's points so far plus what its starters are projected to add; null once final, or for a bye. */
 	home_projected: number | null;
 	away_projected: number | null;
+	/** The home side's chance of winning, 0 to 1, from those projections and how far each could swing; null once final, or for a bye. */
+	home_win_chance: number | null;
 };
 
 // ---- scores ----

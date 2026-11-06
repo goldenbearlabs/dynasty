@@ -90,6 +90,13 @@
 	// The viewer's own team on the left, wherever the schedule put it.
 	const flipped = $derived(!!matchup && matchup.away_franchise_id !== null && matchup.away_franchise_id === page.data.me?.id);
 	const facing = $derived(flipped ? [sides[1], sides[0]] : sides);
+	// Each side's chance of winning, in the order shown.
+	const chances = $derived.by(() => {
+		const home = matchup?.home_win_chance;
+		if (home == null) return undefined;
+		return flipped ? [1 - home, home] : [home, 1 - home];
+	});
+	const percent = (c: number) => (c > 0.99 && c < 1 ? '>99%' : c < 0.01 && c > 0 ? '<1%' : `${Math.round(c * 100)}%`);
 	// The scoreboards of the days in view give each game's clock and score; they reload with every score change.
 	const scoreDays = $derived([...new Set(sides.flatMap(s => s.rows.flatMap(r => r.games.map(g => g.day))))].sort().join(','));
 	$effect(() => {
@@ -135,6 +142,13 @@
 				</div>
 				{#if index === 0}<div class="score-state"><span class="pill" class:good={!matchup.final && sportsToday() >= matchup.period.starts_on}>{matchup.final ? 'Final' : sportsToday() < matchup.period.starts_on ? 'Upcoming' : 'In progress'}</span>{#if matchup.period.double_games}<small>Double games</small>{/if}</div>{/if}
 			{/each}
+			{#if chances}
+				<div class="win" title="Chance of winning: points so far plus what the starters are projected to add, allowing for how far each game could swing">
+					<span class:ahead={chances[0] >= chances[1]}>{percent(chances[0])}</span>
+					<div class="win-bar" role="img" aria-label="Win chance {percent(chances[0])} to {percent(chances[1])}"><i style:width="{chances[0] * 100}%"></i></div>
+					<span class:ahead={chances[1] > chances[0]}>{percent(chances[1])}</span>
+				</div>
+			{/if}
 		</section>
 
 		<div class="spread view-controls">
@@ -197,6 +211,10 @@
 	.score { font: 800 1.65rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
 	.leader .score { color: var(--sport); }
 	.score .proj { display: block; font: italic 500 .65rem var(--body); color: var(--ink-soft); }
+	.win { grid-column: 1 / -1; display: flex; align-items: center; gap: .5rem; font: 700 .7rem var(--mono); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+	.win .ahead { color: var(--sport); }
+	.win-bar { flex: 1; height: .35rem; border-radius: 1rem; background: var(--rule); overflow: hidden; }
+	.win-bar i { display: block; height: 100%; background: var(--sport); transition: width .4s ease; }
 	.score-state { display: grid; gap: .2rem; text-align: center; justify-items: center; }
 	.score-state .pill { font-size: .55rem; }
 	.score-state small { font-size: .6rem; color: var(--ink-soft); }
