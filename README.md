@@ -424,3 +424,10 @@ The [NBA production integration](docs/nba-production.md) serves that model in
 lineups and matchup forecasts, with input/projection refreshes every two hours,
 locked pregame expectations and a health endpoint. Model coefficients remain
 fixed between evaluated releases.
+
+The [CBB projection laboratory](docs/cbb-model.md) adds a four-season college
+corpus, internal opponent-adjusted offense/defense/tempo, player and rotation
+features, and a validated nonlinear minutes correction. It includes
+chronological comparisons, same-origin weekly ranking, uncertainty checks and
+a prospective prediction CLI. Its candidate is offline; live CBB projections
+retain their current behavior.

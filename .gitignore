@@ -19,3 +19,7 @@ frontend/build
 frontend/.svelte-kit
 
 backend/nba-refresh
+
+# college projection research data and environment
+data/cbb/
+.venv-cbb/
