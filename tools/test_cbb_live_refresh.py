@@ -4,17 +4,38 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-from cbb_live_refresh import make_targets, locked_records, merge_corpus, summary_rows, atomic_json, timestamp
+from cbb_live_refresh import make_targets, locked_records, merge_corpus, summary_rows, atomic_json, timestamp, collect_rosters
 
 UTC = dt.timezone.utc
 
 
 class LiveRefreshTests(unittest.TestCase):
+    def test_missing_roster_does_not_abort_other_teams(self):
+        from unittest.mock import Mock
+        feed = Mock()
+        feed.fetch.side_effect = [urllib.error.HTTPError('url', 404, 'missing', {}, None),
+                                 {'athletes': [{'id': '123'}]}, {'athletes': []}]
+        rosters, unavailable = collect_rosters(feed, {1, 2, 3})
+        self.assertEqual(rosters, {2: [{'id': '123'}]})
+        self.assertEqual([r['team'] for r in unavailable], [1, 3])
+
+    def test_transient_roster_failure_and_duplicate_identity_still_fail(self):
+        from unittest.mock import Mock
+        feed = Mock()
+        feed.fetch.side_effect = urllib.error.HTTPError('url', 503, 'unavailable', {}, None)
+        with self.assertRaises(urllib.error.HTTPError): collect_rosters(feed, {1})
+        feed.fetch.side_effect = None
+        feed.fetch.return_value = {'athletes': [{'id': '1'}, {'id': '1'}]}
+        with self.assertRaisesRegex(ValueError, 'Duplicate'): collect_rosters(feed, {1})
+        feed.fetch.return_value = {'athletes': []}
+        with self.assertRaisesRegex(ValueError, 'No upcoming'): collect_rosters(feed, {1})
+
     def event(self):
         return {'id': '12', 'season': {'year': 2027, 'type': 2}, 'competitions': [{
             'date': '2026-11-08T20:00:00Z', 'neutralSite': False, 'status': {'type': {'state': 'pre'}},

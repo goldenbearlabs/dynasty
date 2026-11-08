@@ -274,6 +274,8 @@ export type PlayerProfile = {
 };
 
 export type PlayerFilter = {
+	/** Current CBB team conferences, comma separated. */
+	conferences?: string;
 	ascending?: string;
 	per_game?: string;
 	stat_key?: string;

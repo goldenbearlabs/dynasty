@@ -239,6 +239,7 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 
 	players, err := s.Queries.ListPlayers(r.Context(), db.ListPlayersParams{
 		RankedOnly:  rankedOnly,
+		Conferences: splitPlayerFilter(query.Get("conferences")),
 		Ownership:   splitPlayerFilter(query.Get("ownership")),
 		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,
@@ -263,6 +264,7 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := s.Queries.CountPlayers(r.Context(), db.CountPlayersParams{
 		RankedOnly:  rankedOnly,
+		Conferences: splitPlayerFilter(query.Get("conferences")),
 		Ownership:   splitPlayerFilter(query.Get("ownership")),
 		Owners:      splitPlayerFilter(query.Get("owners")),
 		Competition: competition,

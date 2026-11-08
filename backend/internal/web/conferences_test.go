@@ -59,6 +59,28 @@ func TestCollegeConferenceEligibility(t *testing.T) {
 		ids[x.name] = id
 		exec(`insert into player_seasons (player_id,competition,year,label,team,games,stats,conference) values ($1,'cbb',9999,'conference-test',$2,10,'{"pts":200}',$3)`, id, x.name, x.conference)
 	}
+	// Leaders filters the entire pool and its pagination total by current team
+	// membership; the selected historical season does not change main eligibility.
+	var leaders struct {
+		Players []db.ListPlayersRow `json:"players"`
+		Total   int64               `json:"total"`
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?competition=cbb&conferences=2&q=ACC&sort=points", nil, &leaders)
+	if leaders.Total != 1 || len(leaders.Players) != 1 || leaders.Players[0].ID.String() != ids["ACC"] {
+		t.Fatalf("eligible Leaders pool: %+v", leaders)
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?competition=cbb&conferences=2&q=Ivy", nil, &leaders)
+	if leaders.Total != 0 || len(leaders.Players) != 0 {
+		t.Fatal("ineligible conference appeared in Leaders")
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?competition=cbb&conferences=2,12&q=Ivy", nil, &leaders)
+	if leaders.Total != 1 || len(leaders.Players) != 1 {
+		t.Fatal("multiple conferences were not supported")
+	}
+	ann.want(http.StatusOK, "GET", "/api/players?competition=cbb&q=Ivy", nil, &leaders)
+	if leaders.Total != 1 {
+		t.Fatal("unfiltered Leaders changed")
+	}
 	// Conference history follows the season, including a player now outside the starter pool.
 	exec(`insert into player_seasons (player_id,competition,year,label,team,games,stats,conference) values ($1,'cbb',9998,'conference-old','Old',10,'{"pts":100}','2')`, ids["Ivy"])
 	research := func(season string, explicit bool) players.AnalyticsPage {

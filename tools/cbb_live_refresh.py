@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -74,6 +75,36 @@ class Feed:
                 if attempt == 2:
                     raise
                 time.sleep(2 ** attempt)
+
+
+def collect_rosters(feed, teams):
+    """An absent team roster must not block forecasts for other teams.
+
+    Only a confirmed missing/empty roster is omitted. Transport failures and
+    identity corruption still fail the run, preserving the previous snapshot.
+    """
+    rosters, unavailable = {}, []
+    for team in sorted(teams):
+        url = BASE + '/teams/' + str(team) + '/roster'
+        try:
+            payload = feed.fetch('roster-' + str(team), url)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            unavailable.append({'team': team, 'url': url, 'reason': 'HTTP 404'})
+            LOG.warning('Roster unavailable for team %s; using proxy for its players', team)
+            continue
+        people = payload.get('athletes', [])
+        if not people:
+            unavailable.append({'team': team, 'url': url, 'reason': 'empty roster'})
+            LOG.warning('Empty roster for team %s; using proxy for its players', team)
+            continue
+        if len({p['id'] for p in people}) != len(people):
+            raise ValueError('Duplicate roster identities ' + str(team))
+        rosters[team] = people
+    if teams and not rosters:
+        raise ValueError('No upcoming team rosters available')
+    return rosters, unavailable
 
 
 def seed(root, today):
@@ -355,14 +386,8 @@ def refresh(args):
     if day.month in [11, 12, 1, 2, 3] and age > 7 and not (day.month == 11 and day.day <= 7):
         raise ValueError('CBB completed history is over seven sports days old')
     LOG.info('History ready: %s games, %s rows, through %s', len(data.games), data.n, latest)
-    rosters = {}
     needed = {int(side['team']['id']) for e in scheduled for side in e['competitions'][0]['competitors']}
-    for team in sorted(needed & set(conferences)):
-        payload = feed.fetch('roster-' + str(team), BASE + '/teams/' + str(team) + '/roster')
-        people = payload.get('athletes', [])
-        if not people or len({p['id'] for p in people}) != len(people):
-            raise ValueError('Empty/duplicate roster ' + str(team))
-        rosters[team] = people
+    rosters, unavailable_rosters = collect_rosters(feed, needed & set(conferences))
     names = defaultdict(set)
     for player, name in zip(data.a['player_id'], data.table['name'].to_pylist()):
         names[int(player)].add(normalized(name))
@@ -387,7 +412,7 @@ def refresh(args):
                 'history_through': through.isoformat(), 'model_sha256': hashlib.sha256(model_bytes).hexdigest(),
                 'records': preserved}
     atomic_json(folder / 'manifest.json', {'started_at': started.isoformat(), 'information_cutoff': observed.isoformat(),
-                'captures': feed.captures, 'excluded_games': excluded, 'new_forecasts': len(records), 'preserved_started_forecasts': len(preserved)-len(records),
+                'captures': feed.captures, 'excluded_games': excluded, 'unavailable_rosters': unavailable_rosters, 'new_forecasts': len(records), 'preserved_started_forecasts': len(preserved)-len(records),
                 'note': 'Conditional on playing; no calibrated DNP probabilities or timestamped injury model. No retraining.'})
     archive = root / 'forecast-archive'
     archive.mkdir(exist_ok=True)
@@ -396,7 +421,7 @@ def refresh(args):
     atomic_json(live, snapshot)
     atomic_json(root / 'last-refresh.json', {'completed_at': completed.isoformat(), 'duration_seconds': (completed-started).total_seconds(),
                 'new_forecasts': len(records), 'locked_forecasts': len(preserved)-len(records), 'history_through': latest,
-                'model_sha256': snapshot['model_sha256'], 'capture': str(folder)})
+                'model_sha256': snapshot['model_sha256'], 'unavailable_rosters': unavailable_rosters, 'capture': str(folder)})
     for child in (root / 'live-snapshots').iterdir():
         if child.is_dir() and child.stat().st_mtime < time.time() - 7*86400:
             shutil.rmtree(child)

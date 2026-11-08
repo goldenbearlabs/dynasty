@@ -133,6 +133,7 @@
 		compact
 		statColumns
 		byPoints
+		startingConferences={leagueFor('cbb')?.settings.lineup.conferences ?? data.competitions.find((c) => c.key === 'cbb')?.defaults.lineup.conferences ?? []}
 		competitions={data.competitions}
 		franchises={data.dynasty?.franchises ?? []}
 		{competition}

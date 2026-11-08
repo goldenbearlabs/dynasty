@@ -27,7 +27,10 @@ prediction targets; model roster/role/depth features still use prior completed
 games, matching the tested feature recipe. Historical state is replayed without
 the large research feature matrices. Today's sports-day outcomes are excluded.
 The worker handles regulation and overtime historical games, regular season
-and postseason. Corrupt/incomplete completed games are quarantined in the run
+and postseason. A confirmed missing (HTTP 404) or empty roster is recorded in
+`last-refresh.json` and the run manifest; that team uses the proxy while other
+teams receive model forecasts. Transport errors and duplicate roster identities
+still stop publication. Corrupt/incomplete completed games are quarantined in the run
 manifest; more than 10% failing stops publication. During the regular season,
 history more than seven sports days old also stops publication (with a first
 week of November exception for the new season).

@@ -27,6 +27,8 @@
 
 	type Props = {
 		workspace?: boolean;
+		/** Offer the Leaders Power 7 filter using the league's main-roster conferences. */
+		startingConferences?: string[];
 		franchises?: Franchise[];
 		/** Show one sport, or every sport when empty. */
 		competition?: string;
@@ -63,6 +65,7 @@
 	};
 	let {
 		workspace = false,
+		startingConferences,
 		franchises = [],
 		competition: only = '',
 		competitions = [],
@@ -94,6 +97,7 @@
 	let status = $state('');
 	// MLB prospects only: narrow to those on MLB.com's Top 100.
 	let topHundred = $state(false);
+	let powerSeven = $state(true);
 	const rankable = $derived(competition === 'mlb' && status === 'prospect');
 	let search = $state('');
 	let query = $state(''); // search, applied after a pause in typing
@@ -196,6 +200,7 @@
 		if (competition !== shown) {
 			shown = competition;
 			position = []; // positions belong to a sport
+			powerSeven = competition === 'cbb';
 			chosenStats = null;
 			if (order.startsWith('stat:')) {
 				order = 'points';
@@ -216,6 +221,7 @@
 		loading = true;
 		getPlayers({
 			competition,
+			conferences: competition === 'cbb' && powerSeven ? startingConferences?.join(',') : undefined,
 			ownership: workspace ? ownership.join(',') : undefined,
 			owners: workspace ? owners.join(',') : undefined,
 			status,
@@ -256,6 +262,7 @@
 					maxAge,
 					status,
 					topHundred,
+					powerSeven,
 					search,
 					query,
 					availableOnly,
@@ -288,6 +295,7 @@
 				maxAge = saved.maxAge;
 				status = saved.status;
 				topHundred = saved.topHundred;
+				powerSeven = saved.powerSeven ?? (saved.competition === 'cbb');
 				search = saved.search;
 				query = saved.query;
 				availableOnly = saved.availableOnly;
@@ -355,6 +363,12 @@
 			<option value="prospect">Prospects</option>
 			<option value="inactive">Inactive</option>
 		</select>
+		{#if competition === 'cbb' && startingConferences?.length}
+			<label class="check" title="Only players in this league's main-roster conferences">
+				<input type="checkbox" bind:checked={powerSeven} onchange={() => (page = 1)} />
+				Power 7
+			</label>
+		{/if}
 		{#if rankable}
 			<label class="check top-hundred">
 				<input

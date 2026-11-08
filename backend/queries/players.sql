@@ -180,6 +180,9 @@ left join stat_sort on stat_sort.player_id = p.id and stat_sort.competition = p.
 left join rostered         on rostered.competition = p.competition
 where p.pool_eligible and (sqlc.arg(competition)::text = '' or p.competition = sqlc.arg(competition))
   and (sqlc.arg(status)::text = '' or p.status = sqlc.arg(status))
+  -- Leaders conference filters use current team membership, matching main rosters.
+  and (coalesce(cardinality(sqlc.arg(conferences)::text[]), 0) = 0
+       or (p.competition = 'cbb' and t.conference = any(sqlc.arg(conferences)::text[])))
   -- ranked_only: just the prospects on the MLB Pipeline Top 100.
   and (not sqlc.arg(ranked_only)::boolean or pr.rank is not null)
   and (coalesce(cardinality(sqlc.arg(ownership)::text[]), 0) = 0
@@ -249,9 +252,12 @@ order by competition, year desc;
 -- name: CountPlayers :one
 select count(*)
 from players p
+left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and (@competition::text = '' or p.competition = @competition)
   and (@status::text = '' or p.status = @status)
+  and (coalesce(cardinality(@conferences::text[]), 0) = 0
+       or (p.competition = 'cbb' and t.conference = any(@conferences::text[])))
   and (not @ranked_only::boolean or exists (select 1 from prospect_rankings pr where pr.player_id = p.id and pr.source = 'mlb_pipeline'))
   and (coalesce(cardinality(@ownership::text[]), 0) = 0
        or ('available' = any(@ownership::text[]) and coalesce(r.list, '') = '')

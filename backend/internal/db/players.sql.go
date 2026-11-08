@@ -63,32 +63,36 @@ func (q *Queries) ClearProbableStarters(ctx context.Context, arg ClearProbableSt
 const countPlayers = `-- name: CountPlayers :one
 select count(*)
 from players p
+left join pro_teams t on t.id = p.pro_team_id
 left join roster_entries r on r.player_id = p.id
 where p.pool_eligible and ($1::text = '' or p.competition = $1)
   and ($2::text = '' or p.status = $2)
-  and (not $3::boolean or exists (select 1 from prospect_rankings pr where pr.player_id = p.id and pr.source = 'mlb_pipeline'))
-  and (coalesce(cardinality($4::text[]), 0) = 0
-       or ('available' = any($4::text[]) and coalesce(r.list, '') = '')
-       or ('taken' = any($4::text[]) and coalesce(r.list, '') <> '')
-       or ($4::text[] && array['main','reserve','rights']::text[] and r.list = any($4::text[])))
-  and (coalesce(cardinality($5::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($5::text[])))
-  and ($6::text = '' or p.full_name ilike '%' || $6 || '%')
-  and ($7::text = '' or p.positions && string_to_array($7, ','))
-  and ($8::int is null or p.birth_date <= current_date - make_interval(years => $8))
-  and ($9::int is null or p.birth_date > current_date - make_interval(years => $9 + 1))
-  and ($10::uuid is null or (
-        r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $10)))
+  and (coalesce(cardinality($3::text[]), 0) = 0
+       or (p.competition = 'cbb' and t.conference = any($3::text[])))
+  and (not $4::boolean or exists (select 1 from prospect_rankings pr where pr.player_id = p.id and pr.source = 'mlb_pipeline'))
+  and (coalesce(cardinality($5::text[]), 0) = 0
+       or ('available' = any($5::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($5::text[]) and coalesce(r.list, '') <> '')
+       or ($5::text[] && array['main','reserve','rights']::text[] and r.list = any($5::text[])))
+  and (coalesce(cardinality($6::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($6::text[])))
+  and ($7::text = '' or p.full_name ilike '%' || $7 || '%')
+  and ($8::text = '' or p.positions && string_to_array($8, ','))
+  and ($9::int is null or p.birth_date <= current_date - make_interval(years => $9))
+  and ($10::int is null or p.birth_date > current_date - make_interval(years => $10 + 1))
   and ($11::uuid is null or (
+        r.player_id is null
+        and p.competition = (select l.competition from leagues l where l.id = $11)))
+  and ($12::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $11 and l.competition = p.competition)))
+                    where dl.draft_id = $12 and l.competition = p.competition)))
 `
 
 type CountPlayersParams struct {
 	Competition string      `json:"competition"`
 	Status      string      `json:"status"`
+	Conferences []string    `json:"conferences"`
 	RankedOnly  bool        `json:"ranked_only"`
 	Ownership   []string    `json:"ownership"`
 	Owners      []string    `json:"owners"`
@@ -104,6 +108,7 @@ func (q *Queries) CountPlayers(ctx context.Context, arg CountPlayersParams) (int
 	row := q.db.QueryRow(ctx, countPlayers,
 		arg.Competition,
 		arg.Status,
+		arg.Conferences,
 		arg.RankedOnly,
 		arg.Ownership,
 		arg.Owners,
@@ -873,26 +878,29 @@ left join stat_sort on stat_sort.player_id = p.id and stat_sort.competition = p.
 left join rostered         on rostered.competition = p.competition
 where p.pool_eligible and ($2::text = '' or p.competition = $2)
   and ($7::text = '' or p.status = $7)
+  -- Leaders conference filters use current team membership, matching main rosters.
+  and (coalesce(cardinality($8::text[]), 0) = 0
+       or (p.competition = 'cbb' and t.conference = any($8::text[])))
   -- ranked_only: just the prospects on the MLB Pipeline Top 100.
-  and (not $8::boolean or pr.rank is not null)
-  and (coalesce(cardinality($9::text[]), 0) = 0
-       or ('available' = any($9::text[]) and coalesce(r.list, '') = '')
-       or ('taken' = any($9::text[]) and coalesce(r.list, '') <> '')
-       or ($9::text[] && array['main','reserve','rights']::text[] and r.list = any($9::text[])))
-  and (coalesce(cardinality($10::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($10::text[])))
-  and ($11::text = '' or p.full_name ilike '%' || $11 || '%')
+  and (not $9::boolean or pr.rank is not null)
+  and (coalesce(cardinality($10::text[]), 0) = 0
+       or ('available' = any($10::text[]) and coalesce(r.list, '') = '')
+       or ('taken' = any($10::text[]) and coalesce(r.list, '') <> '')
+       or ($10::text[] && array['main','reserve','rights']::text[] and r.list = any($10::text[])))
+  and (coalesce(cardinality($11::text[]), 0) = 0 or r.franchise_id in (select id from franchises where slug = any($11::text[])))
+  and ($12::text = '' or p.full_name ilike '%' || $12 || '%')
   -- position: one or several, comma separated; a player matches by any of his.
-  and ($12::text = '' or p.positions && string_to_array($12, ','))
-  and ($13::int is null or p.birth_date <= current_date - make_interval(years => $13))
-  and ($14::int is null or p.birth_date > current_date - make_interval(years => $14 + 1))
-  and ($15::uuid is null or (
-        r.player_id is null
-        and p.competition = (select l.competition from leagues l where l.id = $15)))
+  and ($13::text = '' or p.positions && string_to_array($13, ','))
+  and ($14::int is null or p.birth_date <= current_date - make_interval(years => $14))
+  and ($15::int is null or p.birth_date > current_date - make_interval(years => $15 + 1))
   and ($16::uuid is null or (
+        r.player_id is null
+        and p.competition = (select l.competition from leagues l where l.id = $16)))
+  and ($17::uuid is null or (
         r.player_id is null
         and exists (select 1 from draft_leagues dl
                     join leagues l on l.id = dl.league_id
-                    where dl.draft_id = $16 and l.competition = p.competition)))
+                    where dl.draft_id = $17 and l.competition = p.competition)))
 ), candidates as materialized (
 select id, competition, status, injury_designation, full_name, positions, birth_date, class, note, headshot_url, eligible_since, prospect_rank, prospect_rank_year, prospect_rank_source, prospect_rank_url, prospect_eta, draft_year, draft_round, draft_pick, draft_overall, team_abbrev, team_name, owner_name, owner_slug, roster_list, season_games, season_scored, waiver_until, season, season_points, season_index, sort_text, sort_number from player_pool
 order by
@@ -901,7 +909,7 @@ order by
   case when not $1::boolean then sort_text end desc nulls last,
   case when $1::boolean then sort_text end asc nulls last,
   full_name, id
-limit $18 offset $17
+limit $19 offset $18
 )
 select candidates.id, candidates.competition, candidates.status, candidates.injury_designation,
  candidates.full_name, candidates.positions, candidates.birth_date, candidates.class, candidates.note,
@@ -941,6 +949,7 @@ type ListPlayersParams struct {
 	SortBy      string      `json:"sort_by"`
 	PerGame     bool        `json:"per_game"`
 	Status      string      `json:"status"`
+	Conferences []string    `json:"conferences"`
 	RankedOnly  bool        `json:"ranked_only"`
 	Ownership   []string    `json:"ownership"`
 	Owners      []string    `json:"owners"`
@@ -1009,6 +1018,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		arg.SortBy,
 		arg.PerGame,
 		arg.Status,
+		arg.Conferences,
 		arg.RankedOnly,
 		arg.Ownership,
 		arg.Owners,
