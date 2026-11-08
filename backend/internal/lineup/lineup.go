@@ -25,7 +25,8 @@ import (
 )
 
 type Service struct {
-	NBA      *nbalive.Service // optional NBA forecast snapshot; other sports keep their proxy
+	NBA      *nbalive.Service // optional basketball snapshots; other sports keep their proxy
+	CBB      *nbalive.Service
 	pool     *pgxpool.Pool
 	registry competition.Registry // what each sport's stats move with, for projections
 }
@@ -190,10 +191,14 @@ func (s *Service) project(ctx context.Context, q *db.Queries, league db.League, 
 		for j := range p.Games {
 			g := &p.Games[j]
 			g.market.Average = average
-			if league.Competition == "nba" {
-				if points, ok := s.NBA.Points(p.PlayerID, g.GameID, rules.Scoring, g.StartsAt, g.Status == "scheduled"); ok {
+			model := s.NBA
+			if league.Competition == "cbb" {
+				model = s.CBB
+			}
+			if league.Competition == "nba" || league.Competition == "cbb" {
+				if points, ok := model.Points(p.PlayerID, g.GameID, rules.Scoring, g.StartsAt, g.Status == "scheduled"); ok {
 					g.Expected = points
-					g.ProjectionSource = "nba_model"
+					g.ProjectionSource = league.Competition + "_model"
 					if g.Status == "scheduled" {
 						g.Projected = points
 					}

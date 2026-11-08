@@ -3,6 +3,8 @@ package nbalive
 import (
 	"context"
 	"crossover/internal/nbamodel"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -86,4 +88,60 @@ func TestMalformedReloadRetainsPreviousSnapshot(t *testing.T) {
 	if service.current.Load() != prior {
 		t.Fatal("lost last valid snapshot")
 	}
+}
+
+func TestCompetitionIsolationBeforeDatabaseMapping(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		sport, competition string
+		minutes            float64
+	}{
+		{"nba", "cbb", 30}, {"cbb", "nba", 30}, {"cbb", "cbb", 41},
+	} {
+		t.Run(tc.sport+"_"+tc.competition+fmt.Sprint(tc.minutes), func(t *testing.T) {
+			snapshot := example(now)
+			snapshot.Sport = tc.sport
+			r := snapshot.Records["g/p"]
+			r.Prediction.Minutes = tc.minutes
+			snapshot.Records["g/p"] = r
+			path := filepath.Join(t.TempDir(), "snapshot.json")
+			data, _ := json.Marshal(snapshot)
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			service := NewCompetitionService(nil, path, slog.New(slog.NewTextHandler(io.Discard, nil)), tc.competition)
+			if err := service.Reload(context.Background()); err == nil {
+				t.Fatal("accepted wrong sport or invalid CBB minutes")
+			}
+		})
+	}
+}
+
+// Set CBB_TEST_SNAPSHOT to exercise the Python collector -> Go serving contract.
+func TestCBBCollectorSnapshot(t *testing.T) {
+	path := os.Getenv("CBB_TEST_SNAPSHOT")
+	if path == "" {
+		t.Skip("set CBB_TEST_SNAPSHOT for the collector integration check")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot Snapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := snapshot.Validate(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Sport != "cbb" || len(snapshot.Records) == 0 {
+		t.Fatal("expected populated CBB snapshot")
+	}
+	for _, r := range snapshot.Records {
+		s := r.Prediction.Stats
+		if r.Prediction.Minutes > 40 || math.Abs(s["pts"]-(2*s["fgm"]+s["tpm"]+s["ftm"])) > 1e-7 {
+			t.Fatal("incoherent CBB forecast")
+		}
+	}
+	t.Logf("validated %d collector forecasts", len(snapshot.Records))
 }

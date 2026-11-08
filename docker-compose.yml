@@ -1,4 +1,4 @@
-# Production: `docker compose up -d --build` runs all four services.
+# Production: `docker compose up -d --build` runs the app services and CBB refresh worker.
 # Development: `make db` starts only Postgres; the app runs on the host.
 services:
   caddy:
@@ -32,14 +32,35 @@ services:
       FETCH_VIA: ${FETCH_VIA:-}
       SCHEDULE_DAYS: ${SCHEDULE_DAYS:-365} # full schedules; active fantasy seasons can extend this
       NBA_PROJECTIONS_PATH: ${NBA_PROJECTIONS_PATH-/nba/live-projections.json}
+      CBB_PROJECTIONS_PATH: ${CBB_PROJECTIONS_PATH-/cbb/live-projections.json}
       TZ: ${TZ:-America/New_York} # the nightly and weekly syncs run on this clock
     volumes:
       - ./data/nba:/nba:ro
+      - ./data/cbb/live:/cbb:ro
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started # cache health never gates app startup
+
+  cbb-refresh:
+    build:
+      context: .
+      dockerfile: Dockerfile.cbb
+    restart: unless-stopped
+    init: true
+    # The worker starts immediately, then sleeps two hours between runs.
+    # Its separate corpus survives image rebuilds and container restarts.
+    volumes:
+      - ./data/cbb/live:/worker/data/cbb/live
+    cpus: 1.0
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,datetime; p=json.load(open('data/cbb/live/last-refresh.json')); assert (datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(p['completed_at'])).total_seconds()<21600"]
+      interval: 60s
+      timeout: 10s
+      start_period: 60m
+      retries: 3
 
   redis:
     image: redis:8-alpine

@@ -20,6 +20,7 @@ type Record struct {
 	Official   *nbamodel.OfficialFeatures `json:"official_report,omitempty"`
 }
 type Snapshot struct {
+	Sport          string            `json:"sport,omitempty"`
 	Version        int               `json:"version"`
 	GeneratedAt    time.Time         `json:"generated_at"`
 	HistoryThrough time.Time         `json:"history_through"`

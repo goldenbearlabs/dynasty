@@ -429,11 +429,12 @@ The [CBB projection laboratory](docs/cbb-model.md) adds a four-season college
 corpus, internal opponent-adjusted offense/defense/tempo, player and rotation
 features, and a validated nonlinear minutes correction. It includes
 chronological comparisons, same-origin weekly ranking, uncertainty checks and
-a prospective prediction CLI. Its candidate is offline; live CBB projections
-retain their current behavior.
+a prospective prediction CLI. Its context successor is connected to live CBB
+projections through the production refresh worker.
 
 The [CBB context follow-on](docs/cbb-context-study.md) adds historical recruiting,
 persistent transfer roles and prior-game roster depth. Its validation-selected
 candidate improves the original champion and a newly collected November 6
 check. It is the offline default; historical availability archives without
-publication timestamps remain excluded, and live CBB serving is unchanged.
+publication timestamps remain excluded. The [CBB production worker](docs/cbb-production.md)
+starts immediately on deployment and refreshes forecasts every two hours.

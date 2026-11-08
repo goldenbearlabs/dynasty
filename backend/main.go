@@ -348,6 +348,15 @@ func run(log *slog.Logger) error {
 	}
 	lineups := lineup.NewService(pool, registry)
 	lineups.NBA = nba
+	var cbb *nbalive.Service
+	if path := os.Getenv("CBB_PROJECTIONS_PATH"); path != "" {
+		cbb = nbalive.NewCompetitionService(pool, path, log, "cbb")
+		if err := cbb.Reload(ctx); err != nil {
+			log.Warn("CBB forecasts not ready; using proxy fallback", "err", err)
+		}
+		go cbb.Run(ctx)
+	}
+	lineups.CBB = cbb
 	playerService := players.NewService(pool, registry)
 	playerService.Cache = responseCache
 	server := &web.Server{
@@ -392,6 +401,15 @@ func run(log *slog.Logger) error {
 		}
 	}
 	handler := http.NewServeMux()
+	handler.HandleFunc("GET /healthz/cbb", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		status := cbb.Status()
+		if cbb != nil && status["available"] != true {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		json.NewEncoder(w).Encode(status)
+	})
 	handler.HandleFunc("GET /healthz/nba", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

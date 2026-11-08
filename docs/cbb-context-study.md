@@ -2,7 +2,8 @@
 
 The new context model is the **offline default** at `models/cbb/model.json`.
 `models/cbb/context-model.json` is the same candidate; the original champion is
-preserved at `models/cbb/v1-model.json`. Live CBB projections remain unchanged.
+preserved at `models/cbb/v1-model.json`. Live integration and scheduling are now
+available through the [CBB production worker](cbb-production.md).
 The NBA model and its production refresh service were not modified.
 
 ## Results against the previous CBB champion
@@ -220,7 +221,7 @@ context artifact instead of silently ignoring its corrections. The original
 champion remains usable through the same CLI with `--model
 models/cbb/v1-model.json`.
 
-Deployment still requires a CBB refresh worker and live application integration,
-including current rosters and timestamped availability observations. This work
-updates the model and its research/prediction path; it does not activate live
-CBB serving or change the NBA deployment.
+The [CBB production worker](cbb-production.md) now supplies scheduled refreshes,
+current roster target enumeration and live application integration. Timestamped
+availability observations and calibrated appearance probabilities remain future
+work. Model deployment does not change the NBA coefficients or collection job.

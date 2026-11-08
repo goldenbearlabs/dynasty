@@ -1,0 +1,8 @@
+FROM python:3.14-slim
+WORKDIR /worker
+ENV PYTHONUNBUFFERED=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+COPY tools/requirements-cbb-runtime.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+COPY tools/ ./tools/
+COPY models/cbb/model.json ./models/cbb/model.json
+CMD ["python", "tools/cbb_live_refresh.py", "--loop"]

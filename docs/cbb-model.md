@@ -4,8 +4,8 @@ Initial baseline built November 6, 2026. The [context follow-on](cbb-context-stu
 now supplies the offline default at `models/cbb/model.json`; the original
 champion is preserved at `models/cbb/v1-model.json`. Results below describe
 that initial champion.
-CBB live projections have not been switched, and the deployed NBA model is
-unchanged. This release includes historical ingestion, audited data, trained
+The [CBB production worker](cbb-production.md) now connects the context model to
+live projections. The deployed NBA model is unchanged. This release includes historical ingestion, audited data, trained
 models, feature ablations, chronological evaluation, same-origin game ordering,
 uncertainty diagnostics, a prospective prediction command and interactive reviews.
 
