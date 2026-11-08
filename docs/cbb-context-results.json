@@ -1,0 +1,6165 @@
+{
+  "previous_model_sha256": "035b1f654c1d9f44fd75d7dc9e00b5bf07256cb4938b84a9949cec932ef96374",
+  "candidate_model_sha256": "bf27b84a623358ba7403a41cc8f930d7193715accc7a069a69be4104970d1855",
+  "offline_default_updated": true,
+  "live_application_changed": false,
+  "baseline": {
+    "2025": {
+      "n": 20903,
+      "mae": 4.1341286909607255,
+      "rmse": 5.3878725953189734,
+      "bias": 0.04618237702731747
+    },
+    "2026": {
+      "n": 20541,
+      "mae": 4.21012761850481,
+      "rmse": 5.456800537230032,
+      "bias": 0.08933077590514213
+    },
+    "opening2027": {
+      "n": 1537,
+      "mae": 5.275791246464977,
+      "rmse": 6.572698433831724,
+      "bias": 0.24433846930295244
+    }
+  },
+  "new": {
+    "2025": {
+      "model": {
+        "n": 20903,
+        "mae": 4.12394390908444,
+        "rmse": 5.382303581864372,
+        "bias": -0.059130923731141996
+      },
+      "minutes": {
+        "n": 20903,
+        "mae": 4.649167874903231,
+        "rmse": 6.060053417604213,
+        "bias": -0.12706630571106778
+      },
+      "paired_vs_original": {
+        "mae_reduction": 0.010184781876284417,
+        "game_bootstrap_95_interval": [
+          0.0071239750826257615,
+          0.013208251850464795
+        ],
+        "games": 1126,
+        "appearances": 20903
+      },
+      "paired_vs_linear_context": {
+        "mae_reduction": 0.0013643865173114762,
+        "game_bootstrap_95_interval": [
+          -0.0005595157848664749,
+          0.003342192230963408
+        ],
+        "games": 1126,
+        "appearances": 20903
+      },
+      "groups": {
+        "all_verified_d1": {
+          "model": {
+            "n": 68903,
+            "mae": 4.130018162105869,
+            "rmse": 5.376461128276433,
+            "bias": -0.09651191949738008
+          },
+          "minutes": {
+            "n": 68903,
+            "mae": 4.729276493334384,
+            "rmse": 6.132357702781455,
+            "bias": -0.0877200606622959
+          }
+        },
+        "eligible_conferences": {
+          "model": {
+            "n": 20903,
+            "mae": 4.12394390908444,
+            "rmse": 5.382303581864372,
+            "bias": -0.059130923731141996
+          },
+          "minutes": {
+            "n": 20903,
+            "mae": 4.649167874903231,
+            "rmse": 6.060053417604213,
+            "bias": -0.12706630571106778
+          }
+        },
+        "eligible_prior20_minutes": {
+          "model": {
+            "n": 11554,
+            "mae": 4.731575073171353,
+            "rmse": 5.963273545123697,
+            "bias": -0.04169611046792364
+          },
+          "minutes": {
+            "n": 11554,
+            "mae": 4.594993394728919,
+            "rmse": 5.98139325891942,
+            "bias": -0.12688564373432765
+          }
+        },
+        "eligible_cold_start": {
+          "model": {
+            "n": 14,
+            "mae": 2.5130187636706656,
+            "rmse": 2.7180240604605355,
+            "bias": 1.5148920246415307
+          },
+          "minutes": {
+            "n": 14,
+            "mae": 4.713839932263505,
+            "rmse": 5.647609267892317,
+            "bias": 2.39354978536361
+          }
+        },
+        "eligible_first3_season_games": {
+          "model": {
+            "n": 140,
+            "mae": 1.681820236947788,
+            "rmse": 2.748873039234072,
+            "bias": 0.30972315671763745
+          },
+          "minutes": {
+            "n": 140,
+            "mae": 2.4201661212231507,
+            "rmse": 4.2462494913149245,
+            "bias": -0.16944214535877014
+          }
+        },
+        "eligible_transfer": {
+          "model": {
+            "n": 1,
+            "mae": 6.280271135151132,
+            "rmse": 6.280271135151132,
+            "bias": 6.280271135151132
+          },
+          "minutes": {
+            "n": 1,
+            "mae": 6.091473101566038,
+            "rmse": 6.091473101566038,
+            "bias": 6.091473101566038
+          }
+        },
+        "eligible_neutral_site": {
+          "model": {
+            "n": 2902,
+            "mae": 4.102427235171603,
+            "rmse": 5.362978597676718,
+            "bias": -0.20611606879782338
+          },
+          "minutes": {
+            "n": 2902,
+            "mae": 4.516087794488317,
+            "rmse": 5.892899914649699,
+            "bias": -0.1593532472253419
+          }
+        },
+        "eligible_postseason": {
+          "model": {
+            "n": 1385,
+            "mae": 4.1247660996624225,
+            "rmse": 5.424037232603769,
+            "bias": -0.2342997210740357
+          },
+          "minutes": {
+            "n": 1385,
+            "mae": 4.218939925857839,
+            "rmse": 5.604289303228709,
+            "bias": -0.10936261814208198
+          }
+        },
+        "eligible_predicted_mismatch": {
+          "model": {
+            "n": 144,
+            "mae": 3.769378373469052,
+            "rmse": 4.8638652658903245,
+            "bias": -0.6751602785732024
+          },
+          "minutes": {
+            "n": 144,
+            "mae": 4.201443968022541,
+            "rmse": 5.292968253276663,
+            "bias": -0.3549400564472854
+          }
+        },
+        "unverified_opponent": {
+          "model": {
+            "n": 143,
+            "mae": 5.097596950744603,
+            "rmse": 6.72189758699939,
+            "bias": -2.4488717492572594
+          },
+          "minutes": {
+            "n": 143,
+            "mae": 5.019359989513299,
+            "rmse": 6.242059876371578,
+            "bias": -1.1348219340369978
+          }
+        }
+      },
+      "ranking": {
+        "pairs": 8304,
+        "player_weeks": 8214,
+        "pair_accuracy": 0.5470857418111753,
+        "regret": 2.3685780374969565,
+        "chosen_actual_mean": 11.180910640370099
+      },
+      "variation": {
+        "within_player_spearman_mean": 0.05912774591310777,
+        "players_with_5_games": 1138,
+        "within_player_centered_correlation": 0.09727736126282917,
+        "median_player_forecast_sd": 1.2185261581817008,
+        "median_player_actual_sd": 4.848991124219945,
+        "sequential_three_game_average": {
+          "n": 6507,
+          "mae": 2.5396392382166706,
+          "rmse": 3.26466496536655,
+          "bias": -0.0859145604187628
+        }
+      },
+      "interval80_coverage": 0.8033296655982395,
+      "interval95_coverage": 0.9507726163708559,
+      "brier": 0.2367267621727267
+    },
+    "2026": {
+      "model": {
+        "n": 20541,
+        "mae": 4.20438199960151,
+        "rmse": 5.4521368015031015,
+        "bias": 0.03591535886885227
+      },
+      "minutes": {
+        "n": 20541,
+        "mae": 4.6080334152809215,
+        "rmse": 5.9528303861874665,
+        "bias": -0.07807658393443703
+      },
+      "paired_vs_original": {
+        "mae_reduction": 0.005745618903300228,
+        "game_bootstrap_95_interval": [
+          0.0029750128520077694,
+          0.008352419329228897
+        ],
+        "games": 1118,
+        "appearances": 20541
+      },
+      "paired_vs_linear_context": {
+        "mae_reduction": -0.0021531938024787244,
+        "game_bootstrap_95_interval": [
+          -0.004340628328039848,
+          8.027663809122923e-05
+        ],
+        "games": 1118,
+        "appearances": 20541
+      },
+      "groups": {
+        "all_verified_d1": {
+          "model": {
+            "n": 67281,
+            "mae": 4.201750310337066,
+            "rmse": 5.4460216866079225,
+            "bias": -0.016184611210967908
+          },
+          "minutes": {
+            "n": 67281,
+            "mae": 4.7522287288056155,
+            "rmse": 6.1252284117614835,
+            "bias": -0.08239712569053176
+          }
+        },
+        "eligible_conferences": {
+          "model": {
+            "n": 20541,
+            "mae": 4.20438199960151,
+            "rmse": 5.4521368015031015,
+            "bias": 0.03591535886885227
+          },
+          "minutes": {
+            "n": 20541,
+            "mae": 4.6080334152809215,
+            "rmse": 5.9528303861874665,
+            "bias": -0.07807658393443703
+          }
+        },
+        "eligible_prior20_minutes": {
+          "model": {
+            "n": 11642,
+            "mae": 4.8338453985356145,
+            "rmse": 6.097296931288333,
+            "bias": -0.02384319478758896
+          },
+          "minutes": {
+            "n": 11642,
+            "mae": 4.5306260582008155,
+            "rmse": 5.863153397018844,
+            "bias": -0.1467164867577841
+          }
+        },
+        "eligible_cold_start": {
+          "model": {
+            "n": 12,
+            "mae": 2.9240735784112553,
+            "rmse": 4.186114308524992,
+            "bias": 0.059064928114039995
+          },
+          "minutes": {
+            "n": 12,
+            "mae": 7.037109140744454,
+            "rmse": 8.784589581982685,
+            "bias": -0.40419983761891615
+          }
+        },
+        "eligible_first3_season_games": {
+          "model": {
+            "n": 122,
+            "mae": 2.1207122935550253,
+            "rmse": 3.3087236469101837,
+            "bias": 0.19595090347641422
+          },
+          "minutes": {
+            "n": 122,
+            "mae": 3.2690581344809746,
+            "rmse": 4.713356822037416,
+            "bias": -0.04768930465388737
+          }
+        },
+        "eligible_transfer": {
+          "model": {
+            "n": 4,
+            "mae": 4.344681199727749,
+            "rmse": 5.021404910585254,
+            "bias": 1.016449807974486
+          },
+          "minutes": {
+            "n": 4,
+            "mae": 4.995622782739123,
+            "rmse": 5.565890149011039,
+            "bias": 4.051776176010276
+          }
+        },
+        "eligible_neutral_site": {
+          "model": {
+            "n": 2798,
+            "mae": 4.172161607802655,
+            "rmse": 5.423237713118917,
+            "bias": -0.11837584197370152
+          },
+          "minutes": {
+            "n": 2798,
+            "mae": 4.225851740452464,
+            "rmse": 5.435581919136769,
+            "bias": -0.02154328325380259
+          }
+        },
+        "eligible_postseason": {
+          "model": {
+            "n": 1376,
+            "mae": 4.015217400733968,
+            "rmse": 5.274854178171166,
+            "bias": -0.08219830181909928
+          },
+          "minutes": {
+            "n": 1376,
+            "mae": 4.213340432003847,
+            "rmse": 5.463367043524723,
+            "bias": 0.07571274989154002
+          }
+        },
+        "eligible_predicted_mismatch": {
+          "model": {
+            "n": 181,
+            "mae": 3.346358245317274,
+            "rmse": 4.445136927727208,
+            "bias": -0.16228601950462804
+          },
+          "minutes": {
+            "n": 181,
+            "mae": 4.305045971705637,
+            "rmse": 5.578719873756756,
+            "bias": -0.7341034570419912
+          }
+        },
+        "unverified_opponent": {
+          "model": {
+            "n": 112,
+            "mae": 5.549772023833397,
+            "rmse": 7.37738000076108,
+            "bias": -1.9921561843777273
+          },
+          "minutes": {
+            "n": 112,
+            "mae": 5.393538936753994,
+            "rmse": 6.507619543247517,
+            "bias": -1.169255642231495
+          }
+        }
+      },
+      "ranking": {
+        "pairs": 8143,
+        "player_weeks": 7958,
+        "pair_accuracy": 0.5617094436939702,
+        "regret": 2.3834506157325963,
+        "chosen_actual_mean": 11.49365418446846
+      },
+      "variation": {
+        "within_player_spearman_mean": 0.03924679522928959,
+        "players_with_5_games": 1144,
+        "within_player_centered_correlation": 0.07352919688197221,
+        "median_player_forecast_sd": 1.2320341458074313,
+        "median_player_actual_sd": 4.832371162873537,
+        "sequential_three_game_average": {
+          "n": 6406,
+          "mae": 2.5729046775654667,
+          "rmse": 3.294991769052659,
+          "bias": 0.006558560493587391
+        }
+      },
+      "interval80_coverage": 0.8021031108514678,
+      "interval95_coverage": 0.9475682780779904,
+      "brier": 0.23759260541759866
+    },
+    "opening2027": {
+      "model": {
+        "n": 1537,
+        "mae": 5.167064264549789,
+        "rmse": 6.467347982626991,
+        "bias": 0.21860025892791582
+      },
+      "minutes": {
+        "n": 1537,
+        "mae": 6.096995818645026,
+        "rmse": 7.520704396348735,
+        "bias": 1.5148311743465341
+      },
+      "paired_vs_original": {
+        "mae_reduction": 0.10872698191518897,
+        "game_bootstrap_95_interval": [
+          0.062146866371896606,
+          0.15412564959782876
+        ],
+        "games": 123,
+        "appearances": 1537
+      },
+      "paired_vs_linear_context": {
+        "mae_reduction": 0.04251083139123476,
+        "game_bootstrap_95_interval": [
+          0.021642732784776256,
+          0.0626440787088614
+        ],
+        "games": 123,
+        "appearances": 1537
+      },
+      "groups": {
+        "all_verified_d1": {
+          "model": {
+            "n": 4318,
+            "mae": 4.913843582441596,
+            "rmse": 6.163894385792184,
+            "bias": 0.32670654041511504
+          },
+          "minutes": {
+            "n": 4318,
+            "mae": 6.509670776359377,
+            "rmse": 8.00730092075913,
+            "bias": 0.32216754925569746
+          }
+        },
+        "eligible_conferences": {
+          "model": {
+            "n": 1537,
+            "mae": 5.167064264549789,
+            "rmse": 6.467347982626991,
+            "bias": 0.21860025892791582
+          },
+          "minutes": {
+            "n": 1537,
+            "mae": 6.096995818645026,
+            "rmse": 7.520704396348735,
+            "bias": 1.5148311743465341
+          }
+        },
+        "eligible_prior20_minutes": {
+          "model": {
+            "n": 1058,
+            "mae": 5.443408734625739,
+            "rmse": 6.797882188396248,
+            "bias": 0.12031487458105493
+          },
+          "minutes": {
+            "n": 1058,
+            "mae": 6.368577139830465,
+            "rmse": 7.790240269778647,
+            "bias": 1.5421462206287684
+          }
+        },
+        "eligible_cold_start": {
+          "model": {
+            "n": 366,
+            "mae": 5.570824339866133,
+            "rmse": 7.110704254749478,
+            "bias": -0.45177476353714685
+          },
+          "minutes": {
+            "n": 366,
+            "mae": 7.545854636259277,
+            "rmse": 8.817769094517825,
+            "bias": 1.4331172025543228
+          }
+        },
+        "eligible_first3_season_games": {
+          "model": {
+            "n": 1537,
+            "mae": 5.167064264549789,
+            "rmse": 6.467347982626991,
+            "bias": 0.21860025892791582
+          },
+          "minutes": {
+            "n": 1537,
+            "mae": 6.096995818645026,
+            "rmse": 7.520704396348735,
+            "bias": 1.5148311743465341
+          }
+        },
+        "eligible_transfer": {
+          "model": {
+            "n": 534,
+            "mae": 5.598802186993168,
+            "rmse": 6.739492328429767,
+            "bias": 0.8708609211044052
+          },
+          "minutes": {
+            "n": 534,
+            "mae": 6.493383981732369,
+            "rmse": 8.073572331480406,
+            "bias": 1.8134109042283286
+          }
+        },
+        "eligible_neutral_site": {
+          "model": {
+            "n": 126,
+            "mae": 5.29246219691374,
+            "rmse": 6.308609062759087,
+            "bias": 0.6716120089527201
+          },
+          "minutes": {
+            "n": 126,
+            "mae": 6.739715973224558,
+            "rmse": 8.031841039745826,
+            "bias": 0.1875083456441218
+          }
+        },
+        "eligible_postseason": {
+          "model": {
+            "n": 0,
+            "mae": null,
+            "rmse": null,
+            "bias": null
+          },
+          "minutes": {
+            "n": 0,
+            "mae": null,
+            "rmse": null,
+            "bias": null
+          }
+        },
+        "eligible_predicted_mismatch": {
+          "model": {
+            "n": 0,
+            "mae": null,
+            "rmse": null,
+            "bias": null
+          },
+          "minutes": {
+            "n": 0,
+            "mae": null,
+            "rmse": null,
+            "bias": null
+          }
+        },
+        "unverified_opponent": {
+          "model": {
+            "n": 1445,
+            "mae": 5.03420011123988,
+            "rmse": 6.243260547367867,
+            "bias": -0.15458820841021714
+          },
+          "minutes": {
+            "n": 1445,
+            "mae": 4.906080842998776,
+            "rmse": 6.1530594760346755,
+            "bias": 0.6208821848087039
+          }
+        }
+      },
+      "ranking": {
+        "pairs": 65,
+        "player_weeks": 68,
+        "pair_accuracy": 0.5846153846153846,
+        "regret": 1.9852941176470589,
+        "chosen_actual_mean": 13.801470588235293
+      },
+      "variation": {
+        "within_player_spearman_mean": null,
+        "players_with_5_games": 0,
+        "within_player_centered_correlation": null,
+        "median_player_forecast_sd": null,
+        "median_player_actual_sd": null,
+        "sequential_three_game_average": {
+          "n": 0,
+          "mae": null,
+          "rmse": null,
+          "bias": null
+        }
+      },
+      "interval80_coverage": 0.7573194534808068,
+      "interval95_coverage": 0.933636955107352,
+      "brier": 0.20215411501373093
+    }
+  },
+  "new_holdout": {
+    "sports_day": "2026-11-06",
+    "context_selected_before_collection": "2026-11-08T00:00:53.258730+00:00",
+    "minutes_selection_saved_before_collection": "2026-11-08T00:06:08.409253+00:00",
+    "minutes_configuration": {
+      "leaves": 15,
+      "iterations": 120,
+      "context": true
+    },
+    "captured_at": "2026-11-08T00:09:24.914609+00:00",
+    "selected": "joint",
+    "eligible_games": 44,
+    "baseline": {
+      "n": 546,
+      "mae": 4.663696241556363,
+      "rmse": 5.903393696649995,
+      "bias": -0.1413293794788745
+    },
+    "context": {
+      "n": 546,
+      "mae": 4.5477055766186,
+      "rmse": 5.800001378548412,
+      "bias": -0.2287248837385729
+    },
+    "baseline_minutes": {
+      "n": 546,
+      "mae": 5.063680999830969,
+      "rmse": 6.286340689766088,
+      "bias": 1.7860983990397539
+    },
+    "context_minutes": {
+      "n": 546,
+      "mae": 4.792356169947616,
+      "rmse": 5.951800877820799,
+      "bias": 1.2951706125683156
+    },
+    "paired": {
+      "mae_reduction": 0.11599066493776303,
+      "game_bootstrap_95_interval": [
+        0.03419664694245479,
+        0.1951561033323084
+      ],
+      "games": 44,
+      "appearances": 546
+    },
+    "all_d1": {
+      "baseline": {
+        "n": 1338,
+        "mae": 4.421052859278308,
+        "rmse": 5.618347518300709,
+        "bias": 0.27569874840706626
+      },
+      "context": {
+        "n": 1338,
+        "mae": 4.34859071020734,
+        "rmse": 5.544705826195202,
+        "bias": 0.30926842894857776
+      }
+    },
+    "sources": [
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=20261106&groups=50&limit=500",
+        "sha256": "8a36b47133a72f0f29151a26814ff0a60e7992908efde88e531d90437f5e7e59",
+        "bytes": 1413150
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920685",
+        "sha256": "a5ec2021c4b261bd03d90320a9cdacfc194efb66f7c88487b93e99da7e56eb4d",
+        "bytes": 394557
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920423",
+        "sha256": "10b421657fa32246e31283db52442db7316847e830c36ade6a27b1bc2ada01b4",
+        "bytes": 395301
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921719",
+        "sha256": "1ec79be6a3df38b660b0d13abbc00e851ffed49924f7b4c374da0d61a131dd06",
+        "bytes": 368760
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909785",
+        "sha256": "1a143388bfdc2e358e31b6f0ead6131297586fd727a4c60df8cca423f1ce1368",
+        "bytes": 421239
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909772",
+        "sha256": "b64ab124b73352f1eba6882284b452305f0787b08646d634975e0a9d6ecef112",
+        "bytes": 422342
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401906758",
+        "sha256": "288d394f3e9017610480eff4afa07c77847aadefedc00d9d6cd00319da9f6007",
+        "bytes": 506006
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922219",
+        "sha256": "eb9e7e3844688558041b019e22607d7f859219df0ab8a8e54b251552841c59f3",
+        "bytes": 440260
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921802",
+        "sha256": "a24411c1d155532dfd2e4cc250d2d613b4c182070230344502b11cc038a30cc2",
+        "bytes": 407986
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921739",
+        "sha256": "e56051733e9f7367a62f1e2609929cb188612230b5e5266031a5948e839fe80d",
+        "bytes": 411789
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909552",
+        "sha256": "e4a7ee95e4b1fd7313677f0029ab2957bd411a76d402a7921eac20173fced16c",
+        "bytes": 371870
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922248",
+        "sha256": "a68fec86dfc913ef9004f9f34dad9f988fc795851aa7152bdf92876c62b79cbe",
+        "bytes": 455790
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909751",
+        "sha256": "785a5c7af67c645bcb4667b4f835442468911ea5d57fa71651dd49dc497ad571",
+        "bytes": 470404
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920717",
+        "sha256": "5c0c7053b4b9c088bc4368cb1e3030a5142648a3248402976e788c4b64dbaeaa",
+        "bytes": 372197
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401926131",
+        "sha256": "3e95794a601cbd6e17cd7acebe2c1bc7a0053292f176a6d3bfee3b6bc8e283a1",
+        "bytes": 427865
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922059",
+        "sha256": "09fa0c92a93bcc8a881130bd73cb058314ad581f786d15ea96354ca1ac59c558",
+        "bytes": 504235
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401916314",
+        "sha256": "b041930bacdf1e3fc820504e4439cd9b0ceb85fdcd6d71d3e16013957115ca16",
+        "bytes": 407469
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401929385",
+        "sha256": "b80ea1e6f36724b9f6502b915a50656b43194830716c299db4f53fdce8b84a6a",
+        "bytes": 364375
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401928840",
+        "sha256": "73bafe12a6fd0283c9a5aa730cb89bb0b89ca5bc3602155ce6d2659746b0a01d",
+        "bytes": 385773
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401926813",
+        "sha256": "d897e10b678ac6f953a92ed357b4f26a71efa500cf2d2e0e4c9ecb7851517afc",
+        "bytes": 392894
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401926161",
+        "sha256": "b817789001cef36491cbb0a5fd9503673ef5e58d674f255c0f98d37fb7877458",
+        "bytes": 430242
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401926135",
+        "sha256": "df4a8c2dcfa1d26f153a6b82e731441f6d457a7ef79cb4c96fb893317689dec6",
+        "bytes": 352739
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922210",
+        "sha256": "4c67fcca84db44228f1cb6253b752473e728140a0d1eaf2db24c515649c6902f",
+        "bytes": 357795
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921767",
+        "sha256": "aabcbcfa353d13817dea5ba25e1154439431eefb7df91eaf5d7c4327a5d25537",
+        "bytes": 412798
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921754",
+        "sha256": "cba88845422ed8f34f3747774bbdc7a2d6bad570b2277c8a94d54aaffc3f89f3",
+        "bytes": 364617
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921285",
+        "sha256": "0affba848319b4c92bef53e0c1112d1a2fc5505670d857aaa4acc6293f50d869",
+        "bytes": 422724
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921166",
+        "sha256": "74e6f1412cd63c790537472df10e04d25d279cd46ab02341956a13f94ca21792",
+        "bytes": 353385
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921140",
+        "sha256": "88b75b548da0203e63b864718f54e4707909886a9c8750c60905511a58b2d101",
+        "bytes": 347516
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920920",
+        "sha256": "3af94f371a69abfb8445066d9ef09b18f43465ebe78b5218b840d6048cc8921b",
+        "bytes": 434265
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920305",
+        "sha256": "4771fc3382a94ca58e6c4c410a597b1f5f33805a7ccb95e3c36dcc530d47da90",
+        "bytes": 436785
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920072",
+        "sha256": "7b583cc7c52c44853a9f16543e86c9c4060f8b88d7e78f0926c1e83073178de3",
+        "bytes": 384420
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401918956",
+        "sha256": "54393eca796dae1bfad691e7cb135946075733b02a0aa64b6800c9d1c8ea752a",
+        "bytes": 355700
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401917949",
+        "sha256": "8df3b8a9d35b19018d636b4140acac053f2e39d867b3c69683c977ffe2dce438",
+        "bytes": 416356
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401913100",
+        "sha256": "6ad2c5a44f74efa3addd26ad5950e37522a3d3dae1ff6a3cb639a8c6689b2b54",
+        "bytes": 411662
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401912208",
+        "sha256": "b54fb17298130ff2a9616140313e4a1f3378f85d82e33031e04495bd64b2372c",
+        "bytes": 377237
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401911305",
+        "sha256": "f604861afc7c683befa12a638724ad69929c51347fdc5243584e4da157326beb",
+        "bytes": 412759
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401911249",
+        "sha256": "81009701eb3275e582e73223a99306e18dbb76ac84fe534a37da7107500e15df",
+        "bytes": 395998
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401911006",
+        "sha256": "237216abdc27a7bb6934b2a37464fd1eb6434cf76d4757630d7f2d3779ab0f83",
+        "bytes": 402620
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401911005",
+        "sha256": "8dc5e9d6a37fca6d4e84d62201fd0c58a7975b79968c95b7ad80950b656ba93e",
+        "bytes": 442355
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909695",
+        "sha256": "392b786376106f3ad64d4377f630c2ac343e50f3cc44f4d6c6b2ae2b9df6dc1f",
+        "bytes": 409875
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909542",
+        "sha256": "f01ef66a1301eed0aa6ab9548c49e633a2117e7678e0737073b922b5461b96f2",
+        "bytes": 415603
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401906780",
+        "sha256": "d8f3b5b04725c386c161b5fa56e2a1bef617625508775ec2667c7edba824859c",
+        "bytes": 407792
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401925089",
+        "sha256": "a7aabf08e8b892add1eb73e701ee382e65fe0148cbb9e9c91f5ecc3e123384db",
+        "bytes": 403061
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401923260",
+        "sha256": "38658dc4fdcef40ac2841502bd8b3ca5d3ee93446220d1af845bcfb4875cc112",
+        "bytes": 378298
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920894",
+        "sha256": "7e79e13c15fa96583215fdba0956d8dd7362de097f40de45250471d64ffa7630",
+        "bytes": 345083
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401919015",
+        "sha256": "a9c496627a24f4f34b3c3ccb9835ed7fdce056a2cab0a3e419bbf039d0d39117",
+        "bytes": 403534
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401928823",
+        "sha256": "17dffe9023e710b73b71210e6217a69db3ed82f9761660ee106a05244487e8f2",
+        "bytes": 387222
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401928622",
+        "sha256": "7395cfb72af4ae5af1bcec6e52641e0a9fab581539f704a8fb484c76f0d7ebd6",
+        "bytes": 391978
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401925641",
+        "sha256": "8fb1260f2650dcc2f0e8ed44932e389bd3ee20fe1ba91017df77be795fe1ac6d",
+        "bytes": 401701
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401925097",
+        "sha256": "e112250db538c27000a22beb6767d35e567b6f2ad34a8ede22a096dbf25ffb2d",
+        "bytes": 446297
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921809",
+        "sha256": "b29b4c02189cc35730c4ed3275abd634a43bc5ed6bccf05e3364ddda722c8d1a",
+        "bytes": 397382
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920807",
+        "sha256": "4fccb595f1f70bcbe3bdfa30013de65ca168c2d73988eca188f69bcfa1221f8e",
+        "bytes": 439074
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920733",
+        "sha256": "9b88f768598a4bc75629a1de9985a619d56db0c7c2f219de430e5f306ef48ad6",
+        "bytes": 330281
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401919048",
+        "sha256": "5a3f15232918449b830ab360b2262ca6d16cb1d7e14413cc4de1334b2da06a23",
+        "bytes": 427481
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401916304",
+        "sha256": "f3fe6c92153a887311e6156a5454d0ce417baf79cd52d20cafd4166247ba8fd6",
+        "bytes": 384742
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909523",
+        "sha256": "04785e34afde86e1f4b1210a5fa1f2842e87b951d88d101b3eaf3916194ed9a9",
+        "bytes": 431943
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401906802",
+        "sha256": "39ff02aaf00948416fb258c802b208051f8d160fc97d72fbd511fbf57d16a6f8",
+        "bytes": 394085
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922021",
+        "sha256": "e8ca84c96704f3d488b6076711108646f9b3290f87d81ac000c4857585f8f9fe",
+        "bytes": 448403
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920726",
+        "sha256": "739b2e3f6a306b4e360ecf6237b117ea571c29df1e4f5cb58588c1f922dab2d9",
+        "bytes": 373958
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401917914",
+        "sha256": "11bd924f0d2e6d7cc9e0eb40e8b2bc609e52b24fa7d05945b30a482a3ba2cced",
+        "bytes": 427964
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401922261",
+        "sha256": "248aed645a314dc2501fb09570ec45c4584a93b362456a4cc101cd97584cd2e4",
+        "bytes": 351670
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921732",
+        "sha256": "eb3941bbf9bdfb56a3e6e4ff4984793bbe350e13c81f1b9479e2e0e287e81750",
+        "bytes": 353257
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401919040",
+        "sha256": "466436e98972c7be9d1159cb09f8a24584d39270a58faf4a0b8a5763a503ea4f",
+        "bytes": 427018
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401909797",
+        "sha256": "c1991908d2b83c3b39425384b0ce9927d144fbd2302f9ac3af11a601723b2500",
+        "bytes": 467400
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920952",
+        "sha256": "8f2d1ba7b6d46f67c9d8188404b7f66624b9c8b477575ebf72617f9c20fcc726",
+        "bytes": 390181
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401929410",
+        "sha256": "bf34dd5fc6af18b241e4feacb5fda22f8ebe196de7e620adf79b5e0c2fcfc86b",
+        "bytes": 346503
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401929356",
+        "sha256": "e8fb36ea905bb993cdbed6398e0edd24c4dcd114d1229632984a573f1209af59",
+        "bytes": 383021
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401920344",
+        "sha256": "d6aaf727576b12ac6f044424770ead3b012a5816ad00db3bbe122be73c6d71c8",
+        "bytes": 361201
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401917515",
+        "sha256": "e2627ac247d2566ec01fab2af627561173b9a43c2e743792e497c163f7aa9d0b",
+        "bytes": 477609
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921727",
+        "sha256": "1cc49513eef030e8a8397d0ab62ffa5884cb8042e28d31de0c4470e0e03ae075",
+        "bytes": 382236
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401921061",
+        "sha256": "f5514ee4d38c5a46e948c4556edc545d824c67acc10f7aac15a7d407296b0439",
+        "bytes": 447536
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401917516",
+        "sha256": "2f329d3b7736c8bf54e31948b3e37b97c082f51ef5589f670bae4830b75c890a",
+        "bytes": 348941
+      },
+      {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=401929001",
+        "sha256": "79be27b23a15bc9331ae0047ec4dfa30cbfbab493b34871d93abf77f2e7f0e9c",
+        "bytes": 364186
+      }
+    ],
+    "skipped": [],
+    "note": "Newly collected retrospective holdout. No target starts, positions, stats, DNP roster entries or target minutes are model inputs. Context uses history strictly before Nov 6. These predictions were not issued before the games."
+  },
+  "context_ablation": {
+    "baseline": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.1362588241385705,
+              "rmse": 5.3792212303880556,
+              "bias": -0.014053457254918874
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.739104341058078,
+              "rmse": 6.148611978149984,
+              "bias": -0.04395907029390488
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.1341286909607255,
+              "rmse": 5.3878725953189734,
+              "bias": 0.04618237702731747
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.660229082186585,
+              "rmse": 6.0763241836175705,
+              "bias": -0.03606712873351201
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.744744990744242,
+              "rmse": 5.970686204915427,
+              "bias": 0.12016239591794137
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.603011715797241,
+              "rmse": 6.000029001837421,
+              "bias": -0.021230720285379118
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.8747395181048216,
+              "rmse": 3.031842107162089,
+              "bias": 2.0375850863343516
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.757490430777575,
+              "rmse": 6.504268920604828,
+              "bias": 3.54558941289535
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.7077912942508549,
+              "rmse": 2.782059619241195,
+              "bias": 0.3397760247053202
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.595052235708255,
+              "rmse": 4.396353508451539,
+              "bias": -0.07566809546202705
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 6.322327696331636,
+              "rmse": 6.322327696331636,
+              "bias": 6.322327696331636
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 6.804518688532223,
+              "rmse": 6.804518688532223,
+              "bias": 6.804518688532223
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.114092384278217,
+              "rmse": 5.369763748238594,
+              "bias": -0.12273335123665724
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.528081516118871,
+              "rmse": 5.916503503207316,
+              "bias": -0.06946848099733066
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.1322023850346365,
+              "rmse": 5.424264898468888,
+              "bias": -0.10563735122988567
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.241585689198272,
+              "rmse": 5.636921683213311,
+              "bias": -0.022397917694873603
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.779197348340788,
+              "rmse": 4.893926786082136,
+              "bias": -0.662817780752225
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.228018734452716,
+              "rmse": 5.3152947201074,
+              "bias": -0.31284005216915606
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.157051939342319,
+              "rmse": 6.768623581423992,
+              "bias": -2.4715405645518
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.12912182190552,
+              "rmse": 6.371585016595429,
+              "bias": -1.2221099146866878
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.206551777389005,
+              "rmse": 5.449978295641169,
+              "bias": 0.0279201460631534
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.766112879643404,
+              "rmse": 6.1456077441614685,
+              "bias": -0.05734961571379315
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.21012761850481,
+              "rmse": 5.456800537230032,
+              "bias": 0.08933077590514213
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.621040752916751,
+              "rmse": 5.973487270431765,
+              "bias": -0.03679170855605891
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.842593738033377,
+              "rmse": 6.104462544283497,
+              "bias": 0.06127997701511004
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.544335017518979,
+              "rmse": 5.885500461138522,
+              "bias": -0.09328077699550523
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.4108282887314263,
+              "rmse": 4.643021253958358,
+              "bias": 0.14087664958860094
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.69641575875196,
+              "rmse": 9.48881658410675,
+              "bias": -0.14707965926635866
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.175945214261417,
+              "rmse": 3.3850644748329644,
+              "bias": 0.09824452681385452
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.375674312901668,
+              "rmse": 4.874933870399153,
+              "bias": -0.1153812802877749
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.4248200262233315,
+              "rmse": 5.177678153260637,
+              "bias": 0.727085938530956
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.4013584672999375,
+              "rmse": 5.917855386147098,
+              "bias": 3.9592844012564385
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.175867237156496,
+              "rmse": 5.427162432185044,
+              "bias": -0.10681972460096499
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.2434080047608,
+              "rmse": 5.462887137286948,
+              "bias": -0.012309215987562213
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.020911108888913,
+              "rmse": 5.279311662794061,
+              "bias": -0.060062513086003834
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.247831035222521,
+              "rmse": 5.508962181312472,
+              "bias": 0.025433124348322098
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.353093433780886,
+              "rmse": 4.447720549909502,
+              "bias": -0.16155542152887725
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.326495255667837,
+              "rmse": 5.6361365798078635,
+              "bias": -0.7027663390170521
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.595272091861901,
+              "rmse": 7.434972819059555,
+              "bias": -2.0790066161673697
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.482137655278856,
+              "rmse": 6.585927065573402,
+              "bias": -1.269478274790368
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.974375989738635,
+              "rmse": 6.2260541136250245,
+              "bias": 0.31338236595897806
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.64335029707925,
+              "rmse": 8.151593414781075,
+              "bias": 0.24189963456074176
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.275791246464977,
+              "rmse": 6.572698433831724,
+              "bias": 0.24433846930295244
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.271546539024179,
+              "rmse": 7.715861364466134,
+              "bias": 1.7224904390970874
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.560775629949104,
+              "rmse": 6.9161266989467345,
+              "bias": 0.17340704714759478
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.525262561103073,
+              "rmse": 7.998354266504217,
+              "bias": 1.860910693135114
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.753794116774889,
+              "rmse": 7.239925388167619,
+              "bias": -0.3371374065347222
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.735527438881411,
+              "rmse": 8.981680808307601,
+              "bias": 1.5621547493718217
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.275791246464977,
+              "rmse": 6.572698433831724,
+              "bias": 0.24433846930295244
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.271546539024179,
+              "rmse": 7.715861364466134,
+              "bias": 1.7224904390970874
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.722875416244365,
+              "rmse": 6.8615020524019465,
+              "bias": 0.9883653086293109
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.649013867515725,
+              "rmse": 8.306274648773195,
+              "bias": 2.134448023960985
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.350908974917923,
+              "rmse": 6.373196489198389,
+              "bias": 0.5603268861534231
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.847007645808692,
+              "rmse": 8.181279632078377,
+              "bias": 0.3276939245494322
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.0488445779147355,
+              "rmse": 6.249240728961848,
+              "bias": -0.11916584141968678
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.925190449741313,
+              "rmse": 6.166699801854631,
+              "bias": 0.6433525058582094
+            }
+          }
+        }
+      }
+    },
+    "capacity_control": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.1366564037004485,
+              "rmse": 5.3783325639924895,
+              "bias": -0.024090767438478843
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.739493155910285,
+              "rmse": 6.141058693476016,
+              "bias": -0.04903206604160814
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.133031740688989,
+              "rmse": 5.387403644470885,
+              "bias": 0.02265645743406736
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.659209498654985,
+              "rmse": 6.06835297476002,
+              "bias": -0.08439254070487047
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.743389217124889,
+              "rmse": 5.9708684565084615,
+              "bias": 0.07582319793999658
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.606070182106019,
+              "rmse": 5.993937742916309,
+              "bias": -0.11047669276199783
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.8402888541128033,
+              "rmse": 2.9992153054480735,
+              "bias": 1.990813344246357
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.775963223655931,
+              "rmse": 6.539764180014651,
+              "bias": 3.5486927343867243
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.6661794455045822,
+              "rmse": 2.7756225131472063,
+              "bias": 0.2517840573669474
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.5341448183382322,
+              "rmse": 4.407376085284463,
+              "bias": -0.27825236357211297
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 6.0860160471069635,
+              "rmse": 6.0860160471069635,
+              "bias": 6.0860160471069635
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 6.427087693531163,
+              "rmse": 6.427087693531163,
+              "bias": 6.427087693531163
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.112755687080774,
+              "rmse": 5.3682272927346455,
+              "bias": -0.14215538913102366
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.525639319068752,
+              "rmse": 5.900450067795462,
+              "bias": -0.11323915891596903
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.132582746474186,
+              "rmse": 5.4218311659145195,
+              "bias": -0.10201777353525726
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.2313335612954,
+              "rmse": 5.618297208574648,
+              "bias": -0.020694247665142974
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.7744939932753985,
+              "rmse": 4.885584862450144,
+              "bias": -0.6846476558241892
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.1791316214143155,
+              "rmse": 5.2707819549857895,
+              "bias": -0.32364711425383025
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.131717979577595,
+              "rmse": 6.73446062963742,
+              "bias": -2.4113129640598343
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.102732420112657,
+              "rmse": 6.341821009318257,
+              "bias": -1.1697529107243392
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.207392351402435,
+              "rmse": 5.448892586398442,
+              "bias": 0.019957729751661976
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.766767855350333,
+              "rmse": 6.138172461472727,
+              "bias": -0.058936186390662976
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.209284054003556,
+              "rmse": 5.45481067145736,
+              "bias": 0.0681301290610927
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.6228700089241554,
+              "rmse": 5.966709179001651,
+              "bias": -0.0757801453099738
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.839705836061411,
+              "rmse": 6.102798978739661,
+              "bias": 0.01576046064537225
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.548734137104917,
+              "rmse": 5.882284912029391,
+              "bias": -0.1812780086335025
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.4543024103640643,
+              "rmse": 4.676062855093266,
+              "bias": 0.16330484450802993
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.852936199462662,
+              "rmse": 9.56202278195981,
+              "bias": 0.019808323575481273
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.1419481705532077,
+              "rmse": 3.3727461695878187,
+              "bias": 0.0464641522637756
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3818942306293804,
+              "rmse": 4.895885608455649,
+              "bias": -0.22147349719548245
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.338785281528271,
+              "rmse": 5.124113378701489,
+              "bias": 0.5551072281162183
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.30687375399672,
+              "rmse": 5.783433561375796,
+              "bias": 3.67917467453677
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.179927675608791,
+              "rmse": 5.428340525767379,
+              "bias": -0.1199859850377312
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.2544485019006135,
+              "rmse": 5.461969568954581,
+              "bias": -0.036898504699235134
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.025504260684825,
+              "rmse": 5.275392819694838,
+              "bias": -0.06012899179230371
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.257977513055835,
+              "rmse": 5.504049353540614,
+              "bias": 0.02952576688863759
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.3484296320633997,
+              "rmse": 4.449901224312331,
+              "bias": -0.15731087802281174
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.329594618371357,
+              "rmse": 5.6202167890353865,
+              "bias": -0.6833456746571017
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.573532116233776,
+              "rmse": 7.402665229806054,
+              "bias": -2.0124428496248172
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.455315929519571,
+              "rmse": 6.5471005369600315,
+              "bias": -1.2165512189057404
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.967444509897217,
+              "rmse": 6.225969282904097,
+              "bias": 0.31729795403314415
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.644207918284353,
+              "rmse": 8.166721142642135,
+              "bias": 0.26520699073709175
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.268004669603743,
+              "rmse": 6.572402427823286,
+              "bias": 0.2805436060093188
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.269391435232901,
+              "rmse": 7.734531837169779,
+              "bias": 1.7909867497667709
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.563598936257292,
+              "rmse": 6.919613806607465,
+              "bias": 0.2505991510584595
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.555398643815239,
+              "rmse": 8.041506607913547,
+              "bias": 2.018181759851616
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.753603394370488,
+              "rmse": 7.239136970840336,
+              "bias": -0.33317249759030493
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.752348153415229,
+              "rmse": 9.002318214771762,
+              "bias": 1.6792338130587177
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.268004669603743,
+              "rmse": 6.572402427823286,
+              "bias": 0.2805436060093188
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.269391435232901,
+              "rmse": 7.734531837169779,
+              "bias": 1.7909867497667709
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.726520001276766,
+              "rmse": 6.87422269296724,
+              "bias": 1.0363080413106718
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.670122275702766,
+              "rmse": 8.348725145018692,
+              "bias": 2.2053094413658103
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.345628197477818,
+              "rmse": 6.377707378330174,
+              "bias": 0.6063488208697748
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.831718699782838,
+              "rmse": 8.177647232321386,
+              "bias": 0.4145207391428532
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.046546963419581,
+              "rmse": 6.2466463838772075,
+              "bias": -0.048355353931322
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.942041764544602,
+              "rmse": 6.182379620652088,
+              "bias": 0.7158714622082883
+            }
+          }
+        }
+      }
+    },
+    "recruiting": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.137040660873619,
+              "rmse": 5.378276566375603,
+              "bias": -0.01920082855418689
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.740459301051564,
+              "rmse": 6.141931795526486,
+              "bias": -0.04799567640120712
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.13270757643459,
+              "rmse": 5.386824487254687,
+              "bias": 0.023584149136066657
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.661325670543995,
+              "rmse": 6.071409124706325,
+              "bias": -0.10498264402675557
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.7411635356475506,
+              "rmse": 5.968543255204852,
+              "bias": 0.07995795707244847
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.608318770326081,
+              "rmse": 5.9960266807642455,
+              "bias": -0.1257147071703739
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.849561289732885,
+              "rmse": 3.015009979587757,
+              "bias": 1.9869233573754292
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.634743510175321,
+              "rmse": 6.4320757373403525,
+              "bias": 3.4371927019442032
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.6638266223700475,
+              "rmse": 2.771764595313356,
+              "bias": 0.24642514929931295
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.512106438165063,
+              "rmse": 4.37073517148134,
+              "bias": -0.3131396024032689
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 6.03856999160587,
+              "rmse": 6.03856999160587,
+              "bias": 6.03856999160587
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 6.213442450968207,
+              "rmse": 6.213442450968207,
+              "bias": 6.213442450968207
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.109232922987043,
+              "rmse": 5.367446657155662,
+              "bias": -0.15724853591283255
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.5312284059301104,
+              "rmse": 5.906177917195645,
+              "bias": -0.1553719129829067
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.130353093262991,
+              "rmse": 5.422046822424265,
+              "bias": -0.11445973860789341
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.232427981833371,
+              "rmse": 5.618405826641394,
+              "bias": -0.05037272933601132
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.801499379012169,
+              "rmse": 4.930469082207117,
+              "bias": -0.716026101516612
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.246199465251345,
+              "rmse": 5.307353848248308,
+              "bias": -0.45412183097964093
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.130750833866074,
+              "rmse": 6.734667463846836,
+              "bias": -2.4148633045389856
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.099801417172239,
+              "rmse": 6.339399042866103,
+              "bias": -1.1467813863699552
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.20682943998093,
+              "rmse": 5.44854548999021,
+              "bias": 0.015622646496247986
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.7663026778098585,
+              "rmse": 6.13811603451148,
+              "bias": -0.06498820121373894
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.207044050495966,
+              "rmse": 5.453576046379577,
+              "bias": 0.0484989573670762
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.621224279686864,
+              "rmse": 5.966362474887113,
+              "bias": -0.10637878298866933
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.8383004441204305,
+              "rmse": 6.100421273800136,
+              "bias": -0.0026496377152411352
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.549252221941588,
+              "rmse": 5.88243002462096,
+              "bias": -0.20438559350140176
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.0786954907508526,
+              "rmse": 4.303834270387291,
+              "bias": 0.4599194695517171
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.403083360700985,
+              "rmse": 8.671092777315256,
+              "bias": 0.35693559549996584
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.114745538668163,
+              "rmse": 3.3395700679205094,
+              "bias": 0.15613817952802675
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3366306530827545,
+              "rmse": 4.742918332175897,
+              "bias": -0.1312349613142195
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.326843501807581,
+              "rmse": 4.9839830123794355,
+              "bias": 0.8248896645137602
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.203380661233609,
+              "rmse": 5.760584953700558,
+              "bias": 4.04790347472802
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.175961630182509,
+              "rmse": 5.426211827635245,
+              "bias": -0.16047691694929975
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.253911088571834,
+              "rmse": 5.463593137406252,
+              "bias": -0.0880718894353015
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.0237468655143935,
+              "rmse": 5.279118215094575,
+              "bias": -0.08737212695854879
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.254346262760624,
+              "rmse": 5.502147791950146,
+              "bias": -0.007255671323618314
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.346110280505098,
+              "rmse": 4.459080687764301,
+              "bias": -0.18387444288527785
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.337164976725108,
+              "rmse": 5.6289891322176135,
+              "bias": -0.7024027690700936
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.577170915659386,
+              "rmse": 7.392785389187266,
+              "bias": -1.9744950265109662
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.460081378067499,
+              "rmse": 6.549387676751124,
+              "bias": -1.1897377425537858
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.942953665764973,
+              "rmse": 6.202314015018348,
+              "bias": 0.31852358467776937
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.627144524002914,
+              "rmse": 8.148198885906893,
+              "bias": 0.25168513848257584
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.225921305578661,
+              "rmse": 6.527904050951166,
+              "bias": 0.40528945887100176
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.234146758707011,
+              "rmse": 7.6920613050999185,
+              "bias": 1.8430497359495446
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.50737891411359,
+              "rmse": 6.856195067203453,
+              "bias": 0.3925616060813423
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.519025519990412,
+              "rmse": 7.991886622359628,
+              "bias": 2.081064577124985
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.640750792282765,
+              "rmse": 7.111994483036144,
+              "bias": -0.21909676999824065
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.637636238017028,
+              "rmse": 8.892195074098158,
+              "bias": 1.747168461191368
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.225921305578661,
+              "rmse": 6.527904050951166,
+              "bias": 0.40528945887100176
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.234146758707011,
+              "rmse": 7.6920613050999185,
+              "bias": 1.8430497359495446
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.683807287265874,
+              "rmse": 6.844994539304564,
+              "bias": 1.1328801674718734
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.6364313361470915,
+              "rmse": 8.304537355551448,
+              "bias": 2.2418287645645694
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.369847808256392,
+              "rmse": 6.411121790905548,
+              "bias": 0.9126073268211223
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.782465617938524,
+              "rmse": 8.104536725141575,
+              "bias": 0.5795665178185454
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.034565330759029,
+              "rmse": 6.233699499766009,
+              "bias": -0.0911017805736802
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.930493483248808,
+              "rmse": 6.17097317326253,
+              "bias": 0.6866955473209205
+            }
+          }
+        }
+      }
+    },
+    "transfer_roles": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.1326990471308775,
+              "rmse": 5.380908406560649,
+              "bias": -0.10393891368765978
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.7387326263010685,
+              "rmse": 6.147129752143302,
+              "bias": -0.05786847924583122
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.127962085534743,
+              "rmse": 5.387407943038569,
+              "bias": -0.06530043174603
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.659717631364109,
+              "rmse": 6.074662865832719,
+              "bias": -0.06550060065837025
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.737933941998017,
+              "rmse": 5.970049473355236,
+              "bias": -0.04718513210297342
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.604412775534501,
+              "rmse": 5.998375793236099,
+              "bias": -0.052949997079913845
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.8289265861135897,
+              "rmse": 2.988226105979275,
+              "bias": 1.9708854540687273
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.725620976874278,
+              "rmse": 6.478007623137814,
+              "bias": 3.4778961541549784
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.7121498766155392,
+              "rmse": 2.799149517600222,
+              "bias": 0.3306409344645597
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.5870714593025004,
+              "rmse": 4.402904690997826,
+              "bias": -0.07198166487538701
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 6.361410659019488,
+              "rmse": 6.361410659019488,
+              "bias": 6.361410659019488
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 6.60262753899395,
+              "rmse": 6.60262753899395,
+              "bias": 6.60262753899395
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.108859465046771,
+              "rmse": 5.374124665118019,
+              "bias": -0.24736431560958239
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.52712964799136,
+              "rmse": 5.9133969480693755,
+              "bias": -0.09884318994167504
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.128466758955635,
+              "rmse": 5.427629599990462,
+              "bias": -0.24192254839565994
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.2388063974728505,
+              "rmse": 5.631682287360706,
+              "bias": -0.030653006865791515
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.7769218435679854,
+              "rmse": 4.886542277455005,
+              "bias": -0.7373373912995266
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.224136836888797,
+              "rmse": 5.3125271692248885,
+              "bias": -0.3473171916392
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.151922775982965,
+              "rmse": 6.764040618698585,
+              "bias": -2.4808049729935893
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.124046486620513,
+              "rmse": 6.36518346603627,
+              "bias": -1.2114394117603267
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.204381190243676,
+              "rmse": 5.449726931519914,
+              "bias": -0.010477235605810806
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.765192084092659,
+              "rmse": 6.143837670137555,
+              "bias": -0.07029409226424194
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.205944516969989,
+              "rmse": 5.455030262984152,
+              "bias": 0.041800377972078806
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.6202755292894375,
+              "rmse": 5.971539108858417,
+              "bias": -0.06500237094250638
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.836267892976041,
+              "rmse": 6.1015948592142335,
+              "bias": -0.013057067517292926
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.545218067800971,
+              "rmse": 5.883532618271846,
+              "bias": -0.12685689678828307
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.395446533512947,
+              "rmse": 4.66255628659194,
+              "bias": 0.07567820700308032
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.707057950509056,
+              "rmse": 9.509429268065695,
+              "bias": -0.16650013878863357
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.178793307976652,
+              "rmse": 3.383487741803344,
+              "bias": 0.10273812383024039
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3731112178377396,
+              "rmse": 4.876410834937233,
+              "bias": -0.09057296658786199
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.364186403195083,
+              "rmse": 5.1560396656732514,
+              "bias": 0.6893272978743807
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.373311024821261,
+              "rmse": 5.848737147692433,
+              "bias": 3.8655231558318803
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.173234062331913,
+              "rmse": 5.428471613875035,
+              "bias": -0.15152129639262416
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.24297186834535,
+              "rmse": 5.461506595778817,
+              "bias": -0.03484442028152581
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.017806511098417,
+              "rmse": 5.27770843884166,
+              "bias": -0.10203655212810096
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.24480558750793,
+              "rmse": 5.504382037532081,
+              "bias": 0.01978915967570092
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.351029847558348,
+              "rmse": 4.453210220105978,
+              "bias": -0.16509895330265903
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.325756133923751,
+              "rmse": 5.632881867702559,
+              "bias": -0.7069935674933349
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.589703670190933,
+              "rmse": 7.424815312773537,
+              "bias": -2.0482347356349817
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.477260712970633,
+              "rmse": 6.581635501639531,
+              "bias": -1.2601197950176108
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.961355900995126,
+              "rmse": 6.222932446424553,
+              "bias": 0.2989394000075866
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.645267044384731,
+              "rmse": 8.151993584934223,
+              "bias": 0.2471162057103197
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.265894758167317,
+              "rmse": 6.571877423837773,
+              "bias": 0.27307296832174316
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.273028450402718,
+              "rmse": 7.716809191577572,
+              "bias": 1.731282864758702
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.552988042984305,
+              "rmse": 6.918445165364638,
+              "bias": 0.22877628345843165
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.526528571222492,
+              "rmse": 7.998005246681665,
+              "bias": 1.8662761825725367
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.734698289237877,
+              "rmse": 7.245746257530193,
+              "bias": -0.44487495295171
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.7400780897582315,
+              "rmse": 8.98776147841891,
+              "bias": 1.5987940372390446
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.265894758167317,
+              "rmse": 6.571877423837773,
+              "bias": 0.27307296832174316
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.273028450402718,
+              "rmse": 7.716809191577572,
+              "bias": 1.731282864758702
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.71833966781862,
+              "rmse": 6.865898296862141,
+              "bias": 1.0463812600714395
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.647122264476286,
+              "rmse": 8.301103425162411,
+              "bias": 2.114123333904928
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.334308573700515,
+              "rmse": 6.356119360278087,
+              "bias": 0.6065068135433379
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.853656891476014,
+              "rmse": 8.180699117442177,
+              "bias": 0.3155603469609724
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.05092346185845,
+              "rmse": 6.250822670057449,
+              "bias": -0.09887595767730682
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.926518251364266,
+              "rmse": 6.167117225787648,
+              "bias": 0.6818926908598383
+            }
+          }
+        }
+      }
+    },
+    "observed_depth": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.133311275728593,
+              "rmse": 5.376985032419965,
+              "bias": -0.04821153950135516
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.740359670874181,
+              "rmse": 6.140498660637499,
+              "bias": -0.1109527756548661
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.128142883160611,
+              "rmse": 5.385892213318062,
+              "bias": -0.03393789821243164
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.662802364689571,
+              "rmse": 6.069521132024167,
+              "bias": -0.1986573537718285
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.737608320412417,
+              "rmse": 5.965550105046994,
+              "bias": 0.017396754922673143
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.61417041194758,
+              "rmse": 5.9891233727392885,
+              "bias": -0.22645077095631527
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.653652452167526,
+              "rmse": 2.816777011015317,
+              "bias": 1.7843571656098713
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.2993700267222845,
+              "rmse": 6.071822194089477,
+              "bias": 2.9850479908306817
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.6566289973295703,
+              "rmse": 2.7730189041982767,
+              "bias": 0.2107072305831917
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.4579797685015787,
+              "rmse": 4.351967446803271,
+              "bias": -0.39172659542870775
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 5.600346899137592,
+              "rmse": 5.600346899137592,
+              "bias": 5.600346899137592
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 5.1979137503024315,
+              "rmse": 5.1979137503024315,
+              "bias": 5.1979137503024315
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.108807195161675,
+              "rmse": 5.37059588460665,
+              "bias": -0.19013812637690006
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.527268772860145,
+              "rmse": 5.903754590919796,
+              "bias": -0.20795080186999212
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.130180574540566,
+              "rmse": 5.427863451924392,
+              "bias": -0.16099221083745097
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.237226166551917,
+              "rmse": 5.627124959555361,
+              "bias": -0.1334236735999366
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.7739678596492436,
+              "rmse": 4.881182509630724,
+              "bias": -0.7053505330882497
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.179110880594627,
+              "rmse": 5.267083399002587,
+              "bias": -0.3806150428866833
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.120360972569111,
+              "rmse": 6.725040334572003,
+              "bias": -2.3843934875608226
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.101229923275116,
+              "rmse": 6.351031082874968,
+              "bias": -1.1160075152287838
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.206168715413411,
+              "rmse": 5.449564839398534,
+              "bias": -0.005651634681295044
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.769181206947072,
+              "rmse": 6.140971052356568,
+              "bias": -0.083130466369259
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.206601468640205,
+              "rmse": 5.454537097842811,
+              "bias": 0.0347671448930262
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.62715941446295,
+              "rmse": 5.971388703622603,
+              "bias": -0.11151112063307457
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.836392675201514,
+              "rmse": 6.101294715500099,
+              "bias": -0.022482370920882715
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.554708143393921,
+              "rmse": 5.887651588568303,
+              "bias": -0.21339732909629758
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.2923637395444074,
+              "rmse": 4.492663388904979,
+              "bias": 0.09037356791965594
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.503374029481852,
+              "rmse": 9.351494008258111,
+              "bias": -0.13480934313664425
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.1398186212909893,
+              "rmse": 3.353861172392361,
+              "bias": 0.008338564015814497
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3566999100686443,
+              "rmse": 4.87627001361455,
+              "bias": -0.2744188914996017
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.52423868446406,
+              "rmse": 5.194728645292699,
+              "bias": 0.3523285204994445
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.103887448081251,
+              "rmse": 5.7613283464424745,
+              "bias": 3.390594291249955
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.177691377033636,
+              "rmse": 5.427262256254938,
+              "bias": -0.13897133660069746
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.257461261113574,
+              "rmse": 5.46721717882121,
+              "bias": -0.050336285157797506
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.025510408121631,
+              "rmse": 5.275338091483081,
+              "bias": -0.08000951262251949
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.2664099946742855,
+              "rmse": 5.514184699005225,
+              "bias": 0.01734376281109369
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.3457210753134676,
+              "rmse": 4.449877707152627,
+              "bias": -0.16040584479375564
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.334991074914339,
+              "rmse": 5.610610990379826,
+              "bias": -0.6795568034048135
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.587051929044398,
+              "rmse": 7.41460424816754,
+              "bias": -2.011856549961453
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.463124176430077,
+              "rmse": 6.55549140969004,
+              "bias": -1.1991604119476464
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.949646579145474,
+              "rmse": 6.201187104454176,
+              "bias": 0.3138894197410652
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.605783044632367,
+              "rmse": 8.122786490243525,
+              "bias": 0.2988056911248143
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.250350517587348,
+              "rmse": 6.54435731807601,
+              "bias": 0.24902480923167344
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.24892008752234,
+              "rmse": 7.706008920716568,
+              "bias": 1.7907833734965963
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.53654262015788,
+              "rmse": 6.887754517692732,
+              "bias": 0.18335333193149778
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.519328233848294,
+              "rmse": 7.993682604107334,
+              "bias": 1.949061353121918
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.739803735406671,
+              "rmse": 7.239711513403592,
+              "bias": -0.3823921497264296
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.735058028690838,
+              "rmse": 8.992874056009619,
+              "bias": 1.6550532187568432
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.250350517587348,
+              "rmse": 6.54435731807601,
+              "bias": 0.24902480923167344
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.24892008752234,
+              "rmse": 7.706008920716568,
+              "bias": 1.7907833734965963
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.675902008942938,
+              "rmse": 6.808947284864481,
+              "bias": 0.9824069381818243
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.639914639435967,
+              "rmse": 8.295463443360818,
+              "bias": 2.1799593171273015
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.370770053068325,
+              "rmse": 6.396840762364429,
+              "bias": 0.552314737176433
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.854171980030492,
+              "rmse": 8.200365209896873,
+              "bias": 0.40431444742162387
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.033931664277414,
+              "rmse": 6.237733195305166,
+              "bias": -0.038669382765501734
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.939114793750993,
+              "rmse": 6.179102270661891,
+              "bias": 0.7467982294532055
+            }
+          }
+        }
+      }
+    },
+    "participation": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.137086489631481,
+              "rmse": 5.377437466578857,
+              "bias": -0.02271257901975575
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.739970699052955,
+              "rmse": 6.138521247945691,
+              "bias": -0.041286371547752665
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.133630837272769,
+              "rmse": 5.385934653987578,
+              "bias": 0.020600433696840937
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.66048982357309,
+              "rmse": 6.064554949636846,
+              "bias": -0.08196873734547312
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.7411405840807825,
+              "rmse": 5.968737101021406,
+              "bias": 0.05755056156686924
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.605649406971769,
+              "rmse": 5.9894275243839905,
+              "bias": -0.1309225287111636
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.677043890449697,
+              "rmse": 2.8406312929835678,
+              "bias": 1.7471963132742212
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.50653058454201,
+              "rmse": 6.264864509400042,
+              "bias": 3.081231814335123
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.6987394903701247,
+              "rmse": 2.762019428263344,
+              "bias": 0.3328920564756494
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.506826966753468,
+              "rmse": 4.342648950571024,
+              "bias": -0.10801420528173522
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 5.877872512660852,
+              "rmse": 5.877872512660852,
+              "bias": 5.877872512660852
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 6.0593520145620605,
+              "rmse": 6.0593520145620605,
+              "bias": 6.0593520145620605
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.116087979532191,
+              "rmse": 5.365672739899945,
+              "bias": -0.10291721433615335
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.528960778800087,
+              "rmse": 5.8957134456024685,
+              "bias": -0.11840538849824926
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.131185601030118,
+              "rmse": 5.417062542161233,
+              "bias": -0.10350647134429788
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.231390218484051,
+              "rmse": 5.608521111149359,
+              "bias": -0.019920382685224905
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.7710139053393257,
+              "rmse": 4.864473266379606,
+              "bias": -0.6420431349423595
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.179384563547518,
+              "rmse": 5.2616794645298945,
+              "bias": -0.2764883722047183
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.1249805257762375,
+              "rmse": 6.740954582924609,
+              "bias": -2.4390223940393776
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.126182544320685,
+              "rmse": 6.361356388169349,
+              "bias": -1.1566674939765829
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.208088632628252,
+              "rmse": 5.448542584010969,
+              "bias": 0.026090638887288586
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.766332138840654,
+              "rmse": 6.136310733543014,
+              "bias": -0.055168740334061
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.209799640907768,
+              "rmse": 5.454506084316994,
+              "bias": 0.07568430083088369
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.623571651593238,
+              "rmse": 5.964819838561003,
+              "bias": -0.06799645762837302
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.838712954354466,
+              "rmse": 6.101901403257837,
+              "bias": 0.013320195198309945
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.548797287879792,
+              "rmse": 5.879964928665911,
+              "bias": -0.18953478267833762
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.3302848037608173,
+              "rmse": 4.690990737776421,
+              "bias": -0.11456371228126476
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.620700445770184,
+              "rmse": 9.561212815367481,
+              "bias": -0.429467185584489
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.158538699352352,
+              "rmse": 3.376507313394569,
+              "bias": 0.12507111633504073
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.340206824808253,
+              "rmse": 4.876644802485811,
+              "bias": -0.05421537978473499
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.402767038308833,
+              "rmse": 5.104387041200239,
+              "bias": 0.32241631134584003
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.1626554860963125,
+              "rmse": 5.593920189452467,
+              "bias": 3.387733727992041
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.180859328729445,
+              "rmse": 5.427166363218377,
+              "bias": -0.07833984967285369
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.256695160869511,
+              "rmse": 5.459674041425806,
+              "bias": -0.0318574738075401
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.023693223343919,
+              "rmse": 5.2750192258934705,
+              "bias": -0.05180109574935305
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.26023701834685,
+              "rmse": 5.500372478780668,
+              "bias": 0.05092330956130972
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.354003369673001,
+              "rmse": 4.447552166605598,
+              "bias": -0.11776942166965562
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.3319311738393464,
+              "rmse": 5.603494146892037,
+              "bias": -0.6838563639305956
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.584113721611719,
+              "rmse": 7.410284600462437,
+              "bias": -1.9953429813482815
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.466445732562755,
+              "rmse": 6.54966765416261,
+              "bias": -1.1722136631823592
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.961845003671632,
+              "rmse": 6.224151864407523,
+              "bias": 0.3297189188319777
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.631291156173515,
+              "rmse": 8.156310664245682,
+              "bias": 0.306474024113408
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.26334197137797,
+              "rmse": 6.574135976318531,
+              "bias": 0.28833145080269257
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.266680551803692,
+              "rmse": 7.736632075439092,
+              "bias": 1.8295818914051682
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.554659783774101,
+              "rmse": 6.923499938510919,
+              "bias": 0.2368837539695538
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.552152600920563,
+              "rmse": 8.040681306102787,
+              "bias": 2.03454162771128
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.723766988768963,
+              "rmse": 7.244212612066684,
+              "bias": -0.463617735221229
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.721812234756477,
+              "rmse": 8.981650384589216,
+              "bias": 1.5957472310425085
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.26334197137797,
+              "rmse": 6.574135976318531,
+              "bias": 0.28833145080269257
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.266680551803692,
+              "rmse": 7.736632075439092,
+              "bias": 1.8295818914051682
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.725368131664683,
+              "rmse": 6.871410143498439,
+              "bias": 1.0532974751246864
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.663530873122402,
+              "rmse": 8.345085142523459,
+              "bias": 2.236377304239723
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.345713729435953,
+              "rmse": 6.37567956397296,
+              "bias": 0.5756699964891606
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.832799311124142,
+              "rmse": 8.18254852834243,
+              "bias": 0.44904247704369243
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.049276222869431,
+              "rmse": 6.24859764906258,
+              "bias": -0.028593613050495206
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.959566845760121,
+              "rmse": 6.201802644652364,
+              "bias": 0.7492472786429948
+            }
+          }
+        }
+      }
+    },
+    "joint": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.130727841372554,
+              "rmse": 5.379697475029989,
+              "bias": -0.1152552600140954
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.7397824342085135,
+              "rmse": 6.14448696771132,
+              "bias": -0.13050986222135763
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.125308295601752,
+              "rmse": 5.387657098436332,
+              "bias": -0.10973826856379462
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.666567514376955,
+              "rmse": 6.077220977408062,
+              "bias": -0.2360696695486955
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.734387501645438,
+              "rmse": 5.967764910010007,
+              "bias": -0.09567071089782103
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.622063978066155,
+              "rmse": 5.998053617026362,
+              "bias": -0.24003181255382364
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.572783686374708,
+              "rmse": 2.736018546680802,
+              "bias": 1.5811247289216703
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.0109418213741375,
+              "rmse": 5.8345266599039585,
+              "bias": 2.557886668450363
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.69762101587193,
+              "rmse": 2.779603092309471,
+              "bias": 0.28973384243984485
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.4539670264506444,
+              "rmse": 4.31285883913599,
+              "bias": -0.21697352872649273
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 5.845777736189858,
+              "rmse": 5.845777736189858,
+              "bias": 5.845777736189858
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 5.116570599347325,
+              "rmse": 5.116570599347325,
+              "bias": 5.116570599347325
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.106932718991796,
+              "rmse": 5.374748345386196,
+              "bias": -0.2614928852901601
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.537435143214577,
+              "rmse": 5.917234499957113,
+              "bias": -0.28073702154061897
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.128240736270692,
+              "rmse": 5.434542099901485,
+              "bias": -0.2707851917117154
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.235928605160523,
+              "rmse": 5.6256592062377795,
+              "bias": -0.1876796649678018
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.8032814882104073,
+              "rmse": 4.912973164748626,
+              "bias": -0.7749963107748367
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.2696545617956865,
+              "rmse": 5.331886010476577,
+              "bias": -0.5444995819781148
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.131670806412753,
+              "rmse": 6.7518687338100145,
+              "bias": -2.440801707035385
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.134846528355436,
+              "rmse": 6.383810734844463,
+              "bias": -1.1491911832137103
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.204135193789153,
+              "rmse": 5.448292437118347,
+              "bias": -0.019416081946779004
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.76291015963861,
+              "rmse": 6.135965010455689,
+              "bias": -0.0883527423118249
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.202228805799031,
+              "rmse": 5.452215378545779,
+              "bias": 0.004283837633518645
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.620598085206171,
+              "rmse": 5.9660706141361635,
+              "bias": -0.14092988369191853
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.831453381716925,
+              "rmse": 6.097051525035221,
+              "bias": -0.0655128170168805
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.550725557424961,
+              "rmse": 5.882538933757519,
+              "bias": -0.23032431942335166
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 2.87566662264269,
+              "rmse": 4.143355709214791,
+              "bias": 0.15505263542320336
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 6.947548990834264,
+              "rmse": 8.52273325562017,
+              "bias": -0.21493884765163865
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.167475426391089,
+              "rmse": 3.3495930484705743,
+              "bias": 0.24347562719365223
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3192507804875833,
+              "rmse": 4.727098888719957,
+              "bias": 0.05207651174687127
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.5298624008429655,
+              "rmse": 5.164416667882437,
+              "bias": 0.7975167698799737
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.013704314776448,
+              "rmse": 5.61743588894874,
+              "bias": 3.606336681470819
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.170742208497748,
+              "rmse": 5.423072243554588,
+              "bias": -0.16727269617216456
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.251577883408277,
+              "rmse": 5.459083964877278,
+              "bias": -0.11919652467013304
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.018012032674228,
+              "rmse": 5.277170011741726,
+              "bias": -0.1280458040869752
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.254007484828145,
+              "rmse": 5.498635707671803,
+              "bias": -0.012565714739894153
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.3492068365468484,
+              "rmse": 4.4622333005703565,
+              "bias": -0.15954339432777595
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.3470797789319535,
+              "rmse": 5.602056102571807,
+              "bias": -0.7185771015929908
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.6093616620475,
+              "rmse": 7.422307317614712,
+              "bias": -1.9710478609896287
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.486227174674402,
+              "rmse": 6.565928414173567,
+              "bias": -1.149581793164988
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.9235089261588465,
+              "rmse": 6.176877466299057,
+              "bias": 0.3311340341807089
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.577368321804448,
+              "rmse": 8.08489885004602,
+              "bias": 0.3134560016426653
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.209575095941023,
+              "rmse": 6.505189521357017,
+              "bias": 0.3850588376803609
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.209440142818115,
+              "rmse": 7.653036333194275,
+              "bias": 1.821792010902358
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.47618682514753,
+              "rmse": 6.828087794939506,
+              "bias": 0.32298882908279436
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.459231165299359,
+              "rmse": 7.910028057619639,
+              "bias": 1.9101314968734213
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.609974723502791,
+              "rmse": 7.1144291304885865,
+              "bias": -0.32503144400733525
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.606811204868771,
+              "rmse": 8.877276805545833,
+              "bias": 1.6873774045373597
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.209575095941023,
+              "rmse": 6.505189521357017,
+              "bias": 0.3850588376803609
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.209440142818115,
+              "rmse": 7.653036333194275,
+              "bias": 1.821792010902358
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.637514037767753,
+              "rmse": 6.7830520808138015,
+              "bias": 1.0816216996490255
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.61299751154469,
+              "rmse": 8.235048299423518,
+              "bias": 2.175907485011443
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.400611331629345,
+              "rmse": 6.427955002506986,
+              "bias": 0.8440913607655157
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.842883937274353,
+              "rmse": 8.138026485873928,
+              "bias": 0.5305119025011006
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.026524476322165,
+              "rmse": 6.221731286218139,
+              "bias": -0.04723381660996332
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.9322246970423524,
+              "rmse": 6.164606623502928,
+              "bias": 0.7787900498861987
+            }
+          }
+        }
+      }
+    },
+    "joint_without_recruiting": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.130558509036429,
+              "rmse": 5.379512303249985,
+              "bias": -0.11349281317762797
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.738904585406875,
+              "rmse": 6.143901150085372,
+              "bias": -0.12715442481113617
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.1258625258763235,
+              "rmse": 5.387500743572501,
+              "bias": -0.0955993985766654
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.664329194303677,
+              "rmse": 6.074929245901372,
+              "bias": -0.20898041671277712
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.735915089603368,
+              "rmse": 5.968632901307358,
+              "bias": -0.07753583766708093
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.619312770402632,
+              "rmse": 5.997197839400967,
+              "bias": -0.21660085496312842
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.588768876455106,
+              "rmse": 2.757933843450281,
+              "bias": 1.6463234550879433
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.166209680921479,
+              "rmse": 5.954777387501268,
+              "bias": 2.6675747779483814
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.7078376064992424,
+              "rmse": 2.7866799548444576,
+              "bias": 0.31476748274086686
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.479635275814101,
+              "rmse": 4.351166367968021,
+              "bias": -0.16594530364749152
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 5.926778946891939,
+              "rmse": 5.926778946891939,
+              "bias": 5.926778946891939
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 5.331858684923201,
+              "rmse": 5.331858684923201,
+              "bias": 5.331858684923201
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.108957714960138,
+              "rmse": 5.373668314488757,
+              "bias": -0.23104178177577717
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.531450360584729,
+              "rmse": 5.912121423038125,
+              "bias": -0.231999653288506
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.126184746333925,
+              "rmse": 5.428220483103369,
+              "bias": -0.24474890556892273
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.237405703713395,
+              "rmse": 5.628054767339308,
+              "bias": -0.1475105779245019
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.77715891366182,
+              "rmse": 4.869047314629153,
+              "bias": -0.7210451228303169
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.1969319350046055,
+              "rmse": 5.28739151792383,
+              "bias": -0.39966382422887947
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.135273400864941,
+              "rmse": 6.760039850301347,
+              "bias": -2.4714445069344633
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.134448548241502,
+              "rmse": 6.382030565687373,
+              "bias": -1.1708786505327082
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.204822918524512,
+              "rmse": 5.4486490018394145,
+              "bias": -0.013546653938356516
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.763699619144423,
+              "rmse": 6.136097812156572,
+              "bias": -0.08323972409755236
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.204727504634636,
+              "rmse": 5.453369415689796,
+              "bias": 0.026552861005497596
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.622870497537154,
+              "rmse": 5.966541956444128,
+              "bias": -0.11133859544277011
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.833003807239934,
+              "rmse": 6.099277228138663,
+              "bias": -0.044927749339942924
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.551080172834776,
+              "rmse": 5.882709388071708,
+              "bias": -0.2105585308882523
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 3.226676612837857,
+              "rmse": 4.546503979632739,
+              "bias": -0.12174941622635382
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 7.3779708748013775,
+              "rmse": 9.458672682295305,
+              "bias": -0.5660234215511101
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.186343075012495,
+              "rmse": 3.3746798243194283,
+              "bias": 0.13196593943566456
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3671102922285345,
+              "rmse": 4.883469344452019,
+              "bias": -0.04779540140187136
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.5338535550207135,
+              "rmse": 5.290190669125174,
+              "bias": 0.5227395237451244
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 5.104663418235172,
+              "rmse": 5.643455198507478,
+              "bias": 3.2044276244110375
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.174372893730823,
+              "rmse": 5.425278965002323,
+              "bias": -0.12699533266023763
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.252946021306603,
+              "rmse": 5.457235235610906,
+              "bias": -0.07024467162093524
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.019520215087009,
+              "rmse": 5.27372111015799,
+              "bias": -0.0983152663404155
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.2583166523659575,
+              "rmse": 5.500430994959121,
+              "bias": 0.023738530292578986
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.350279037447317,
+              "rmse": 4.45331836644882,
+              "bias": -0.13668289293421299
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.340122890322555,
+              "rmse": 5.593019568974619,
+              "bias": -0.7064584042797657
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.605052066788994,
+              "rmse": 7.431800154166322,
+              "bias": -2.0093273325435255
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.481280956261459,
+              "rmse": 6.563774199240137,
+              "bias": -1.1778516448978666
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.9503276379688685,
+              "rmse": 6.200709772086591,
+              "bias": 0.3337730055662542
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.595710016856165,
+              "rmse": 8.105331496362966,
+              "bias": 0.3301127036967465
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.253969302490062,
+              "rmse": 6.54831010303755,
+              "bias": 0.26397735283229184
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.245539300716213,
+              "rmse": 7.697221655272592,
+              "bias": 1.7778152978112072
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.534784057774063,
+              "rmse": 6.891450903553075,
+              "bias": 0.18323394408291752
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.501529803146175,
+              "rmse": 7.963518759221833,
+              "bias": 1.853857434921744
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.726610118436798,
+              "rmse": 7.240621170989758,
+              "bias": -0.42304219982987484
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.721692502466312,
+              "rmse": 8.987962684041047,
+              "bias": 1.6473951241880371
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.253969302490062,
+              "rmse": 6.54831010303755,
+              "bias": 0.26397735283229184
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.245539300716213,
+              "rmse": 7.697221655272592,
+              "bias": 1.7778152978112072
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.6772487348048495,
+              "rmse": 6.807194591214965,
+              "bias": 0.9783232533313033
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.641958422611874,
+              "rmse": 8.278523807780317,
+              "bias": 2.1364343014836678
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.385347655163001,
+              "rmse": 6.402934555230085,
+              "bias": 0.5440718004992678
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.905496740547126,
+              "rmse": 8.218930123731647,
+              "bias": 0.372194308664827
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.036356234014292,
+              "rmse": 6.233807568717491,
+              "bias": -0.0015657714046998733
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.9424237066426135,
+              "rmse": 6.176040779668791,
+              "bias": 0.8079097379905366
+            }
+          }
+        }
+      }
+    },
+    "joint_without_depth": {
+      "2025": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 68903,
+              "mae": 4.133079134935675,
+              "rmse": 5.379467355829138,
+              "bias": -0.09040668726949391
+            },
+            "minutes": {
+              "n": 68903,
+              "mae": 4.737564464442061,
+              "rmse": 6.142184722767027,
+              "bias": -0.06914125941037025
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20903,
+              "mae": 4.1279704833565765,
+              "rmse": 5.386519191672543,
+              "bias": -0.06804304053908837
+            },
+            "minutes": {
+              "n": 20903,
+              "mae": 4.659756513690099,
+              "rmse": 6.070650602998843,
+              "bias": -0.12350294859258672
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11554,
+              "mae": 4.736224403779591,
+              "rmse": 5.968479784187156,
+              "bias": -0.05442701090538208
+            },
+            "minutes": {
+              "n": 11554,
+              "mae": 4.607880397653418,
+              "rmse": 5.99422895875762,
+              "bias": -0.12978697541277412
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 14,
+              "mae": 2.707044830399417,
+              "rmse": 2.8683267135984094,
+              "bias": 1.7507913272311233
+            },
+            "minutes": {
+              "n": 14,
+              "mae": 5.311216660049071,
+              "rmse": 6.12598224810926,
+              "bias": 2.870606872401273
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 140,
+              "mae": 1.730580013363261,
+              "rmse": 2.8007473469067894,
+              "bias": 0.3398628493536149
+            },
+            "minutes": {
+              "n": 140,
+              "mae": 2.5127254775240453,
+              "rmse": 4.357177892664522,
+              "bias": -0.08372581080737435
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 1,
+              "mae": 6.025204989200755,
+              "rmse": 6.025204989200755,
+              "bias": 6.025204989200755
+            },
+            "minutes": {
+              "n": 1,
+              "mae": 5.683990674107346,
+              "rmse": 5.683990674107346,
+              "bias": 5.683990674107346
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2902,
+              "mae": 4.108318143869887,
+              "rmse": 5.371572867319449,
+              "bias": -0.22407042752906112
+            },
+            "minutes": {
+              "n": 2902,
+              "mae": 4.530521514923937,
+              "rmse": 5.906414081347412,
+              "bias": -0.17419853522892356
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1385,
+              "mae": 4.129275686119713,
+              "rmse": 5.42957123251015,
+              "bias": -0.2319170157447923
+            },
+            "minutes": {
+              "n": 1385,
+              "mae": 4.230045789400082,
+              "rmse": 5.612666917570852,
+              "bias": -0.07761376796968245
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 144,
+              "mae": 3.798867218344645,
+              "rmse": 4.913558379488813,
+              "bias": -0.7496846329385701
+            },
+            "minutes": {
+              "n": 144,
+              "mae": 4.2645087465698,
+              "rmse": 5.323939093703071,
+              "bias": -0.4507521337461349
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 143,
+              "mae": 5.135708259832527,
+              "rmse": 6.749654178007815,
+              "bias": -2.462178370912781
+            },
+            "minutes": {
+              "n": 143,
+              "mae": 5.127504926101923,
+              "rmse": 6.367993931252976,
+              "bias": -1.1736250364152638
+            }
+          }
+        }
+      },
+      "2026": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 67281,
+              "mae": 4.204550222703102,
+              "rmse": 5.447388473700001,
+              "bias": -0.003954206218242946
+            },
+            "minutes": {
+              "n": 67281,
+              "mae": 4.761366520379202,
+              "rmse": 6.133675431673783,
+              "bias": -0.07815588001521209
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 20541,
+              "mae": 4.203414782862542,
+              "rmse": 5.451544743499124,
+              "bias": 0.02392724761977679
+            },
+            "minutes": {
+              "n": 20541,
+              "mae": 4.617311368885135,
+              "rmse": 5.961157508210451,
+              "bias": -0.12018312493797748
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 11642,
+              "mae": 4.832773018372375,
+              "rmse": 6.097042853486044,
+              "bias": -0.04511084503399624
+            },
+            "minutes": {
+              "n": 11642,
+              "mae": 4.546062846294777,
+              "rmse": 5.876920616028488,
+              "bias": -0.21901727338055266
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 12,
+              "mae": 2.9286619746376097,
+              "rmse": 4.327727929413519,
+              "bias": 0.06237099332114734
+            },
+            "minutes": {
+              "n": 12,
+              "mae": 6.963521213397932,
+              "rmse": 8.69698915059503,
+              "bias": -0.5498244060003343
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 122,
+              "mae": 2.17318468394725,
+              "rmse": 3.3651505520968175,
+              "bias": 0.2606981577450709
+            },
+            "minutes": {
+              "n": 122,
+              "mae": 3.3107883266660267,
+              "rmse": 4.735946221490059,
+              "bias": 0.07123411214834977
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 4,
+              "mae": 4.429172003998586,
+              "rmse": 5.0417299217227605,
+              "bias": 0.6362315965314838
+            },
+            "minutes": {
+              "n": 4,
+              "mae": 4.975501247484542,
+              "rmse": 5.377558751224393,
+              "bias": 3.4465728970319587
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 2798,
+              "mae": 4.171760980214274,
+              "rmse": 5.423843162101941,
+              "bias": -0.15333748617384407
+            },
+            "minutes": {
+              "n": 2798,
+              "mae": 4.249436971342871,
+              "rmse": 5.454712169524938,
+              "bias": -0.1108902704516237
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 1376,
+              "mae": 4.017498580715361,
+              "rmse": 5.277237077370328,
+              "bias": -0.11504640889847809
+            },
+            "minutes": {
+              "n": 1376,
+              "mae": 4.245755026842277,
+              "rmse": 5.487422113502474,
+              "bias": -0.010924176531952684
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 181,
+              "mae": 3.3512425459551474,
+              "rmse": 4.462831067823977,
+              "bias": -0.15664630824602319
+            },
+            "minutes": {
+              "n": 181,
+              "mae": 4.339804555559135,
+              "rmse": 5.608492228917651,
+              "bias": -0.7217257892011265
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 112,
+              "mae": 5.593941465532999,
+              "rmse": 7.4109358648314645,
+              "bias": -1.9697975153950265
+            },
+            "minutes": {
+              "n": 112,
+              "mae": 5.479775481742983,
+              "rmse": 6.563379736075742,
+              "bias": -1.1556046181149462
+            }
+          }
+        }
+      },
+      "opening2027": {
+        "groups": {
+          "all_verified_d1": {
+            "model": {
+              "n": 4318,
+              "mae": 4.933134811167025,
+              "rmse": 6.193429056925936,
+              "bias": 0.3380978041765292
+            },
+            "minutes": {
+              "n": 4318,
+              "mae": 6.610103717306371,
+              "rmse": 8.118706735066164,
+              "bias": 0.3064247191689666
+            }
+          },
+          "eligible_conferences": {
+            "model": {
+              "n": 1537,
+              "mae": 5.221199156895148,
+              "rmse": 6.526558488627643,
+              "bias": 0.4254682916436709
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.232353659278781,
+              "rmse": 7.679727034653141,
+              "bias": 1.8452403847232919
+            }
+          },
+          "eligible_prior20_minutes": {
+            "model": {
+              "n": 1058,
+              "mae": 5.492687840349688,
+              "rmse": 6.855024263965428,
+              "bias": 0.3742378998008515
+            },
+            "minutes": {
+              "n": 1058,
+              "mae": 6.491557993086634,
+              "rmse": 7.947456015741359,
+              "bias": 1.9593726026767933
+            }
+          },
+          "eligible_cold_start": {
+            "model": {
+              "n": 366,
+              "mae": 5.608891253396898,
+              "rmse": 7.115426957987402,
+              "bias": -0.3428900554734145
+            },
+            "minutes": {
+              "n": 366,
+              "mae": 7.617268327259537,
+              "rmse": 8.884455623259814,
+              "bias": 1.7246855418554365
+            }
+          },
+          "eligible_first3_season_games": {
+            "model": {
+              "n": 1537,
+              "mae": 5.221199156895148,
+              "rmse": 6.526558488627643,
+              "bias": 0.4254682916436709
+            },
+            "minutes": {
+              "n": 1537,
+              "mae": 6.232353659278781,
+              "rmse": 7.679727034653141,
+              "bias": 1.8452403847232919
+            }
+          },
+          "eligible_transfer": {
+            "model": {
+              "n": 534,
+              "mae": 5.680863616016229,
+              "rmse": 6.837252566106878,
+              "bias": 1.1695183427098044
+            },
+            "minutes": {
+              "n": 534,
+              "mae": 6.642791383540273,
+              "rmse": 8.280002233807341,
+              "bias": 2.211453909187276
+            }
+          },
+          "eligible_neutral_site": {
+            "model": {
+              "n": 126,
+              "mae": 5.3779470558532205,
+              "rmse": 6.408488144952249,
+              "bias": 0.9011646420357459
+            },
+            "minutes": {
+              "n": 126,
+              "mae": 6.841179742512697,
+              "rmse": 8.120388553317214,
+              "bias": 0.5464127309564543
+            }
+          },
+          "eligible_postseason": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "eligible_predicted_mismatch": {
+            "model": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            },
+            "minutes": {
+              "n": 0,
+              "mae": null,
+              "rmse": null,
+              "bias": null
+            }
+          },
+          "unverified_opponent": {
+            "model": {
+              "n": 1445,
+              "mae": 5.033502633088628,
+              "rmse": 6.224643083954732,
+              "bias": -0.05616315625748974
+            },
+            "minutes": {
+              "n": 1445,
+              "mae": 4.931191268042972,
+              "rmse": 6.166780971470581,
+              "bias": 0.7657397640342807
+            }
+          }
+        }
+      }
+    }
+  },
+  "selection": {
+    "linear": {
+      "selected": "joint",
+      "relative": {
+        "baseline": 1.0,
+        "capacity_control": 0.9995249441191161,
+        "recruiting": 0.9977310856161843,
+        "transfer_roles": 0.9986237786340313,
+        "observed_depth": 0.998132606068369,
+        "participation": 0.9984289031783743,
+        "joint": 0.9953201390735984,
+        "joint_without_recruiting": 0.9970167419636176,
+        "joint_without_depth": 0.9962583543928474
+      },
+      "configurations": {
+        "baseline": {
+          "2025": {
+            "mae": 4.367983786723685,
+            "all_d1_mae": 4.251971119242964,
+            "minutes_ridge": 0,
+            "rate_ridge": 0,
+            "candidates": [
+              {
+                "minutes_ridge": 0,
+                "rate_ridge": 0,
+                "mae": 4.367983786723685,
+                "all_d1_mae": 4.251971119242964
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.4635091684324735,
+            "all_d1_mae": 4.302950161422817,
+            "minutes_ridge": 0,
+            "rate_ridge": 0,
+            "candidates": [
+              {
+                "minutes_ridge": 0,
+                "rate_ridge": 0,
+                "mae": 4.4635091684324735,
+                "all_d1_mae": 4.302950161422817
+              }
+            ]
+          }
+        },
+        "capacity_control": {
+          "2025": {
+            "mae": 4.3669533107982526,
+            "all_d1_mae": 4.250318043359347,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.3669533107982526,
+                "all_d1_mae": 4.250318043359347
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.367587424901059,
+                "all_d1_mae": 4.250848537771647
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.367864800034937,
+                "all_d1_mae": 4.251140292267333
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.369312009048393,
+                "all_d1_mae": 4.251880357052724
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.370037766923336,
+                "all_d1_mae": 4.252500670261435
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.3703329950454775,
+                "all_d1_mae": 4.252809572106041
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.36835496695447,
+                "all_d1_mae": 4.25161232137789
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.369102613872152,
+                "all_d1_mae": 4.252244791695899
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.369397203117986,
+                "all_d1_mae": 4.252553886304514
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.460321347734918,
+            "all_d1_mae": 4.300879161268996,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.460321347734918,
+                "all_d1_mae": 4.300879161268996
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.461017312920773,
+                "all_d1_mae": 4.301336436402379
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.461464624285518,
+                "all_d1_mae": 4.301684711471128
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.463134081855259,
+                "all_d1_mae": 4.302319032858096
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.463896652100518,
+                "all_d1_mae": 4.30283470303911
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.464353808093887,
+                "all_d1_mae": 4.303193177060595
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.462841594242317,
+                "all_d1_mae": 4.3022478681059955
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.463590248144138,
+                "all_d1_mae": 4.302761941673333
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.464040211000865,
+                "all_d1_mae": 4.303117288766635
+              }
+            ]
+          }
+        },
+        "recruiting": {
+          "2025": {
+            "mae": 4.365565874223834,
+            "all_d1_mae": 4.248934394557268,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 1.0,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.366464343359028,
+                "all_d1_mae": 4.247969655495359
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.366321127642409,
+                "all_d1_mae": 4.248422878630714
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.365565874223834,
+                "all_d1_mae": 4.248934394557268
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.368575697245783,
+                "all_d1_mae": 4.249599689621247
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.368587271239025,
+                "all_d1_mae": 4.250178776273564
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.367983493088465,
+                "all_d1_mae": 4.25073990000542
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.36807401636678,
+                "all_d1_mae": 4.249695774373058
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.368209138586872,
+                "all_d1_mae": 4.250319779920619
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.367846115613969,
+                "all_d1_mae": 4.250957575873921
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.445725319027946,
+            "all_d1_mae": 4.293474057817741,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.445725319027946,
+                "all_d1_mae": 4.293474057817741
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.446947280167671,
+                "all_d1_mae": 4.294296611229897
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.449150535454474,
+                "all_d1_mae": 4.295946776549386
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.448552317345175,
+                "all_d1_mae": 4.295018877056276
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.44982710612955,
+                "all_d1_mae": 4.295893409060978
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.452068506692359,
+                "all_d1_mae": 4.297558685225082
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.450472183580002,
+                "all_d1_mae": 4.295894838827109
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.4517627800067725,
+                "all_d1_mae": 4.296774681671275
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.454114567158431,
+                "all_d1_mae": 4.298489329945355
+              }
+            ]
+          }
+        },
+        "transfer_roles": {
+          "2025": {
+            "mae": 4.360838246250611,
+            "all_d1_mae": 4.245895516290745,
+            "minutes_ridge": 1.0,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.362515217992647,
+                "all_d1_mae": 4.246360599682862
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.368383250081914,
+                "all_d1_mae": 4.250292915986065
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.370327821581735,
+                "all_d1_mae": 4.252324171323823
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.3617548472688314,
+                "all_d1_mae": 4.245844582888475
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.367497073412316,
+                "all_d1_mae": 4.249625053435149
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.369582843996436,
+                "all_d1_mae": 4.25170026820557
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.360838246250611,
+                "all_d1_mae": 4.245895516290745
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.366758167336524,
+                "all_d1_mae": 4.249849956428144
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.368964481071109,
+                "all_d1_mae": 4.2520100486044905
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.458525424541188,
+            "all_d1_mae": 4.297418267271279,
+            "minutes_ridge": 1.0,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.459172859732663,
+                "all_d1_mae": 4.297706181456557
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.460890751116018,
+                "all_d1_mae": 4.299307478099253
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.463273544994934,
+                "all_d1_mae": 4.30193460640547
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.460183054626549,
+                "all_d1_mae": 4.298156043881049
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.461925136464493,
+                "all_d1_mae": 4.299770243582895
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.464346497169007,
+                "all_d1_mae": 4.302399360685928
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.458525424541188,
+                "all_d1_mae": 4.297418267271279
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.460270361522845,
+                "all_d1_mae": 4.299068901967885
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.462805651295183,
+                "all_d1_mae": 4.301803380272819
+              }
+            ]
+          }
+        },
+        "observed_depth": {
+          "2025": {
+            "mae": 4.362121259466847,
+            "all_d1_mae": 4.247488502831691,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 1.0,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.362443218974389,
+                "all_d1_mae": 4.247319530385966
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.362563321947823,
+                "all_d1_mae": 4.2475622026639765
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.362121259466847,
+                "all_d1_mae": 4.247488502831691
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.364813503069676,
+                "all_d1_mae": 4.2490434982316225
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.365201445697886,
+                "all_d1_mae": 4.249479616810727
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.364901701980235,
+                "all_d1_mae": 4.249518145329606
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.3655469402623615,
+                "all_d1_mae": 4.249772259820331
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.366064055855582,
+                "all_d1_mae": 4.250305194481987
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.365876399418418,
+                "all_d1_mae": 4.250424772853031
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.452829646037599,
+            "all_d1_mae": 4.293780934689664,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.452829646037599,
+                "all_d1_mae": 4.293780934689664
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.453974787352079,
+                "all_d1_mae": 4.294875800739419
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.455117280907877,
+                "all_d1_mae": 4.296173934506294
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.457333774823678,
+                "all_d1_mae": 4.296820648262253
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.458645517580046,
+                "all_d1_mae": 4.298054592730564
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.459867992189974,
+                "all_d1_mae": 4.29942635177144
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.458998687268745,
+                "all_d1_mae": 4.298387017073521
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.460391674768219,
+                "all_d1_mae": 4.299685482619276
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.461698148614327,
+                "all_d1_mae": 4.3011195728758045
+              }
+            ]
+          }
+        },
+        "participation": {
+          "2025": {
+            "mae": 4.361162984686636,
+            "all_d1_mae": 4.24489079820338,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.361162984686636,
+                "all_d1_mae": 4.24489079820338
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.361844833017239,
+                "all_d1_mae": 4.244894568957165
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.363748888857822,
+                "all_d1_mae": 4.2460237847453
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.362599937348211,
+                "all_d1_mae": 4.246998124427588
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.363339865663663,
+                "all_d1_mae": 4.247038451970164
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.365274593663033,
+                "all_d1_mae": 4.248178924880673
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.364555268536195,
+                "all_d1_mae": 4.2498338844069705
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.365319853279251,
+                "all_d1_mae": 4.2498829167838705
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.367255539637105,
+                "all_d1_mae": 4.251017847285461
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.456453927489703,
+            "all_d1_mae": 4.296299692468191,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.456453927489703,
+                "all_d1_mae": 4.296299692468191
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.457197905848639,
+                "all_d1_mae": 4.296313284723592
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.458681297087524,
+                "all_d1_mae": 4.297286645961033
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.458806284349377,
+                "all_d1_mae": 4.298423639219336
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.459602918457415,
+                "all_d1_mae": 4.298490785412877
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.4611322797228485,
+                "all_d1_mae": 4.2995001333881335
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.459922849703549,
+                "all_d1_mae": 4.300494998753917
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.460777390984703,
+                "all_d1_mae": 4.300608690360001
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.462457148309829,
+                "all_d1_mae": 4.30172668661742
+              }
+            ]
+          }
+        },
+        "joint": {
+          "2025": {
+            "mae": 4.3537220624379716,
+            "all_d1_mae": 4.238078207427311,
+            "minutes_ridge": 0.1,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.356229898589067,
+                "all_d1_mae": 4.23869120838704
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.360097205116261,
+                "all_d1_mae": 4.241741351643558
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.361682742969849,
+                "all_d1_mae": 4.244582309153266
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.3537220624379716,
+                "all_d1_mae": 4.238078207427311
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.35743497286796,
+                "all_d1_mae": 4.240937696877628
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.359175872349648,
+                "all_d1_mae": 4.243727470983497
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.3567628609420135,
+                "all_d1_mae": 4.2413556147945535
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.3604908942421,
+                "all_d1_mae": 4.244322248963285
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.362593302974052,
+                "all_d1_mae": 4.247242418227141
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.436305584410804,
+            "all_d1_mae": 4.281745905921351,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.436305584410804,
+                "all_d1_mae": 4.281745905921351
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.438699742155237,
+                "all_d1_mae": 4.2836878638347775
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.443446694624169,
+                "all_d1_mae": 4.288216389286551
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.438331667382412,
+                "all_d1_mae": 4.283948862463351
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.440812880163683,
+                "all_d1_mae": 4.285993757390952
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.445640241793577,
+                "all_d1_mae": 4.290603338275769
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.441636634778368,
+                "all_d1_mae": 4.287070369828972
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.444228875757341,
+                "all_d1_mae": 4.289202151010176
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.449484395676881,
+                "all_d1_mae": 4.294041479537191
+              }
+            ]
+          }
+        },
+        "joint_without_recruiting": {
+          "2025": {
+            "mae": 4.354838961662265,
+            "all_d1_mae": 4.240497856616694,
+            "minutes_ridge": 0.1,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.357129599874043,
+                "all_d1_mae": 4.241102946013881
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.361755867094661,
+                "all_d1_mae": 4.244284350662422
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.36456532572674,
+                "all_d1_mae": 4.247025645762168
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.354838961662265,
+                "all_d1_mae": 4.240497856616694
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.359295598343824,
+                "all_d1_mae": 4.243510649965076
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.362109966705489,
+                "all_d1_mae": 4.246156118397661
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.357403464501958,
+                "all_d1_mae": 4.2435139677817135
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.3618173560424225,
+                "all_d1_mae": 4.246601450079467
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.364653328011988,
+                "all_d1_mae": 4.249237814238533
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.4503098643298,
+            "all_d1_mae": 4.2891887839627225,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.4503098643298,
+                "all_d1_mae": 4.2891887839627225
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.452271047861522,
+                "all_d1_mae": 4.290831908495864
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.455582161452972,
+                "all_d1_mae": 4.294158049500791
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.452467563198215,
+                "all_d1_mae": 4.2913754067573056
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.454550465849872,
+                "all_d1_mae": 4.293158648312755
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.457992658998755,
+                "all_d1_mae": 4.296597893310809
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.454046523105694,
+                "all_d1_mae": 4.293711873888857
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.456104887059034,
+                "all_d1_mae": 4.29553006259073
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.45958420218066,
+                "all_d1_mae": 4.299077042789461
+              }
+            ]
+          }
+        },
+        "joint_without_depth": {
+          "2025": {
+            "mae": 4.356640343496928,
+            "all_d1_mae": 4.240261880824951,
+            "minutes_ridge": 0.1,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.359437630396149,
+                "all_d1_mae": 4.241212552516157
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.363315745150968,
+                "all_d1_mae": 4.243926011259407
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.3655387301477795,
+                "all_d1_mae": 4.246709817545004
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.356640343496928,
+                "all_d1_mae": 4.240261880824951
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.360399929420054,
+                "all_d1_mae": 4.242815415301366
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.362815896957223,
+                "all_d1_mae": 4.245642017783551
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.358237543878855,
+                "all_d1_mae": 4.242909799814202
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.362142747700244,
+                "all_d1_mae": 4.245608306284048
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.36510131629409,
+                "all_d1_mae": 4.248668982845306
+              }
+            ]
+          },
+          "2026": {
+            "mae": 4.441698947523248,
+            "all_d1_mae": 4.286661050535772,
+            "minutes_ridge": 0.01,
+            "rate_ridge": 0.01,
+            "candidates": [
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.01,
+                "mae": 4.441698947523248,
+                "all_d1_mae": 4.286661050535772
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 0.1,
+                "mae": 4.443797847271232,
+                "all_d1_mae": 4.287953380763883
+              },
+              {
+                "minutes_ridge": 0.01,
+                "rate_ridge": 1.0,
+                "mae": 4.448389304335542,
+                "all_d1_mae": 4.291910553062735
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.01,
+                "mae": 4.442445028775953,
+                "all_d1_mae": 4.287957312540313
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 0.1,
+                "mae": 4.444540972606231,
+                "all_d1_mae": 4.289307110513876
+              },
+              {
+                "minutes_ridge": 0.1,
+                "rate_ridge": 1.0,
+                "mae": 4.449249240093132,
+                "all_d1_mae": 4.293338212322414
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.01,
+                "mae": 4.444170785068859,
+                "all_d1_mae": 4.2900505996792955
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 0.1,
+                "mae": 4.446379931436421,
+                "all_d1_mae": 4.291476674805698
+              },
+              {
+                "minutes_ridge": 1.0,
+                "rate_ridge": 1.0,
+                "mae": 4.451497377705641,
+                "all_d1_mae": 4.295789509791746
+              }
+            ]
+          }
+        }
+      },
+      "saved_before_test_predictions": "2026-11-08T00:00:53.258730+00:00"
+    },
+    "minutes": {
+      "selected": 3,
+      "configuration": {
+        "leaves": 15,
+        "iterations": 120,
+        "context": true
+      },
+      "validation": {
+        "0": {
+          "2025": {
+            "primary": {
+              "n": 13923,
+              "mae": 4.3537220624379716,
+              "rmse": 5.628250301473744,
+              "bias": 0.07683448450155715
+            },
+            "all_d1": {
+              "n": 44231,
+              "mae": 4.238078207427311,
+              "rmse": 5.45984924203434,
+              "bias": 0.09927693830214213
+            }
+          },
+          "2026": {
+            "primary": {
+              "n": 14258,
+              "mae": 4.436305584410804,
+              "rmse": 5.747534547931752,
+              "bias": -0.2721894328305613
+            },
+            "all_d1": {
+              "n": 45710,
+              "mae": 4.281745905921351,
+              "rmse": 5.528382139247431,
+              "bias": -0.07595972166229259
+            }
+          }
+        },
+        "1": {
+          "2025": {
+            "primary": {
+              "n": 13923,
+              "mae": 4.356527457421315,
+              "rmse": 5.632639836646438,
+              "bias": 0.06571036067189771
+            },
+            "all_d1": {
+              "n": 44231,
+              "mae": 4.24120580984557,
+              "rmse": 5.462645420727872,
+              "bias": 0.09989490012892104
+            }
+          },
+          "2026": {
+            "primary": {
+              "n": 14258,
+              "mae": 4.4429891862702,
+              "rmse": 5.758068938771205,
+              "bias": -0.2905057642557022
+            },
+            "all_d1": {
+              "n": 45710,
+              "mae": 4.287786387283767,
+              "rmse": 5.5335530821569865,
+              "bias": -0.06896270735266409
+            }
+          }
+        },
+        "2": {
+          "2025": {
+            "primary": {
+              "n": 13923,
+              "mae": 4.3439842465982155,
+              "rmse": 5.620847950704521,
+              "bias": 0.0438550079144428
+            },
+            "all_d1": {
+              "n": 44231,
+              "mae": 4.232302452165442,
+              "rmse": 5.45414351132467,
+              "bias": 0.09979920717259975
+            }
+          },
+          "2026": {
+            "primary": {
+              "n": 14258,
+              "mae": 4.434518895797116,
+              "rmse": 5.750187303933378,
+              "bias": -0.3012469759522449
+            },
+            "all_d1": {
+              "n": 45710,
+              "mae": 4.2809606267622105,
+              "rmse": 5.526960192410289,
+              "bias": -0.067715927094363
+            }
+          }
+        },
+        "3": {
+          "2025": {
+            "primary": {
+              "n": 13923,
+              "mae": 4.336240295142101,
+              "rmse": 5.6146611391719725,
+              "bias": 0.026820263825999332
+            },
+            "all_d1": {
+              "n": 44231,
+              "mae": 4.226498606007587,
+              "rmse": 5.448096779522232,
+              "bias": 0.10200375291511797
+            }
+          },
+          "2026": {
+            "primary": {
+              "n": 14258,
+              "mae": 4.424242819284078,
+              "rmse": 5.743294608180039,
+              "bias": -0.319501380588333
+            },
+            "all_d1": {
+              "n": 45710,
+              "mae": 4.273697576251748,
+              "rmse": 5.520313849026409,
+              "bias": -0.06587508132956675
+            }
+          }
+        }
+      },
+      "rule": "Minimize mean relative historical validation MAE with all-D1 guard; current/fresh game results never select hyperparameters."
+    }
+  },
+  "sources": {
+    "recruiting": {
+      "outside_identity_catalog": 1682,
+      "validated_records": 1804,
+      "name_conflict": 86,
+      "no_college_id": 571
+    },
+    "availability": {
+      "rows": 1425,
+      "timestamp_qualified_historical_rows": 0,
+      "excluded_missing_publication_timestamp": 1425
+    }
+  },
+  "limits": [
+    "Positive-minute conditional accuracy, not DNP probability.",
+    "Recruiting labels are intrinsically pre-college but were downloaded now, not historical HTTP snapshots.",
+    "Past game rosters are observed after those games; target-game and final-season rosters are not inputs.",
+    "Archive availability lacks publication timestamps and is excluded.",
+    "Existing holdouts are reused research benchmarks; Nov 6 was collected after model selection, but remains retrospective.",
+    "Opening uncertainty remains undercovered."
+  ]
+}

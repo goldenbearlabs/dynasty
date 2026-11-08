@@ -9,7 +9,7 @@ from nba_report import HTML
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--predictions',required=True);p.add_argument('--baseline-errors',required=True);p.add_argument('--out',required=True);args=p.parse_args();baseline={}
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--predictions',required=True);p.add_argument('--baseline-errors',required=True);p.add_argument('--out',required=True);p.add_argument('--baseline-label',default='Player-only model');args=p.parse_args();baseline={}
     for line in open(args.baseline_errors):
         row=json.loads(line);baseline[(row['game'],row['player'])]=row
     rows=[]
@@ -20,7 +20,7 @@ def main():
         rows.append({'game':target['game_id'],'date':target['starts_at'],'day':day,'player':item['name'],'player_id':target['player_id'],'position':item['features']['position'],'actual':item['actual_points'],'model':item['prediction']['fantasy_points_if_active'],'proxy':item['proxy'],'proxy_if_active':item['proxy_if_active'],'recent_10':item['recent_10'],'minutes':item['prediction']['minutes'],'actual_minutes':item['actual_minutes'],'stats':item['prediction']['stats'],'actual_stats':item['actual_stats'],'baseline_model':before['predicted']})
     if not rows:raise ValueError('No review rows')
     payload=json.dumps(rows,separators=(',',':')).replace('</','<\\/')
-    text=HTML.replace('NBA projection review','CBB projection review').replace('__DATA__',payload).replace('__BASELINE_OPTION__','<option value="baseline_model">Player-only model</option>')
+    text=HTML.replace('NBA projection review','CBB projection review').replace('__DATA__',payload).replace('__BASELINE_OPTION__','<option value="baseline_model">'+__import__('html').escape(args.baseline_label)+'</option>')
     text=text.replace('Compare pregame projections with actual production.','Eligible-conference, verified D1 matchups. Compare pregame projections with actual production.').replace('The proxy is reconstructed without archived pregame odds or injury snapshots.','The conditional proxy uses the application’s two-season weights without archived odds or injuries. The attendance-discount variant uses an approximate season length.')
     Path(args.out).write_text(text);print('CBB review:',len(rows),'player-games',flush=True)
 

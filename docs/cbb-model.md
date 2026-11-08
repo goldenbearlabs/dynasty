@@ -1,6 +1,9 @@
 # CBB projection model and research harness
 
-Built November 6, 2026. The offline candidate is `models/cbb/model.json`.
+Initial baseline built November 6, 2026. The [context follow-on](cbb-context-study.md)
+now supplies the offline default at `models/cbb/model.json`; the original
+champion is preserved at `models/cbb/v1-model.json`. Results below describe
+that initial champion.
 CBB live projections have not been switched, and the deployed NBA model is
 unchanged. This release includes historical ingestion, audited data, trained
 models, feature ablations, chronological evaluation, same-origin game ordering,

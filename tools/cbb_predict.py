@@ -57,11 +57,22 @@ def check_cache(root,cache):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['evaluate','predict']);p.add_argument('--data',default='data/cbb');p.add_argument('--model',default='models/cbb/model.json');p.add_argument('--from',dest='since');p.add_argument('--to',dest='until');p.add_argument('--games');p.add_argument('--players');p.add_argument('--targets');p.add_argument('--observed-at');p.add_argument('--out');p.add_argument('--scoring',help='optional JSON map; rescoring only, not model reselection');args=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['evaluate','predict']);p.add_argument('--data',default='data/cbb');p.add_argument('--model',default='models/cbb/model.json');p.add_argument('--from',dest='since');p.add_argument('--to',dest='until');p.add_argument('--games');p.add_argument('--players');p.add_argument('--targets');p.add_argument('--observed-at');p.add_argument('--out');p.add_argument('--context',help='context data folder, default DATA/context');p.add_argument('--scoring',help='optional JSON map; rescoring only, not model reselection');args=p.parse_args()
     root=Path(args.data);model=json.load(open(args.model));data=Dataset(root);cache={k:v for k,v in np.load(root/'features.npz').items()};check_cache(root,cache)
     if model.get('sport')!='cbb' or model.get('feature_names')!=NAMES:raise ValueError('Unsupported model/schema')
     scoring=json.load(open(args.scoring)) if args.scoring else None
     weights=WEIGHTS if scoring is None else np.array([scoring.get(s,0) for s in STATS])
+    context_root=Path(args.context) if args.context else root/'context'
+    uses_context=bool(model.get('context_correction'))
+    if uses_context:
+        from cbb_context_model import predict as context_predict
+        from cbb_context_features import NAMES as CONTEXT_NAMES,Recruiting,ContextState
+        from cbb_context_sources import normalized
+        from collections import defaultdict
+        spec=model['context_correction']
+        expected=[NAMES[i] for i in spec['core_columns']]+CONTEXT_NAMES
+        if spec['feature_names']!=expected:raise ValueError('Context feature schema mismatch')
+
     if args.command=='evaluate':
         if not args.since or not args.until:p.error('evaluate requires --from and exclusive --to')
         if args.since<model['trained_before']:raise ValueError('Evaluation starts before model training cutoff; use the corresponding historical artifact')
@@ -70,7 +81,17 @@ def main():
         if args.players:mask&=np.isin(a['player_id'],[int(v) for v in args.players.split(',')])
         idx=np.flatnonzero(mask)
         if not len(idx):raise ValueError('No scored appearances match the evaluation filters')
-        minutes,stats,points=predict(model,cache,idx);actual=cache['stats'][idx]@weights;points=stats@weights
+        if uses_context:
+            extra={k:v for k,v in np.load(context_root/'features.npz').items()}
+            context_manifest=json.loads((context_root/'features.json').read_text())
+            if context_manifest['data_sha256']!=hashlib.sha256((root/'history.parquet').read_bytes()).hexdigest():raise ValueError('Context dataset changed; rebuild context cache')
+            if context_manifest['recruiting_sha256']!=hashlib.sha256((context_root/'recruiting.json').read_bytes()).hexdigest():raise ValueError('Recruiting data changed; rebuild context cache')
+            for file,sha in context_manifest['source_sha256'].items():
+                if hashlib.sha256(Path(file).read_bytes()).hexdigest()!=sha:raise ValueError('Context feature code changed; rebuild context cache')
+            if not np.array_equal(extra['rows'],cache['rows']):raise ValueError('Context feature cohort mismatch; rebuild context cache')
+            minutes,stats,points=context_predict(model,cache,extra,idx)
+        else:minutes,stats,points=predict(model,cache,idx)
+        actual=cache['stats'][idx]@weights;points=stats@weights
         result={'mode':'historical_evaluation','from':args.since,'to_exclusive':args.until,'games':len(set(a['game_id'][idx])),'model':metrics(actual,points),'minutes':metrics(a['minutes'][idx],minutes),
                 'groups':{k:metrics(actual[m],points[m]) for k,m in masks(cache,a,idx).items()},'note':'Positive-minute conditional accuracy. No DNP or archived market/injury replay. Custom scoring does not retrain/select a model.'}
     else:
@@ -79,12 +100,27 @@ def main():
         if not isinstance(targets,list) or not targets:raise ValueError('Targets must be a nonempty JSON list')
         for target in targets:validate_target(target,observed,model)
         cutoff=day_number(sports_day(observed));state=replay_before(data,cache,cutoff);outputs=[]
+        context_state=None
+        if uses_context:
+            names=defaultdict(set)
+            for player,name in zip(data.a['player_id'],data.table['name'].to_pylist()):names[int(player)].add(normalized(name))
+            context_state=ContextState(data,Recruiting(context_root/'recruiting.json',names))
+            days,starts=np.unique(data.a['day'],return_index=True);ends=np.r_[starts[1:],data.n]
+            for past,first,last in zip(days,starts,ends):
+                if past>=cutoff:break
+                context_state.observe(range(int(first),int(last)))
+
         for target in targets:
             season=int(target['season']);team=int(target['team']);opponent=int(target['opponent']);home=team if target['home'] else opponent;away=opponent if target['home'] else team
             game={'game_id':int(target['game_id']),'season':season,'home':home,'away':away,'neutral':bool(target['neutral']),'season_type':int(target.get('season_type',2)),
                   'teams':[{'team':team,'opponent':opponent,'conference':int(target.get('conference',0))},{'team':opponent,'opponent':team,'conference':int(target.get('opponent_conference',0))}]}
             state.ratings=state.strength.fit(season,cutoff,[team,opponent]);state.league=state.strength.league;state.context_cache={};x,base,scale,shoot,meta=state.build(None,cutoff,game,target=target)
-            inputs={'x':x[None,:],'base':base[None,:],'scales':scale[None,:],'shoot':shoot[None,:]};minutes,stats,points=predict(model,inputs,np.array([0]));item={'target':target,'minutes':float(minutes[0]),'stats':dict(zip(STATS,map(float,stats[0]))),'fantasy_points_if_active':float(stats[0]@weights),'history_games':meta['history'],'reference_recent_mean':meta['recent_points'],'feature_values':dict(zip(NAMES,map(float,x)))}
+            inputs={'x':x[None,:],'base':base[None,:],'scales':scale[None,:],'shoot':shoot[None,:]}
+            context_values=context_state.build(None,cutoff,target) if context_state is not None else None
+            if uses_context:minutes,stats,points=context_predict(model,inputs,{'x':context_values[None,:]},np.array([0]))
+            else:minutes,stats,points=predict(model,inputs,np.array([0]))
+            item={'target':target,'minutes':float(minutes[0]),'stats':dict(zip(STATS,map(float,stats[0]))),'fantasy_points_if_active':float(stats[0]@weights),'history_games':meta['history'],'reference_recent_mean':meta['recent_points'],'feature_values':dict(zip(NAMES,map(float,x)))}
+            if context_values is not None:item['context_features']=dict(zip(CONTEXT_NAMES,map(float,context_values)))
             if 'uncertainty' in model and args.scoring is None:
                 u=uncertainty(model,points,np.array([meta['recent_points']]),np.array([meta['prior_sd']]),opening_phase(np.array([day_number(sports_day(dt.datetime.fromisoformat(target['starts_at'].replace('Z','+00:00'))))])))
                 item['uncertainty']={k:float(v[0]) for k,v in u.items() if k!='base_probability'};item['uncertainty']['reference']='player_recent_mean' if meta['history']>=5 else 'pooled_cold_start_prior'

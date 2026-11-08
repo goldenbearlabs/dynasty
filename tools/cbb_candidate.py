@@ -28,6 +28,7 @@ def tree_predict(correction,x):
 
 
 def predict(model,cache,idx,frozen=False):
+    if model.get('context_correction'):raise ValueError('Context model requires the context-aware predictor; refusing to ignore its corrections')
     if not model.get('minutes_correction'):return linear_predict(model,cache,idx,frozen)
     x=cache['frozen_x' if frozen else 'x'][idx]
     minutes=np.clip(x[:,0]*40+10*head_predict(model['minutes'],x)[:,0],.5,40)
