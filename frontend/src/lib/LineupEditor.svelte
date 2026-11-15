@@ -6,6 +6,7 @@
 	// games, and where a slot counts only some of them the manager taps the
 	// one that counts.
 	import { autoSetLineup, getLineup, setLineup, getRosterPerformance, type Competition, type LeagueRoster, type RosterPerformance, type Franchise, type League, type Lineup, type LineupGame, type LineupPlayer, type Slot } from '#lib/api.ts';
+	import { basketballMatchupGames, basketballMatchupPerformance, defaultRosterStatsView, isBasketball } from '#lib/basketballStats.ts';
 	import { onScoresChange } from '#lib/socket.svelte.ts';
 	import { columnValue, hockeyScoringColumns, statAbbreviations, statColumns, statValue, sumStats, type StatColumn } from '#lib/statLine.ts';
 	import { rosterGroup, rosterGroupOrder } from '#lib/rosterGroups.ts';
@@ -40,7 +41,8 @@
 	let { league, franchise, canEdit, commissioner = false, roster, competition, day = $bindable() }: Props = $props();
 
 	// View changes the statistics in these same starter and bench rows.
-	let statsView = $state('today');
+	let statsView = $state(untrack(() => defaultRosterStatsView(league.competition)));
+	const matchupStats = $derived(statsView === 'matchup');
 	let performance = $state<RosterPerformance>();
 	let statsLoading = $state(false);
 	let statsError = $state('');
@@ -52,13 +54,19 @@
 		statsLoading = true;
 		try {
 			const historical = statsView.startsWith('season:');
-			const found = await getRosterPerformance(league.id,franchise.id,historical ? 'season' : statsView,historical ? statsView.slice(7) : undefined,statsView === 'today' ? day ?? sportsToday() : undefined);
+			const found = await getRosterPerformance(league.id,franchise.id,historical ? 'season' : matchupStats ? 'current' : statsView,historical ? statsView.slice(7) : undefined,statsView === 'today' ? day ?? sportsToday() : undefined);
 			if (token === statsRequest) { performance = found; statsError = ''; }
 		} catch(e) { if(token === statsRequest) statsError = String(e); }
 		finally { if(token === statsRequest) statsLoading = false; }
 	}
 	$effect(() => { void [statsView,day,league.id,franchise.id,roster?.players,competition]; loadStats(); return () => { statsRequest++; }; });
-	const performanceFor = (id: string) => statsLoading || statsError ? undefined : performance?.players.find(p => p.player_id === id);
+	const performanceFor = (id: string) => {
+		if (matchupStats) {
+			const player = lineup?.players.find(p => p.player_id === id);
+			return player ? basketballMatchupPerformance(player) : undefined;
+		}
+		return statsLoading || statsError ? undefined : performance?.players.find(p => p.player_id === id);
+	};
 	const performanceColumns = $derived.by(() => {
 		const definitions = (competition?.stats ?? []).map(s => ({...s}));
 		const known = new Set(definitions.map(s => s.key));
@@ -250,7 +258,7 @@
 	// slot that counts only some, only the ones that count. A bench player in
 	// such a league has none: no game of his counts.
 	const shownGames = (player: LineupPlayer, starting: boolean) =>
-		player.games.filter((g) => played(g) && (limited.length === 0 || (starting && counts(player, g))));
+		matchupStats ? basketballMatchupGames(player) : player.games.filter((g) => played(g) && (limited.length === 0 || (starting && counts(player, g))));
 	// His projected points in the games still to come that would count: for
 	// a starter in a slot that counts only some, the picked one or on auto
 	// his last; for anyone else, all of them.
@@ -574,7 +582,7 @@
 				{#if player.locked}<span class="locked" title={player.lock_reason ?? "Locked: his game has started"}><Icon name="lock" size={12} /></span>{/if}
 			</span>
 			<div class="player-meta"><span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={18} />{#if player.eligibility_note} · <span class="long" title={player.eligibility_note}>{player.eligibility_note}</span><span class="dash elig" title={player.eligibility_note}>Can't start</span>{/if}</span>
-			{#if statsEnabled}
+			{#if statsEnabled && !matchupStats}
 				{@const stats = performanceFor(player.player_id)}
 				<div class="period-ranks" aria-label="Ranks for {player.full_name}"><span title="Overall rank by total fantasy points">Rank {stats?.overall_rank ? `#${stats.overall_rank}` : '—'}</span>{#each Object.entries(stats?.position_ranks ?? {}) as [position,rank] (position)}<span>{position} #{rank}</span>{:else}<span>Position —</span>{/each}</div>
 			{/if}
@@ -594,7 +602,7 @@
 	{#if brief.length}
 		<div class="stats-line">{#each brief as stat (stat.key)}<span title={stat.title}>{#if stat.label}<small>{stat.label}</small>{/if}{stat.value}</span>{/each}</div>
 	{/if}
-	{@const ahead = !statsEnabled || statsView === 'today' ? forecast(player, starting) : 0}
+	{@const ahead = !statsEnabled || statsView === 'today' || matchupStats ? forecast(player, starting) : 0}
 	{@const viewed = performanceFor(player.player_id)}
 	<div class="pts" class:none={statsEnabled ? !viewed?.games : shown.length === 0 && !ahead}>
 		<small>FPTS</small>{#if statsEnabled}{viewed?.games ? points(viewed.points) : '—'}{:else if shown.length}{points(shown.reduce((n, g) => n + g.points, 0))}{:else if !ahead}–{/if}
@@ -610,14 +618,17 @@
 			<div class="spread stat-view-controls">
 				<label class="row small-text">View
 					<select aria-label="View" bind:value={statsView}>
+						{#if isBasketball(sport)}<option value="matchup">This Matchup</option>{/if}
 						<option value="today">{day && day !== sportsToday() ? dayLabel(day) : 'Today'}</option><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option>
 						<option value="current">Current season{performance?.current_season ? ` · ${performance.current_season}` : ''}</option>
 						{#if performance?.seasons.length}<optgroup label="Past seasons">{#each performance.seasons.filter(s => s.label !== performance?.current_season) as season (season.label)}<option value={`season:${season.label}`}>{season.label}</option>{/each}</optgroup>{/if}
 					</select>
 				</label>
-				{#if statsLoading}<span class="muted small-text" role="status">Loading stats…</span>{:else if performance}<span class="muted stat-context">{statsView === 'today' ? dayLabel(performance.to_day) : performance.season || `${dayLabel(performance.from_day)} – ${dayLabel(performance.to_day)}`} · ranks by total FP</span>{/if}
+				{#if matchupStats}
+					<span class="muted stat-context">{dayLabel(lineup.day)} – {dayLabel(lineup.last_day)} · Starters: counted games · Bench: best game</span>
+				{:else if statsLoading}<span class="muted small-text" role="status">Loading stats…</span>{:else if performance}<span class="muted stat-context">{statsView === 'today' ? dayLabel(performance.to_day) : performance.season || `${dayLabel(performance.from_day)} – ${dayLabel(performance.to_day)}`} · ranks by total FP</span>{/if}
 			</div>
-			{#if statsError}<p role="alert">{statsError}</p><button class="small" onclick={loadStats}>Retry stats</button>{/if}
+			{#if statsError && !matchupStats}<p role="alert">{statsError}</p><button class="small" onclick={loadStats}>Retry stats</button>{/if}
 		{/if}
 		<div class="spread">
 			<nav class="row days" aria-label={weekly ? 'Week' : 'Day'}>

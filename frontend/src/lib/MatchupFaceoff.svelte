@@ -37,7 +37,7 @@
 			projected: starters.reduce((n, r) => n + r.projected, 0)
 		};
 	};
-	const live = (row: MatchupRow) => row.games.some((g) => g.gameId && scores[g.gameId]?.status === 'live');
+	const live = (row: MatchupRow) => (row.statGames ?? row.games).some((g) => g.gameId && scores[g.gameId]?.status === 'live');
 	// Over or under what was expected, once the games behind his points are over.
 	const verdict = (row: MatchupRow) => (!row.settled || !row.pregame ? '' : row.points > row.pregame ? 'over' : row.points < row.pregame ? 'under' : '');
 </script>

@@ -1,4 +1,5 @@
 import type { GameSummary, Lineup, LineupGame, MatchupScorer, Period, ScoredGame } from '#lib/api.ts';
+import { bestBasketballGame, isBasketball } from '#lib/basketballStats.ts';
 import { sumStats } from '#lib/statLine.ts';
 import { sportsToday, timeOfDay } from '#lib/ui/time.ts';
 
@@ -16,7 +17,10 @@ export type MatchupGame = {
 export type MatchupRow = {
 	id: string; name: string; headshot: string; positions: string[]; slot: string;
 	/** Counted fantasy points; for a bench player, what his games would have been worth. */
-	points: number; games: MatchupGame[]; selection: string; earlier: boolean;
+	points: number; games: MatchupGame[];
+	/** Basketball bench summaries use only the best game; details retain every game. */
+	statGames?: MatchupGame[];
+	selection: string; earlier: boolean;
 	/** Projected fantasy points from the games in view still to be played that will count. */
 	projected: number;
 	/** Whether any game behind his points has started. */
@@ -32,7 +36,7 @@ export type MatchupRow = {
 
 /** Official contributions determine points; the lineup adds selected and upcoming games. */
 export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined, period: Period,
-	wholePeriod: boolean, day: string, weekly: boolean): MatchupRow[] {
+	wholePeriod: boolean, day: string, weekly: boolean, competition = ''): MatchupRow[] {
 	const first = wholePeriod ? period.starts_on : weekly ? (lineup?.day ?? day) : day;
 	const last = wholePeriod ? period.ends_on : weekly ? (lineup?.last_day ?? day) : day;
 	const inRange = (d: string) => d >= first && d <= last && d >= period.starts_on && d <= period.ends_on;
@@ -69,8 +73,11 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 			games.push({ ...line, gameId: line.game_id, opponent: `${line.away} @ ${line.home}`, counted: true, label: 'Counted', projected: 0, expected: 0 });
 		}
 		games.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-		// The games behind his points: those that count, or on the bench every one he played.
-		const scoring = games.filter((g) => g.status !== 'scheduled' && (benched ? Object.keys(g.stats ?? {}).length > 0 : g.counted));
+		const bestBench = benched && (isBasketball(competition) || lineup?.lock_in);
+		const best = bestBench ? bestBasketballGame(games) : undefined;
+		const statGames = bestBench ? (best ? [best] : []) : undefined;
+		// Basketball bench points and every displayed stat come from one game.
+		const scoring = statGames ?? games.filter((g) => g.status !== 'scheduled' && (benched ? Object.keys(g.stats ?? {}).length > 0 : g.counted));
 		const projected = games.reduce((total, game) => total + game.projected, 0);
 		const next = games.find((g) => g.status === 'scheduled' && (g.label.startsWith('Selected') || g.label === 'Auto candidate'))
 			?? games.find((g) => g.status === 'scheduled');
@@ -81,9 +88,9 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 			upcoming: projected || (!benched && next && !(lineup?.lock_in && remaining === 0) ? next.expected : 0),
 			id, name: player?.full_name ?? contribution!.full_name, headshot: player?.headshot_url ?? contribution!.headshot_url,
 			positions: player?.positions ?? official[0]?.positions ?? [], slot: benched ? 'BN' : player?.slot ?? official[0]?.slot ?? '',
-			points: benched ? games.reduce((total, game) => total + game.points, 0) : official.reduce((total, game) => total + game.points, 0), games,
+			points: benched ? (statGames ?? games).reduce((total, game) => total + game.points, 0) : official.reduce((total, game) => total + game.points, 0), games, statGames,
 			projected,
-			selection: lineup?.lock_in ? `${player?.locks_used ?? 0}/${lineup.lock_in_limit ?? 1} locked in` : player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
+			selection: bestBench ? 'Best game · Not counted' : lineup?.lock_in ? `${player?.locks_used ?? 0}/${lineup.lock_in_limit ?? 1} locked in` : player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
 			bench: benched,
 			earlier: !player || (benched && official.length > 0)
 		};
@@ -113,22 +120,22 @@ export function gameState(game: MatchupGame, scores: Record<string, GameSummary>
 	return `${result}${ours}–${theirs} · ${live.detail || (status === 'final' ? 'Final' : 'Live')}`;
 }
 
-/** The games a row shows: on the bench all of them; otherwise the ones that count, are picked, or with showOther every one. */
+/** Default game details follow the displayed stats; showOther reveals every game. */
 export const visibleGames = (row: MatchupRow, showOther = false) =>
-	row.games.filter((g) => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate' || g.label === 'Lock in available');
+	!showOther && row.statGames ? row.statGames : row.games.filter((g) => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate' || g.label === 'Lock in available');
 
 /** One line on a row's games: the opponent and where the game stands, or how many there are. picking: slots count only some games. */
 export function gameSummary(row: MatchupRow, scores: Record<string, GameSummary>, showOther = false, picking = true): string {
 	const games = visibleGames(row, showOther);
 	const auto = !row.bench && row.selection.startsWith('Auto');
-	if (games.length === 1) return `${games[0].opponent} · ${gameState(games[0], scores)}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
+	if (games.length === 1) return `${games[0].opponent} · ${gameState(games[0], scores)}${row.statGames ? ' · Best game' : ''}${auto ? ' · Auto' : picking && games[0].label.startsWith('Selected') ? ' · Picked' : ''}`;
 	const playing = games.find((g) => g.gameId && scores[g.gameId]?.status === 'live');
 	if (games.length > 1) return `${games.length} games${playing ? ` · ${playing.opponent} ${gameState(playing, scores)}` : ''}${auto ? ' · Auto' : ''}`;
 	return row.bench ? 'No game in this view' : auto ? 'Auto · waiting for a game' : 'No selected game';
 }
 
-/** A row's stat line from the games that count; for a bench player, all of his. */
+/** Counted starter stats, or bench production (one best game in basketball). */
 export function rowStats(row: MatchupRow) {
-	const games = row.games.filter((g) => row.bench || g.counted);
+	const games = row.statGames ?? row.games.filter((g) => row.bench || g.counted);
 	return { line: sumStats(games.map((g) => g.stats)), played: games.some((g) => Object.keys(g.stats ?? {}).length > 0) };
 }

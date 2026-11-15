@@ -85,7 +85,7 @@
 		{ id: matchup.away_franchise_id, total: matchup.away_points, projected: matchup.away_projected, scored: matchup.away_players, lineup: lineups[1] }
 	].map(side => ({ ...side,
 		identity: side.id ? teamIdentity(franchises.find(f => f.id === side.id), identities, league.id) : { name: 'Bye', image_url: '' },
-		rows: matchupRows(side.scored, side.lineup, matchup!.period, wholePeriod, day, weekly)
+		rows: matchupRows(side.scored, side.lineup, matchup!.period, wholePeriod, day, weekly, league.competition)
 	})) : []);
 	// The viewer's own team on the left, wherever the schedule put it.
 	const flipped = $derived(!!matchup && matchup.away_franchise_id !== null && matchup.away_franchise_id === page.data.me?.id);

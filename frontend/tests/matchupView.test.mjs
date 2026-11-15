@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchupRows } from '../src/lib/matchupView.ts';
+import { matchupRows, rowStats, visibleGames, gameSummary } from '../src/lib/matchupView.ts';
 
 const period = {starts_on:'2026-10-19',ends_on:'2026-11-01',double_games:false};
 const game = (day, points=12, extra={}) => ({day,starts_at:`${day}T23:00:00Z`,status:'final',opponent:'BOS',at_home:true,points,stats:{pts:points},counts:true,...extra});
@@ -113,4 +113,31 @@ test('doubled lock-in projections fill only the remaining choices', () => {
  assert.equal(row.selection,'1/2 locked in');
  const empty=matchupRows([],lineup([{...p,locks_used:0}],{lock_in:true,lock_in_limit:2}),period,false,'2026-10-20',true)[0];
  assert.equal(empty.projected,50);
+});
+
+
+test('basketball bench rows show the best game in the viewed week, not accumulated stats', () => {
+ for (const sport of ['nba','cbb','wnba']) {
+  const p=player({slot:'',games:[
+   game('2026-10-19',18,{stats:{min:20,pts:30,reb:1}}),
+   game('2026-10-23',25,{stats:{min:30,pts:15,reb:12}}),
+   game('2026-10-27',99,{stats:{min:35,pts:60,reb:30}})
+  ]});
+  const row=matchupRows([],lineup([p]),period,false,'2026-10-23',true,sport)[0];
+  assert.equal(row.points,25);
+  assert.deepEqual(rowStats(row).line,{min:30,pts:15,reb:12});
+  assert.equal(row.projected,0);
+  assert.equal(visibleGames(row).length,1);
+  assert.equal(visibleGames(row)[0].day,'2026-10-23');
+  assert.equal(visibleGames(row,true).length,2);
+  assert.match(gameSummary(row,{}),/Best game/);
+ }
+});
+
+test('non-basketball bench rows retain accumulated production', () => {
+ const p=player({slot:'',games:[game('2026-10-19',18,{stats:{goals:1}}),game('2026-10-23',25,{stats:{goals:2}})]});
+ const row=matchupRows([],lineup([p]),period,false,'2026-10-23',true,'nhl')[0];
+ assert.equal(row.points,43);
+ assert.deepEqual(rowStats(row).line,{goals:3});
+ assert.equal(visibleGames(row).length,2);
 });
