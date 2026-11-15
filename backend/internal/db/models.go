@@ -24,6 +24,31 @@ type AccountVerification struct {
 	VerifiedAt pgtype.Timestamptz `json:"verified_at"`
 }
 
+type BasketballGameLock struct {
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	EffectiveOn pgtype.Date        `json:"effective_on"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	GameID      pgtype.UUID        `json:"game_id"`
+	Slot        string             `json:"slot"`
+	LockedAt    pgtype.Timestamptz `json:"locked_at"`
+}
+
+type BasketballLineupMove struct {
+	LeagueID    pgtype.UUID        `json:"league_id"`
+	FranchiseID pgtype.UUID        `json:"franchise_id"`
+	EffectiveOn pgtype.Date        `json:"effective_on"`
+	PlayerID    pgtype.UUID        `json:"player_id"`
+	ChangedAt   pgtype.Timestamptz `json:"changed_at"`
+	Slot        string             `json:"slot"`
+}
+
+type BasketballLineupWindow struct {
+	LeagueID    pgtype.UUID `json:"league_id"`
+	FranchiseID pgtype.UUID `json:"franchise_id"`
+	EffectiveOn pgtype.Date `json:"effective_on"`
+}
+
 type CacheRevision struct {
 	Singleton           bool        `json:"singleton"`
 	Namespace           pgtype.UUID `json:"namespace"`

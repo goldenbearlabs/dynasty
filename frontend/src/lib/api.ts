@@ -574,6 +574,10 @@ export type Odds = {
 };
 
 export type LineupGame = {
+    eligible?: boolean;
+    locked_in?: boolean;
+    can_lock_in?: boolean;
+    lock_deadline?: string;
  game_id?: string;
 	day: string;
 	starts_at: string;
@@ -594,6 +598,8 @@ export type LineupGame = {
 };
 
 export type LineupPlayer = {
+    locks_used?: number;
+    lock_reason?: string;
  nickname: string;
 	starter_eligible: boolean;
 	eligibility_note: string;
@@ -616,6 +622,8 @@ export type LineupPlayer = {
 
 /** A franchise's lineup for one day, or for a week in a weekly league. */
 export type Lineup = {
+    lock_in?: boolean;
+    lock_in_limit?: number;
 	day: string;
 	last_day: string;
 	slots: Slot[];
@@ -630,7 +638,7 @@ export type Lineup = {
 export type LineupChange = {
 	day: string;
 	/** auto: in a slot that counts only some games, count his last games with a stat, not a picked one. */
-	entries: { slot: string; player_id: string; counts_from?: string; auto?: boolean }[];
+	entries: { slot: string; player_id: string; counts_from?: string; auto?: boolean; lock_game_id?: string }[];
 	franchise_id?: string;
 	force?: boolean;
 };

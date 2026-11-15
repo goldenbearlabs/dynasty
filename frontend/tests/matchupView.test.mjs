@@ -92,3 +92,25 @@ test('benched former starters retain official contributions without losing bench
  assert.equal(row.games.length,1);
  assert.equal(row.games[0].counted,true);
 });
+
+test('lock-in offers stay visible and a full lock adds no later projection', () => {
+ const offer=game('2026-10-20',30,{counts:false,eligible:true,can_lock_in:true});
+ const later=game('2026-10-23',0,{status:'scheduled',counts:false,projected:99});
+ const open=matchupRows([],lineup([player({counts_last:true,locks_used:0,games:[offer,later]})],{lock_in:true,lock_in_limit:1}),period,false,'2026-10-21',true)[0];
+ assert.equal(open.games[0].label,'Lock in available');
+ assert.equal(open.projected,99);
+ const locked=matchupRows([scored([official('2026-10-20',30)])],lineup([player({counts_last:true,locks_used:1,games:[{...offer,can_lock_in:false,locked_in:true,counts:true},later]})],{lock_in:true,lock_in_limit:1}),period,false,'2026-10-21',true)[0];
+ assert.equal(locked.games[0].label,'Locked in');
+ assert.equal(locked.projected,0);
+ assert.equal(locked.selection,'1/1 locked in');
+});
+
+test('doubled lock-in projections fill only the remaining choices', () => {
+ const ahead=(day,projected)=>game(day,0,{status:'scheduled',counts:false,projected});
+ const p=player({counts_last:true,locks_used:1,games:[ahead('2026-10-20',40),ahead('2026-10-23',10)]});
+ const row=matchupRows([],lineup([p],{lock_in:true,lock_in_limit:2}),period,false,'2026-10-20',true)[0];
+ assert.equal(row.projected,10);
+ assert.equal(row.selection,'1/2 locked in');
+ const empty=matchupRows([],lineup([{...p,locks_used:0}],{lock_in:true,lock_in_limit:2}),period,false,'2026-10-20',true)[0];
+ assert.equal(empty.projected,50);
+});

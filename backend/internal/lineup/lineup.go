@@ -37,8 +37,9 @@ func NewService(pool *pgxpool.Pool, registry competition.Registry) *Service {
 
 // Entry puts one player in one starting slot.
 type Entry struct {
-	Slot     string      `json:"slot"`
-	PlayerID pgtype.UUID `json:"player_id"`
+	LockGameID pgtype.UUID `json:"lock_game_id,omitempty"`
+	Slot       string      `json:"slot"`
+	PlayerID   pgtype.UUID `json:"player_id"`
 	// CountsFrom picks the game that counts, in a slot that counts only
 	// some games a week: the day of that game. Empty leaves it as it was,
 	// or takes the player's next game.
@@ -52,10 +53,12 @@ type Entry struct {
 // every main-roster player with where he is, his games and whether he can
 // still be moved.
 type View struct {
-	Day     string          `json:"day"`      // first day this lineup applies to
-	LastDay string          `json:"last_day"` // the same day, or the end of the week
-	Slots   []settings.Slot `json:"slots"`
-	Players []Player        `json:"players"`
+	LockIn      bool            `json:"lock_in"`
+	LockInLimit int             `json:"lock_in_limit"`
+	Day         string          `json:"day"`      // first day this lineup applies to
+	LastDay     string          `json:"last_day"` // the same day, or the end of the week
+	Slots       []settings.Slot `json:"slots"`
+	Players     []Player        `json:"players"`
 	// Locked is why the whole lineup can no longer change, or empty.
 	Locked string `json:"locked"`
 	// Starts is the week's pitcher starts against the league's cap; nil in
@@ -89,6 +92,8 @@ type Start struct {
 }
 
 type Player struct {
+	LocksUsed       int         `json:"locks_used"`
+	LockReason      string      `json:"lock_reason,omitempty"`
 	Nickname        string      `json:"nickname"`
 	StarterEligible bool        `json:"starter_eligible"`
 	EligibilityNote string      `json:"eligibility_note"`
@@ -112,14 +117,18 @@ type Player struct {
 }
 
 type Game struct {
-	GameID   pgtype.UUID `json:"game_id"`
-	Day      string      `json:"day"`
-	StartsAt time.Time   `json:"starts_at"`
-	Status   string      `json:"status"`
-	Opponent string      `json:"opponent"`
-	AtHome   bool        `json:"at_home"`
-	Points   float64     `json:"points"`
-	Counts   bool        `json:"counts"` // false for a game his slot leaves out
+	Eligible     bool        `json:"eligible"`
+	LockedIn     bool        `json:"locked_in"`
+	CanLockIn    bool        `json:"can_lock_in"`
+	LockDeadline time.Time   `json:"lock_deadline"`
+	GameID       pgtype.UUID `json:"game_id"`
+	Day          string      `json:"day"`
+	StartsAt     time.Time   `json:"starts_at"`
+	Status       string      `json:"status"`
+	Opponent     string      `json:"opponent"`
+	AtHome       bool        `json:"at_home"`
+	Points       float64     `json:"points"`
+	Counts       bool        `json:"counts"` // false for a game his slot leaves out
 	// Starter is whether a feed has him starting in goal or on the mound:
 	// confirmed, expected, other (a teammate at his position is), or empty.
 	Starter string `json:"starter"`
@@ -240,6 +249,10 @@ func doubledOn(ctx context.Context, q *db.Queries, leagueID pgtype.UUID, day tim
 }
 
 func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgtype.UUID, day time.Time) (View, error) {
+	return loadAt(ctx, q, league, franchiseID, day, time.Now())
+}
+
+func loadAt(ctx context.Context, q *db.Queries, league db.League, franchiseID pgtype.UUID, day, now time.Time) (View, error) {
 	rules, err := settings.Parse[settings.League](league.Settings)
 	if err != nil {
 		return View{}, err
@@ -264,11 +277,14 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 	if doubled {
 		view.Doubled = &Doubled{StartsOn: double.StartsOn.Time.Format(time.DateOnly), EndsOn: double.EndsOn.Time.Format(time.DateOnly)}
 	}
-	now := time.Now()
+	view.LockIn = basketballLockIn(league.Competition, rules.Lineup, first)
+	if view.LockIn {
+		view.LockInLimit = mult
+	}
 	switch {
-	case last.Before(sportsday.Today()):
+	case last.Before(sportsday.Of(now)):
 		view.Locked = "This lineup is in the past."
-	case rules.Lineup.Lock == settings.LockPeriodStart && !now.Before(sportsday.Start(first)):
+	case !view.LockIn && rules.Lineup.Lock == settings.LockPeriodStart && !now.Before(sportsday.Start(first)):
 		view.Locked = "This lineup locked when its " + rules.Lineup.Period + " began."
 	}
 
@@ -331,7 +347,14 @@ func load(ctx context.Context, q *db.Queries, league db.League, franchiseID pgty
 			p.EligibilityNote = "Outside this league’s starting conferences"
 			p.Slot = ""
 		}
-		settle(p, rules.Lineup, now, mult)
+		if !view.LockIn {
+			settle(p, rules.Lineup, now, mult)
+		}
+	}
+	if view.LockIn {
+		if err := loadBasketballChoices(ctx, q, league.ID, franchiseID, &view, now); err != nil {
+			return View{}, err
+		}
 	}
 	if limit := rules.Lineup.PitcherStartsPerWeek; limit > 0 {
 		from := sportsday.WeekStart(first, rules.Lineup.WeekStart)
@@ -533,12 +556,17 @@ func joinedOn(p Player, slot string, now time.Time) string {
 // locked cannot be moved in or out. force is the commissioner's override of
 // the locks.
 func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time, entries []Entry, force bool) error {
+	return s.setWithClock(ctx, league, franchiseID, day, entries, force, time.Now)
+}
+
+func (s *Service) setWithClock(ctx context.Context, league db.League, franchiseID pgtype.UUID, day time.Time, entries []Entry, force bool, clock func() time.Time) error {
 	return db.InTx(ctx, s.pool, func(q *db.Queries) error {
 		// Serialize with roster moves for this franchise.
 		if err := q.LockFranchiseRoster(ctx, db.LockFranchiseRosterParams{LeagueID: league.ID.String(), FranchiseID: franchiseID.String()}); err != nil {
 			return err
 		}
-		current, err := load(ctx, q, league, franchiseID, day)
+		now := clock()
+		current, err := loadAt(ctx, q, league, franchiseID, day, now)
 		if err != nil {
 			return err
 		}
@@ -551,7 +579,7 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		counts := map[pgtype.UUID]pgtype.Date{}
 		joined := map[pgtype.UUID]pgtype.Date{}
 		onAuto := map[pgtype.UUID]bool{}
-		now := time.Now()
+		now = clock()
 		for _, e := range entries {
 			i := slices.IndexFunc(current.Players, func(p Player) bool { return p.PlayerID == e.PlayerID })
 			if i < 0 {
@@ -575,7 +603,13 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 			}
 			wanted[e.PlayerID] = e.Slot
 			filled[slot.Name]++
-			if slot.GamesPerWeek > 0 {
+			if current.LockIn {
+				if err := validateBasketballLock(player, e, now); err != nil {
+					return err
+				}
+			} else if e.LockGameID.Valid {
+				return problem.New("Lock-in is not active for this matchup.")
+			} else if slot.GamesPerWeek > 0 {
 				onAuto[e.PlayerID] = e.Auto
 				day, err := pick(player, e, current.Day, current.LastDay, now, force)
 				if err != nil {
@@ -593,9 +627,18 @@ func (s *Service) Set(ctx context.Context, league db.League, franchiseID pgtype.
 		}
 		if !force {
 			for _, p := range current.Players {
-				if p.Locked && wanted[p.PlayerID] != p.Slot {
-					return problem.New("%s is locked: his game has started.", p.FullName)
+				playing := current.LockIn && slices.ContainsFunc(p.Games, func(g Game) bool {
+					return g.Status != "final" && !g.StartsAt.After(now)
+				})
+				if (p.Locked || playing) && wanted[p.PlayerID] != p.Slot {
+					return problem.New("%s cannot move: %s", p.FullName, lockReason(p))
 				}
+			}
+		}
+
+		if current.LockIn {
+			if err := saveBasketballChoices(ctx, q, league.ID, franchiseID, current, entries, now); err != nil {
+				return err
 			}
 		}
 
@@ -789,6 +832,12 @@ func Held(ctx context.Context, q *db.Queries, league db.League, franchiseID, pla
 		return nil
 	}
 	p := view.Players[i]
+	if view.LockIn {
+		if p.Locked {
+			return problem.New("%s cannot move: %s", p.FullName, lockReason(p))
+		}
+		return nil
+	}
 	if p.Slot == "" || gamesCounted(settings.Lineup{Slots: view.Slots}, p.Slot) == 0 {
 		return nil
 	}
@@ -805,6 +854,9 @@ func Held(ctx context.Context, q *db.Queries, league db.League, franchiseID, pla
 // effect tomorrow.
 func Bench(ctx context.Context, q *db.Queries, leagueID, franchiseID, playerID pgtype.UUID) error {
 	day := sportsday.Today()
+	if err := basketballBench(ctx, q, leagueID, franchiseID, playerID, day); err != nil {
+		return err
+	}
 	started, err := q.PlayerHasStartedGame(ctx, db.PlayerHasStartedGameParams{PlayerID: playerID, Day: sportsday.Date(day)})
 	if err != nil {
 		return err

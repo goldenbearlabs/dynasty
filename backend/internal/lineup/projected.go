@@ -39,7 +39,11 @@ func (s *Service) Projected(ctx context.Context, league db.League, franchiseID p
 		}
 		for _, p := range view.Players {
 			if p.Slot != "" {
-				projectedStarter(&outlook, p, gamesCounted(rules.Lineup, p.Slot)*mult, first, last, c.Play, now)
+				limit := gamesCounted(rules.Lineup, p.Slot) * mult
+				if view.LockIn {
+					limit = view.LockInLimit
+				}
+				projectedStarter(&outlook, p, limit, first, last, c.Play, now)
 			}
 		}
 		end, err := time.Parse(time.DateOnly, view.LastDay)

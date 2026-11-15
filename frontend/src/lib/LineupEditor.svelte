@@ -22,7 +22,7 @@
 	import PlayerActions from '#lib/PlayerActions.svelte';
 	import { dropPlayer } from '#lib/dropPlayer.ts';
 	import { snapshot, invalidateAll } from '$app/navigation';
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { capturePageScroll, restorePageScroll } from '#lib/playerNavigation.svelte.ts';
 	import { page } from '$app/state';
 
@@ -79,6 +79,12 @@
 		return col.key === '__fpg' ? data.points_per_game : data.stats[col.key];
 	}
 
+    let clockNow = $state(Date.now());
+    onMount(() => {
+        const tick = setInterval(() => { clockNow = Date.now(); }, 1000);
+        return () => clearInterval(tick);
+    });
+    const playerInGame = (player: LineupPlayer) => player.games.some(g => g.status !== 'final' && new Date(g.starts_at).getTime() <= clockNow);
 	const sport = $derived(league.competition);
 	let override = $state(false); // the commissioner's override of the locks
 
@@ -115,7 +121,7 @@
 		() => [sport],
 		() => {
 			if (statsEnabled) loadStats();
-			if (lineup && !dirty && !saving) getLineup(league.id, franchise.id, lineup.day).then(show, toast.error);
+			if (lineup && !dirty && !saving && !lockingGame) getLineup(league.id, franchise.id, lineup.day).then(show, toast.error);
 		}
 	);
 
@@ -137,6 +143,7 @@
 	const dirty = $derived(
 		lineup?.players.some((p) => slotOf(p.player_id) !== p.slot || picked[p.player_id] !== savedPick(p)) ?? false
 	);
+	const lockIn = $derived(!!lineup?.lock_in);
 	const weekly = $derived(lineup !== undefined && lineup.day !== lineup.last_day);
 	const limited = $derived(lineup?.slots.filter((s) => s.games_per_week > 0) ?? []);
 
@@ -144,7 +151,7 @@
 	const fits = (player: LineupPlayer, slot: Slot) =>
 		player.starter_eligible && (slot.positions.includes('*') || player.positions.some((p) => slot.positions.includes(p)));
 	const frozen = (player: LineupPlayer | undefined) =>
-		!!player && (!canEdit || ((lineup!.locked !== '' || player.locked) && !override));
+		!!player && (!canEdit || !!lockingGame || ((lineup!.locked !== '' || player.locked || (lockIn && playerInGame(player))) && !override));
 	// The player being moved, by drag or by tap.
 	let moving = $state<string>();
 	let over = $state<number | 'bench'>();
@@ -209,13 +216,14 @@
 	const dragEnd = () => ((moving = undefined), (over = undefined));
 
 	// ---- games ----
-	const begun = (game: LineupGame) => new Date(game.starts_at).getTime() <= Date.now();
+	const begun = (game: LineupGame) => new Date(game.starts_at).getTime() <= clockNow;
 	// How many games a week count in the slot a player is in; 0 is all of them.
 	// A doubled matchup counts twice as many over the whole of it.
 	const limit = (player: LineupPlayer) =>
-		(lineup!.slots.find((s) => s.name === slotOf(player.player_id))?.games_per_week ?? 0) * (lineup!.doubled ? 2 : 1);
+		lockIn && slotOf(player.player_id) ? (lineup?.lock_in_limit ?? 1) : (lineup!.slots.find((s) => s.name === slotOf(player.player_id))?.games_per_week ?? 0) * (lineup!.doubled ? 2 : 1);
 	// Whether a game is one that counts, going by the lineup as it is now arranged.
 	function counts(player: LineupPlayer, game: LineupGame): boolean {
+		if (lockIn) return game.counts;
 		const n = limit(player);
 		if (n === 0) return true;
 		const choice = picked[player.player_id];
@@ -228,14 +236,15 @@
 	// On auto, the game that will count if he plays in it: his last still to
 	// finish. Once all are finished, the one that counted is marked instead.
 	function projected(player: LineupPlayer, game: LineupGame): boolean {
+		if (lockIn && (player.locks_used ?? 0) >= (lineup?.lock_in_limit ?? 1)) return false;
 		if (limit(player) === 0 || picked[player.player_id] !== AUTO || game.status === 'final') return false;
 		const ahead = player.games.filter((g) => g.status !== 'final' && g.day >= (slotOf(player.player_id) === player.slot ? player.counts_from : ''));
-		return ahead.at(-1) === game;
+		return lockIn ? ahead.slice(-Math.max(0, (lineup?.lock_in_limit ?? 1) - (player.locks_used ?? 0))).includes(game) : ahead.at(-1) === game;
 	}
 	// Points from the games that count, as the lineup is now arranged.
 	const total = (player: LineupPlayer) => player.games.reduce((n, g) => n + (counts(player, g) ? g.points : 0), 0);
 	// With the override a commissioner may count any game of the week, even one already played.
-	const pickable = (player: LineupPlayer, game: LineupGame) => limit(player) > 0 && !frozen(player) && (!begun(game) || override);
+	const pickable = (player: LineupPlayer, game: LineupGame) => !lockIn && limit(player) > 0 && !frozen(player) && (!begun(game) || override);
 	const played = (game: LineupGame) => game.status !== 'scheduled';
 	// The games a row's stats come from: those played, and for a starter in a
 	// slot that counts only some, only the ones that count. A bench player in
@@ -326,6 +335,7 @@
 	// Every change saves itself a moment later. A change made while one is
 	// saving is saved straight after it; a refusal puts the lineup back.
 	let saving = $state(false);
+	let lockingGame = $state<string>();
 	let saved = $state(false); // shows "Saved" for a moment
 	let again = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -367,6 +377,30 @@
 			}
 		}
 	}
+
+
+    const lockAvailable = (game: LineupGame) => !!game.can_lock_in && !!game.lock_deadline && new Date(game.lock_deadline).getTime() > clockNow;
+    const lockDeadline = (game: LineupGame) => game.lock_deadline
+        ? new Date(game.lock_deadline).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    async function lockGame(player: LineupPlayer, game: LineupGame) {
+        if (!lineup || !game.game_id || dirty || saving || lockingGame || !lockAvailable(game)) return;
+        lockingGame = game.game_id;
+        clearTimeout(timer);
+        const shown = lineup.day;
+        try {
+            await setLineup(league.id, {
+                day: shown, franchise_id: franchise.id, force: override,
+                entries: seats.flatMap((id, i) => id ? [{ slot: seatSlots[i].name, player_id: id,
+                    ...(id === player.player_id ? { lock_game_id: game.game_id } : {}) }] : [])
+            });
+            show(await getLineup(league.id, franchise.id, shown));
+            toast.good(`${player.full_name}: ${points(game.points)} points locked in.`);
+            await invalidateAll();
+        } catch (e) {
+            toast.error(e);
+            show(await getLineup(league.id, franchise.id, shown).catch(() => lineup!));
+        } finally { lockingGame = undefined; }
+    }
 
 	// Sets the best lineup for every day left this week, or for the week.
 	let autoSetting = $state(false);
@@ -416,11 +450,44 @@
 {#snippet games(player: LineupPlayer, starting: boolean)}
 	{#if player.games.length === 0}
 		<span class="muted small-text nogame"><span class="long">{weekly ? 'No games this week' : 'No game'}</span><span class="dash" title={weekly ? 'No games this week' : 'No game'}>–</span></span>
+    {:else if lockIn}
+        <div class="lock-in-games">
+            <div class="tiles">
+                {#each player.games as game (game.game_id ?? game.starts_at)}
+                    <span class="tile" class:on={game.counts} class:next={starting && projected(player, game)}
+                        class:done={played(game)} title={`${weekday(game.day)} ${versus(game)} · ${game.locked_in ? 'Locked in' : !game.eligible && played(game) ? 'Played on bench · ineligible' : when(game)}`}>
+                        {@render tile(game)}
+                        {#if game.locked_in}<span class="lock-badge">Locked in</span>{/if}
+                    </span>
+                {/each}
+            </div>
+            {#each player.games.filter(lockAvailable) as game (game.game_id)}
+                <div class="lock-prompt">
+                    {#if starting && canEdit && !lineup?.locked}
+                        <button class="small lock-action" disabled={saving || dirty || !!lockingGame}
+                            aria-label={`Lock in ${points(game.points)} points for ${player.full_name} from ${weekday(game.day)} ${versus(game)}`}
+                            onclick={() => lockGame(player, game)}>
+                            <Icon name="lock" size={12} /> {lockingGame === game.game_id ? 'Locking…' : `Lock in · ${points(game.points)} FP`}
+                        </button>
+                    {:else}
+                        <span class="small-text">{points(game.points)} FP available{!starting ? ' · Move to starters to lock in' : ''}</span>
+                    {/if}
+                    <small>{weekday(game.day)} {versus(game)} · Until {lockDeadline(game)}</small>
+                </div>
+            {/each}
+            {#if (player.locks_used ?? 0) > 0}
+                <span class="lock-status">{player.locks_used}/{lineup?.lock_in_limit ?? 1} locked in</span>
+            {:else if starting && player.games.some(g => g.counts)}
+                <span class="lock-status">Auto · Last eligible {lineup?.doubled ? 'games' : 'game'}</span>
+            {:else if playerInGame(player)}
+                <span class="lock-status">Playing · Moves resume after the game</span>
+            {/if}
+        </div>
 	{:else if weekly && limited.length > 0}
 		<!-- The week's games as the opponents' logos, each with its day and time
 		     beneath: the one that counts is filled in; tap another to count it instead. -->
 		<div class="tiles">
-			{#if starting && canEdit && !frozen(player)}
+			{#if !lockIn && starting && canEdit && !frozen(player)}
 				<button
 					class="tile auto"
 					class:on={picked[player.player_id] === AUTO}
@@ -504,7 +571,7 @@
 				<PlayerActions leagueId={league.id} playerId={player.player_id} ownerId={franchise.id} name={player.full_name} detail={`${player.positions.join('/')} · ${player.team_abbrev ?? ''}`} onDrop={canEdit ? () => release(player) : undefined} />
 				{#if player.nickname}<span class="pill brand">“{player.nickname}”</span>{/if}
 				<InjuryBadge designation={player.injury} />
-				{#if player.locked}<span class="locked" title="Locked: his game has started"><Icon name="lock" size={12} /></span>{/if}
+				{#if player.locked}<span class="locked" title={player.lock_reason ?? "Locked: his game has started"}><Icon name="lock" size={12} /></span>{/if}
 			</span>
 			<div class="player-meta"><span class="muted small-text">{player.positions.join('/')} · <TeamLogo competition={sport} abbrev={player.team_abbrev} size={18} />{#if player.eligibility_note} · <span class="long" title={player.eligibility_note}>{player.eligibility_note}</span><span class="dash elig" title={player.eligibility_note}>Can't start</span>{/if}</span>
 			{#if statsEnabled}
@@ -570,7 +637,7 @@
 			<div class="row actions">
 				{#if saving}<span class="muted small-text">Saving…</span>{:else if saved}<span class="saved small-text"><Icon name="check" size={14} /> Saved</span>{/if}
 				{#if owner && !lineup.locked && lineup.players.length > 0}
-					<button class="small" disabled={autoSetting || saving} title="Start the best players you have, keeping anyone who has locked" onclick={autoSet}>
+					<button class="small" disabled={autoSetting || saving || !!lockingGame} title="Start the best players you have, keeping anyone who has locked" onclick={autoSet}>
 						<Icon name="refresh" size={14} /> {autoSetting ? 'Setting…' : weekly ? 'Auto-set this week' : 'Auto-set rest of week'}
 					</button>
 				{/if}
@@ -597,7 +664,13 @@
 				Only main-roster players can start. <a href="/players?competition={sport}">Find players</a>.
 			</Empty>
 		{:else}
-			{#if limited.length > 0 && canEdit}
+			{#if lockIn}
+                <p class="card note small-text lock-help">After a game, lock in its points before the player's next game starts.
+                    Only games played in a starting spot qualify. A lock-in keeps the player in place for the rest of the matchup.
+                    {#if lineup.doubled}Each player gets two lock-ins this matchup.{:else}Each player gets one lock-in this week.{/if}
+                    Unfilled lock-ins use the last eligible games with minutes played. No eligible games means zero.
+                </p>
+            {:else if limited.length > 0 && canEdit}
 				<p class="muted small-text hint">
 					{limited.length === lineup.slots.length ? 'Each starter' : `Each ${limited.map((s) => s.name).join(' and ')}`}
 					scores in {lineup.doubled ? `${limited[0].games_per_week * 2} games this matchup` : limited[0].games_per_week === 1 ? 'one game a week' : `${limited[0].games_per_week} games a week`}. On <strong>Auto</strong> it is his last {lineup.doubled ? 'games of the matchup' : 'game of the week'}
@@ -680,6 +753,13 @@
 </div>
 
 <style>
+    .lock-in-games { display: grid; gap: 0.35rem; }
+    .lock-prompt { display: grid; gap: 0.15rem; justify-items: start; }
+    .lock-prompt small, .lock-status { font-size: 0.68rem; color: var(--ink-soft); }
+    .lock-action { border-color: var(--sport, var(--brand)); white-space: nowrap; }
+    .lock-badge { font-size: 0.6rem; color: var(--ink); }
+    .lock-help { line-height: 1.5; }
+
 	.bench-divider { display:flex; align-items:center; justify-content:space-between; padding:.3rem .55rem; background:var(--surface-2); border-block:1px solid var(--rule); font:600 .62rem var(--mono); text-transform:uppercase; }
 	.name { font-size:.8rem; }
 	.player-meta { display:flex; align-items:center; flex-wrap:wrap; gap:0 .45rem; }

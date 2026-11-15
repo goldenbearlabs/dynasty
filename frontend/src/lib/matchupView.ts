@@ -48,8 +48,9 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 		// On auto, the game expected to count is his last still to finish. Once
 		// all are finished the server marks the one that counted instead.
 		const benched = !!player && !player.slot;
-		const autoGame = !benched && player?.counts_last
-			? raw.filter(g => g.status !== 'final' && g.day >= (player.counts_from || '')).at(-1) : undefined;
+		const remaining = lineup?.lock_in ? Math.max(0, (lineup.lock_in_limit ?? 1) - (player?.locks_used ?? 0)) : 1;
+		const autoGames = !benched && player?.counts_last && remaining > 0
+			? raw.filter(g => g.status !== 'final' && g.day >= (player.counts_from || '')).slice(-remaining) : [];
 		const games: MatchupGame[] = raw.map(g => {
 			const line = official.find(line => matches(g, line));
 			const capped = lineup?.starts?.made.some(s => s.player_id === id && s.day === g.day && !s.counts);
@@ -57,9 +58,9 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 			return {
 				...g, opponent: `${g.at_home ? 'vs' : '@'} ${g.opponent}`, counted: !!line,
 				points: line?.points ?? (benched ? g.points : 0), gameId: line?.game_id ?? g.game_id,
-				projected: g.status === 'scheduled' && !benched && !capped && (g.counts || g === autoGame) ? g.projected : 0,
+				projected: g.status === 'scheduled' && !benched && !capped && (g.counts || autoGames.includes(g)) ? g.projected : 0,
 				expected: g.expected ?? 0,
-				label: line ? 'Counted' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : g === autoGame
+				label: line ? (g.locked_in ? 'Locked in' : 'Counted') : lineup?.lock_in && g.can_lock_in ? 'Lock in available' : benched ? 'Bench · Not counted' : capped ? 'Start cap reached' : autoGames.includes(g)
 					? 'Auto candidate' : selected ? (g.status === 'scheduled' ? 'Selected' : 'Selected · Awaiting scored stats') : 'Not selected'
 			};
 		});
@@ -77,12 +78,12 @@ export function matchupRows(scored: MatchupScorer[], lineup: Lineup | undefined,
 			started: scoring.length > 0,
 			pregame: scoring.reduce((total, game) => total + game.expected, 0),
 			settled: scoring.length > 0 && scoring.every((g) => g.status === 'final'),
-			upcoming: projected || (!benched && next ? next.expected : 0),
+			upcoming: projected || (!benched && next && !(lineup?.lock_in && remaining === 0) ? next.expected : 0),
 			id, name: player?.full_name ?? contribution!.full_name, headshot: player?.headshot_url ?? contribution!.headshot_url,
 			positions: player?.positions ?? official[0]?.positions ?? [], slot: benched ? 'BN' : player?.slot ?? official[0]?.slot ?? '',
 			points: benched ? games.reduce((total, game) => total + game.points, 0) : official.reduce((total, game) => total + game.points, 0), games,
 			projected,
-			selection: player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
+			selection: lineup?.lock_in ? `${player?.locks_used ?? 0}/${lineup.lock_in_limit ?? 1} locked in` : player?.counts_last ? 'Auto · last games with stats' : player?.counts_from ? `Picked from ${player.counts_from}` : '',
 			bench: benched,
 			earlier: !player || (benched && official.length > 0)
 		};
@@ -114,7 +115,7 @@ export function gameState(game: MatchupGame, scores: Record<string, GameSummary>
 
 /** The games a row shows: on the bench all of them; otherwise the ones that count, are picked, or with showOther every one. */
 export const visibleGames = (row: MatchupRow, showOther = false) =>
-	row.games.filter((g) => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate');
+	row.games.filter((g) => row.bench || showOther || g.counted || g.label.startsWith('Selected') || g.label === 'Auto candidate' || g.label === 'Lock in available');
 
 /** One line on a row's games: the opponent and where the game stands, or how many there are. picking: slots count only some games. */
 export function gameSummary(row: MatchupRow, scores: Record<string, GameSummary>, showOther = false, picking = true): string {

@@ -159,7 +159,9 @@ join leagues l on l.id = re.league_id
 left join pro_teams t on t.id = p.pro_team_id
 left join games g on g.competition = l.competition
                  and g.day between @from_day and @to_day
-                 and p.pro_team_id in (g.home_team_id, g.away_team_id)
+                 and (p.pro_team_id in (g.home_team_id, g.away_team_id)
+                   or exists (select 1 from basketball_game_locks kept where kept.league_id = @league_id
+                     and kept.franchise_id = @franchise_id and kept.player_id = p.id and kept.game_id = g.id))
 left join pro_teams home on home.id = g.home_team_id
 left join pro_teams away on away.id = g.away_team_id
 left join stat_lines sl on sl.game_id = g.id and sl.player_id = p.id
@@ -275,6 +277,8 @@ with days as (
   -- Auto counts nothing from before counts_from; a picked game may fall back
   -- to an earlier one, but none from before he came into the slot.
   where g.day between @week_start::date and @to_day::date -- the span's games, found first by their days
+    and not (l.competition in ('nba', 'cbb', 'wnba') and dp.win >= date '2026-11-16'
+             and l.settings->'lineup'->>'period' = 'week')
     and (e.counts_from is null or g.day >= e.counts_from
          or (not e.counts_last and (e.joined_on is null or g.day >= e.joined_on)))
     and (l.competition <> 'cbb'
@@ -288,7 +292,8 @@ with days as (
         (select team.conference from players p join pro_teams team on team.id = p.pro_team_id where p.id = sl.player_id), '')
          in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
 ), counted as (
-  select st.*, (select sum(s.value::numeric * r.value::numeric)
+  select st.franchise_id, st.player_id, st.slot, st.game_id, st.day, st.stats,
+         (select sum(s.value::numeric * r.value::numeric)
                from jsonb_each_text(st.stats) s
                join jsonb_each_text(st.settings->'scoring') r on r.key = s.key) as points
   from started st
@@ -300,6 +305,34 @@ where st.day >= @from_day::date
         and st.nth_back <= st.games_per_week * st.mult - st.played_ahead)
     or (st.games_per_week > 0 and st.counts_last and st.recorded and not st.games_ahead and st.nth_last <= st.games_per_week * st.mult))
   and (st.starts_allowed = 0 or not st.is_start or st.starts_so_far <= st.starts_allowed * st.mult)
+  union all
+  select f.id, choice.player_id, choice.slot, choice.game_id, g.day, sl.stats,
+         fantasy_points(sl.stats, l.settings->'scoring') as points
+  from leagues l
+  join franchises f on f.dynasty_id = l.dynasty_id
+  cross join lateral (
+    select distinct coalesce(per.starts_on, d.day - (d.day - d.week_start) % 7) as first,
+                    coalesce(per.ends_on, d.day - (d.day - d.week_start) % 7 + 6) as last
+    from days d
+    left join lateral (select p.starts_on, p.ends_on from periods p join seasons se on se.id = p.season_id
+      where se.league_id = l.id and p.double_games and d.day between p.starts_on and p.ends_on limit 1) per on true
+  ) win
+  cross join lateral basketball_game_choices(l.id, f.id, win.first, win.last, now()) choice
+  join games g on g.id = choice.game_id
+  join stat_lines sl on sl.game_id = choice.game_id and sl.player_id = choice.player_id
+  join players pl on pl.id = choice.player_id
+  where l.id = @league_id and l.competition in ('nba', 'cbb', 'wnba')
+    and l.settings->'lineup'->>'period' = 'week' and win.first >= date '2026-11-16'
+    and choice.counts and g.day between @from_day::date and @to_day::date
+    and (l.competition <> 'cbb'
+      or jsonb_array_length(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb)) = 0
+      or coalesce((select ps.conference from player_seasons ps
+        join pro_teams team on team.competition = ps.competition and team.abbrev = ps.team
+        where ps.player_id = sl.player_id and ps.competition = 'cbb' and ps.league = ''
+          and ps.year = extract(year from g.day)::int + case when extract(month from g.day) >= 7 then 1 else 0 end
+          and team.id in (g.home_team_id, g.away_team_id) and ps.conference <> '' limit 1),
+        (select team.conference from pro_teams team where team.id = pl.pro_team_id), '')
+        in (select jsonb_array_elements_text(coalesce(nullif(l.settings->'lineup'->'conferences', 'null'::jsonb), '["8","23","7","2","4","44","3","21"]'::jsonb))))
 )
 select st.franchise_id, st.player_id, p.full_name, p.headshot_url, coalesce(n.nickname, '')::text as nickname,
        count(distinct st.game_id) as games,
