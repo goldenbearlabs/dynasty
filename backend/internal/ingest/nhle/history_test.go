@@ -17,17 +17,17 @@ func TestRecentSeasonIdentitiesIncludeSkatersAndGoaliesOnly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/skater/summary":
-			fmt.Fprint(w, `{"data":[{"playerId":8482093,"teamAbbrevs":"CAR","gamesPlayed":71,"goals":32}]}`)
+			fmt.Fprint(w, `{"total":1,"data":[{"playerId":8482093,"teamAbbrevs":"CAR","gamesPlayed":71,"goals":32}]}`)
 		case "/skater/realtime":
-			fmt.Fprint(w, `{"data":[]}`)
+			fmt.Fprint(w, `{"total":0,"data":[]}`)
 		case "/goalie/summary":
-			fmt.Fprint(w, `{"data":[{"playerId":7,"teamAbbrevs":"CAR","gamesPlayed":9,"wins":6}]}`)
+			fmt.Fprint(w, `{"total":1,"data":[{"playerId":7,"teamAbbrevs":"CAR","gamesPlayed":9,"wins":6}]}`)
 		case "/skater/bios":
 			bios++
-			fmt.Fprint(w, `{"data":[{"playerId":8482093,"skaterFullName":"Seth Jarvis","birthDate":"2002-02-01","positionCode":"R"}]}`)
+			fmt.Fprint(w, `{"total":1,"data":[{"playerId":8482093,"skaterFullName":"Seth Jarvis","birthDate":"2002-02-01","positionCode":"R"}]}`)
 		case "/goalie/bios":
 			bios++
-			fmt.Fprint(w, `{"data":[{"playerId":7,"goalieFullName":"Injured Goalie","birthDate":"1998-07-12"}]}`)
+			fmt.Fprint(w, `{"total":1,"data":[{"playerId":7,"goalieFullName":"Injured Goalie","birthDate":"1998-07-12"}]}`)
 		default:
 			t.Errorf("unexpected request %s", r.URL)
 			http.NotFound(w, r)

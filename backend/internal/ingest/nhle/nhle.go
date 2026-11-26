@@ -3,6 +3,7 @@ package nhle
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -466,15 +467,58 @@ func (s *Source) LatestSeason(now time.Time) int {
 	return now.Year()
 }
 
-// report is one page-less listing from the NHL's statistics service.
+// report reads a complete report. The service caps pages even with limit=-1;
+// never pass a partial report to the syncer, which removes omitted season lines.
 func report[T any](ctx context.Context, s *Source, name string, year int) ([]T, error) {
-	var res struct {
-		Data []T `json:"data"`
-	}
 	// seasonId joins the two years: 20252026. gameTypeId 2 is the regular season.
 	filter := fmt.Sprintf("seasonId=%d%d and gameTypeId=2", year-1, year)
-	address := fmt.Sprintf("%s/%s?limit=-1&cayenneExp=%s", s.StatsBase, name, url.QueryEscape(filter))
-	return res.Data, s.client.GetTransient(ctx, address, &res)
+	var rows []T
+	seen := map[int]bool{}
+	total := -1
+	for {
+		var res struct {
+			Data  []json.RawMessage `json:"data"`
+			Total *int              `json:"total"`
+		}
+		params := url.Values{
+			"limit": {"100"}, "start": {strconv.Itoa(len(rows))},
+			"sort":       {`[{"property":"playerId","direction":"ASC"}]`},
+			"cayenneExp": {filter},
+		}
+		address := fmt.Sprintf("%s/%s?%s", s.StatsBase, name, params.Encode())
+		if err := s.client.GetTransient(ctx, address, &res); err != nil {
+			return nil, fmt.Errorf("%s page at %d: %w", name, len(rows), err)
+		}
+		if res.Total == nil || *res.Total < 0 {
+			return nil, fmt.Errorf("%s: missing or invalid report total", name)
+		}
+		if total < 0 {
+			total = *res.Total
+		}
+		if *res.Total != total || len(rows)+len(res.Data) > total || (len(res.Data) == 0 && len(rows) < total) {
+			return nil, fmt.Errorf("%s: incomplete or changing report (received %d + %d of %d, page total %d)", name, len(rows), len(res.Data), total, *res.Total)
+		}
+		for _, raw := range res.Data {
+			var identity struct {
+				PlayerID int `json:"playerId"`
+			}
+			if err := json.Unmarshal(raw, &identity); err != nil {
+				return nil, err
+			}
+			if identity.PlayerID == 0 || seen[identity.PlayerID] {
+				return nil, fmt.Errorf("%s: invalid or repeated player %d", name, identity.PlayerID)
+			}
+			seen[identity.PlayerID] = true
+			var row T
+			if err := json.Unmarshal(raw, &row); err != nil {
+				return nil, err
+			}
+			rows = append(rows, row)
+		}
+		if len(rows) == total {
+			return rows, nil
+		}
+	}
 }
 
 // SeasonStats reads every player's regular-season totals for the season

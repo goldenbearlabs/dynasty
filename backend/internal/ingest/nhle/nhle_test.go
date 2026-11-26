@@ -243,7 +243,7 @@ func TestSeasonStats(t *testing.T) {
 			if got := r.URL.Query().Get("cayenneExp"); got != "seasonId=20252026 and gameTypeId=2" {
 				t.Errorf("filter = %q", got)
 			}
-			w.Write([]byte(`{"data":[` + body + `]}`))
+			w.Write([]byte(`{"total":1,"data":[` + body + `]}`))
 		}
 	}
 	mux.HandleFunc("/skater/summary", report(`{"playerId":1,"teamAbbrevs":"EDM","gamesPlayed":82,"goals":48,"assists":90,"shots":306,"ppGoals":13,"penaltyMinutes":44,"plusMinus":17}`))
